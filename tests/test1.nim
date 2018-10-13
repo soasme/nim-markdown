@@ -8,8 +8,6 @@
 import unittest
 
 import markdownpkg/submodule
-test "correct welcome":
-  check getWelcomeMessage() == "Hello, World!"
 
 test "escape <tag>":
   check escapeTag("hello <script>") == "hello &lt;script&gt;"

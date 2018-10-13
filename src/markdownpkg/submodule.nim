@@ -40,5 +40,3 @@ let reAmpersandSeq = re"&(?!#?\w+;)"
 #   "&amp;"
 proc escapeAmpersandSeq*(doc: string): string =
     result = doc.replace(sub=reAmpersandSeq, by="&amp;")
-
-proc getWelcomeMessage*(): string = "Hello, World!"

@@ -40,45 +40,44 @@ proc preprocessing*(doc: string): string =
   result = result.replace("\u2424", " ")
   result = result.replace(re(r"^ +$", {RegexFlag.reMultiLine}), "")
 
-
-# Replace `<` and `>` to HTML-safe characters.
-# Example:
-#   >>> escapeTag("<tag>")
-#   "&lt;tag&gt;"
 proc escapeTag*(doc: string): string =
+  # Replace `<` and `>` to HTML-safe characters.
+  # Example:
+  #   >>> escapeTag("<tag>")
+  #   "&lt;tag&gt;"
   result = doc.replace("<", "&lt;")
   result = result.replace(">", "&gt;")
 
-# Replace `'` and `"` to HTML-safe characters.
-# Example:
-#   >>> escapeTag("'tag'")
-#   "&quote;tag&quote;"
 proc escapeQuote*(doc: string): string =
+  # Replace `'` and `"` to HTML-safe characters.
+  # Example:
+  #   >>> escapeTag("'tag'")
+  #   "&quote;tag&quote;"
   result = doc.replace("'", "&quote;")
   result = result.replace("\"", "&quote;")
 
-# Replace character `&` to HTML-safe characters.
-# Example:
-#   >>> escapeAmpersandChar("&amp;")
-#   &amp;amp;
 proc escapeAmpersandChar*(doc: string): string =
+  # Replace character `&` to HTML-safe characters.
+  # Example:
+  #   >>> escapeAmpersandChar("&amp;")
+  #   &amp;amp;
   result = doc.replace("&", "&amp;")
 
 let reAmpersandSeq = re"&(?!#?\w+;)"
 
-# Replace `&` from a sequence of characters starting from it to HTML-safe characters.
-# It's useful to keep those have been escaped.
-# Example:
-#   >>> escapeAmpersandSeq("&") # In this case, it's like `escapeAmpersandChar`.
-#   "&"
-#   >>> escapeAmpersandSeq("&amp;") # In this case, we preserve that has escaped.
-#   "&amp;"
 proc escapeAmpersandSeq*(doc: string): string =
+  # Replace `&` from a sequence of characters starting from it to HTML-safe characters.
+  # It's useful to keep those have been escaped.
+  # Example:
+  #   >>> escapeAmpersandSeq("&") # In this case, it's like `escapeAmpersandChar`.
+  #   "&"
+  #   >>> escapeAmpersandSeq("&amp;") # In this case, we preserve that has escaped.
+  #   "&amp;"
   result = doc.replace(sub=reAmpersandSeq, by="&amp;")
 
-# Find a markdown token from document `doc` at position `start`,
-# based on a rule type and regex rule.
 proc findToken(doc: string, start: int, ruleType: MarkdownTokenType, regex: Regex): MarkdownTokenRef =
+  # Find a markdown token from document `doc` at position `start`,
+  # based on a rule type and regex rule.
   var matches: array[5, string]
 
   let size = doc.matchLen(regex, matches=matches, start=start)
@@ -94,8 +93,9 @@ proc findToken(doc: string, start: int, ruleType: MarkdownTokenType, regex: Rege
   of MarkdownTokenType.Text:
     result = MarkdownTokenRef(pos: start, len: size, type: MarkdownTokenType.Text, textVal: matches[0]) 
 
-# Parse markdown document into a sequence of tokens.
+
 iterator parseTokens(doc: string): MarkdownTokenRef =
+  # Parse markdown document into a sequence of tokens.
   var n = 0
   block parseBlock:
     while n < doc.len:
@@ -107,17 +107,21 @@ iterator parseTokens(doc: string): MarkdownTokenRef =
           break parseBlock
       raise newException(MarkdownError, fmt"unknown block rule at position {n}.")
 
-# Render header tag, for example, `<h1>`, `<h2>`, etc.
-# Example:
-#   >>> renderHeader("hello world", level=1)
-#   "<h1>hello world</h1>"
+
 proc renderHeader*(header: Header): string =
+  # Render header tag, for example, `<h1>`, `<h2>`, etc.
+  # Example:
+  #   >>> renderHeader("hello world", level=1)
+  #   "<h1>hello world</h1>"
   result = fmt"<h{header.level}>{header.doc}</h{header.level}>"
 
 proc renderText*(text: string): string =
+  # Render text by escaping itself.
   result = text.escapeAmpersandSeq.escapeTag
 
 proc renderToken(token: MarkdownTokenRef): string =
+  # Render token.
+  # This is a simple dispatcher function.
   case token.type
   of MarkdownTokenType.Header:
     result = renderHeader(token.headerVal)

@@ -33,9 +33,13 @@ var blockRules = @{
   MarkdownTokenType.Text: re"^([^\n]+)",
 }.newTable
 
-# Pre-processing the text
-proc preprocessing(doc: string): string =
-  result = doc.replace(re"\r\n|\r", by="\n")
+proc preprocessing*(doc: string): string =
+  # Pre-processing the text
+  result = doc.replace(re"\r\n|\r", "\n")
+  result = result.replace(re"\t", "    ")
+  result = result.replace("\u2424", " ")
+  result = result.replace(re(r"^ +$", {RegexFlag.reMultiLine}), "")
+
 
 # Replace `<` and `>` to HTML-safe characters.
 # Example:
@@ -123,5 +127,5 @@ proc renderToken(token: MarkdownTokenRef): string =
 # Turn markdown-formatted string into HTML-formatting string.
 # By setting `escapse` to false, no HTML tag will be escaped.
 proc markdown*(doc: string, escape: bool = true): string =
-  for token in parsetokens(doc):
+  for token in parsetokens(preprocessing(doc)):
       result &= rendertoken(token)

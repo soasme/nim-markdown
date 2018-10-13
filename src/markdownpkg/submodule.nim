@@ -16,6 +16,7 @@ type
   # Signify the token type
   MarkdownTokenType* {.pure.} = enum
     Header,
+    IndentedBlockCode,
     Text,
     Newline
 
@@ -27,11 +28,13 @@ type
     len: int
     case type*: MarkdownTokenType
     of MarkdownTokenType.Header: headerVal*: Header
+    of MarkdownTokenType.IndentedBlockCode: codeVal*: string
     of MarkdownTokenType.Text: textVal*: string
     of MarkdownTokenType.Newline: newlineVal*: string
 
 var blockRules = @{
   MarkdownTokenType.Header: re"^ *(#{1,6}) *([^\n]+?) *#* *(?:\n+|$)",
+  MarkdownTokenType.IndentedBlockCode: re"^(( {4}[^\n]+\n*)+)",
   MarkdownTokenType.Text: re"^([^\n]+)",
   MarkdownTokenType.Newline: re"^(\n+)",
 }.newTable
@@ -98,6 +101,9 @@ proc findToken(doc: string, start: int, ruleType: MarkdownTokenType, regex: Rege
   of MarkdownTokenType.Newline:
     if matches[0].len > 1:
       result = MarkdownTokenRef(pos: start, len: size, type: MarkdownTokenType.Newline, newlineVal: matches[0])
+  of MarkdownTokenType.IndentedBlockCode:
+    var code = matches[0].replace(re(r"^ {4}", {RegexFlag.reMultiLine}), "")
+    result = MarkdownTokenRef(pos: start, len: size, type: MarkdownTokenType.IndentedBlockCode, codeVal: code)
 
 
 iterator parseTokens(doc: string): MarkdownTokenRef =
@@ -128,6 +134,10 @@ proc renderText*(text: string): string =
 proc renderNewline*(newline: string): string =
   result = ""
 
+proc renderIndentedBlockCode*(code: string): string =
+  var formattedCode = code.strip(leading=false, trailing=true).escapeTag.escapeAmpersandChar
+  result = fmt"<pre><code>{formattedCode}</code></pre>"
+
 proc renderToken(token: MarkdownTokenRef): string =
   # Render token.
   # This is a simple dispatcher function.
@@ -138,6 +148,8 @@ proc renderToken(token: MarkdownTokenRef): string =
     result = renderText(token.textVal)
   of MarkdownTokenType.Newline:
     result = renderNewline(token.newlineVal)
+  of MarkdownTokenType.IndentedBlockCode:
+    result = renderIndentedBlockCode(token.codeVal)
 
 # Turn markdown-formatted string into HTML-formatting string.
 # By setting `escapse` to false, no HTML tag will be escaped.

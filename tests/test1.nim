@@ -44,3 +44,8 @@ test "text":
 
 test "newline":
   check markdown("\n\n\n") == ""
+
+test "code":
+  check markdown("    proc helloworld():\n") == "<pre><code>proc helloworld():</code></pre>"
+  check markdown("    proc helloworld():\n        echo(\"hello world\")\n"
+    ) == "<pre><code>proc helloworld():\n    echo(\"hello world\")</code></pre>"

@@ -17,5 +17,9 @@ test "escape <tag>":
 test "escape quote":
   check escapeQuote("hello 'world\"") == "hello &quote;world&quote;"
 
-test "escape amp":
-  check escapeAmpersand("hello & world") == "hello &amp; world"
+test "escape & character":
+  check escapeAmpersandChar("hello & world") == "hello &amp; world"
+
+test "escape & sequence":
+  check escapeAmpersandSeq("hello & world") == "hello &amp; world"
+  check escapeAmpersandSeq("hello &amp; world") == "hello &amp; world"

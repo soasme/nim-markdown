@@ -10,3 +10,12 @@ import unittest
 import markdownpkg/submodule
 test "correct welcome":
   check getWelcomeMessage() == "Hello, World!"
+
+test "escape <tag>":
+  check escapeTag("hello <script>") == "hello &lt;script&gt;"
+
+test "escape quote":
+  check escapeQuote("hello 'world\"") == "hello &quote;world&quote;"
+
+test "escape amp":
+  check escapeAmpersand("hello & world") == "hello &amp; world"

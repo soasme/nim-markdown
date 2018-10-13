@@ -3,4 +3,22 @@
 # remove this file altogether. You may create additional modules alongside
 # this file as required.
 
+import re, strutils
+
+
+# Replaces `<` and `>` to HTML-safe characters.
+proc escapeTag*(doc: string): string =
+    result = doc.replace("<", "&lt;")
+    result = result.replace(">", "&gt;")
+
+# Replaces `'` and `"` to HTML-safe characters.
+proc escapeQuote*(doc: string): string =
+    result = doc.replace("'", "&quote;")
+    result = result.replace("\"", "&quote;")
+
+# Replace `&` to HTML-safe characters.
+proc escapeAmpersand*(doc: string): string =
+    result = doc.replace("&", "&amp;")
+
+
 proc getWelcomeMessage*(): string = "Hello, World!"

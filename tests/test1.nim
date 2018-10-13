@@ -22,5 +22,12 @@ test "escape & sequence":
   check escapeAmpersandSeq("hello & world") == "hello &amp; world"
   check escapeAmpersandSeq("hello &amp; world") == "hello &amp; world"
 
-test "test h1":
-  check markdown("# h1") == "<h1>h1</h1>"
+  test "test headers":
+    check markdown("#h1") == "<h1>h1</h1>"
+    check markdown("# h1") == "<h1>h1</h1>"
+    check markdown(" #h1") == "<h1>h1</h1>"
+    check markdown("## h2") == "<h2>h2</h2>"
+    check markdown("### h3") == "<h3>h3</h3>"
+    check markdown("#### h4") == "<h4>h4</h4>"
+    check markdown("##### h5") == "<h5>h5</h5>"
+    check markdown("###### h6") == "<h6>h6</h6>"

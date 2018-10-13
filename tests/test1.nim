@@ -21,3 +21,6 @@ test "escape & character":
 test "escape & sequence":
   check escapeAmpersandSeq("hello & world") == "hello &amp; world"
   check escapeAmpersandSeq("hello &amp; world") == "hello &amp; world"
+
+test "test h1":
+  check markdown("# h1") == "<h1>h1</h1>"

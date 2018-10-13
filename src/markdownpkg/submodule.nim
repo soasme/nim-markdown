@@ -3,7 +3,7 @@
 # remove this file altogether. You may create additional modules alongside
 # this file as required.
 
-import re, strutils
+import re, strutils, strformat, tables
 
 
 # Replace `<` and `>` to HTML-safe characters.
@@ -40,3 +40,14 @@ let reAmpersandSeq = re"&(?!#?\w+;)"
 #   "&amp;"
 proc escapeAmpersandSeq*(doc: string): string =
     result = doc.replace(sub=reAmpersandSeq, by="&amp;")
+
+# Render header tag, for example, `<h1>`, `<h2>`, etc.
+# Example:
+#   >>> renderHeader("hello world", level=1)
+#   "<h1>hello world</h1>"
+proc renderHeader*(doc: string, level: int): string =
+    result = fmt"<h{level}>{doc}</h{level}>"
+
+proc markdown*(doc: string,
+        escape: bool = true): string =
+    result = renderHeader("h1", level=1)

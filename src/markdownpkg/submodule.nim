@@ -16,7 +16,8 @@ type
   # Signify the token type
   MarkdownTokenType* {.pure.} = enum
     Header,
-    Text
+    Text,
+    Newline
 
   # Hold two values: type: MarkdownTokenType, and xyzValue.
   # xyz is the particular type name.
@@ -27,10 +28,12 @@ type
     case type*: MarkdownTokenType
     of MarkdownTokenType.Header: headerVal*: Header
     of MarkdownTokenType.Text: textVal*: string
+    of MarkdownTokenType.Newline: newlineVal*: string
 
 var blockRules = @{
   MarkdownTokenType.Header: re"^ *(#{1,6}) *([^\n]+?) *#* *(?:\n+|$)",
   MarkdownTokenType.Text: re"^([^\n]+)",
+  MarkdownTokenType.Newline: re"^(\n+)",
 }.newTable
 
 proc preprocessing*(doc: string): string =
@@ -91,7 +94,10 @@ proc findToken(doc: string, start: int, ruleType: MarkdownTokenType, regex: Rege
     val.doc = matches[1]
     result = MarkdownTokenRef(pos: start, len: size, type: MarkdownTokenType.Header, headerVal: val) 
   of MarkdownTokenType.Text:
-    result = MarkdownTokenRef(pos: start, len: size, type: MarkdownTokenType.Text, textVal: matches[0]) 
+    result = MarkdownTokenRef(pos: start, len: size, type: MarkdownTokenType.Text, textVal: matches[0])
+  of MarkdownTokenType.Newline:
+    if matches[0].len > 1:
+      result = MarkdownTokenRef(pos: start, len: size, type: MarkdownTokenType.Newline, newlineVal: matches[0])
 
 
 iterator parseTokens(doc: string): MarkdownTokenRef =
@@ -119,6 +125,9 @@ proc renderText*(text: string): string =
   # Render text by escaping itself.
   result = text.escapeAmpersandSeq.escapeTag
 
+proc renderNewline*(newline: string): string =
+  result = ""
+
 proc renderToken(token: MarkdownTokenRef): string =
   # Render token.
   # This is a simple dispatcher function.
@@ -127,6 +136,8 @@ proc renderToken(token: MarkdownTokenRef): string =
     result = renderHeader(token.headerVal)
   of MarkdownTokenType.Text:
     result = renderText(token.textVal)
+  of MarkdownTokenType.Newline:
+    result = renderNewline(token.newlineVal)
 
 # Turn markdown-formatted string into HTML-formatting string.
 # By setting `escapse` to false, no HTML tag will be escaped.

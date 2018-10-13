@@ -22,13 +22,6 @@ test "escape & sequence":
   check escapeAmpersandSeq("hello & world") == "hello &amp; world"
   check escapeAmpersandSeq("hello &amp; world") == "hello &amp; world"
 
-test "preprocessing":
-  check preprocessing("a\n   \nb\n") == "a\n\nb\n"
-  check preprocessing("a\tb") == "a    b"
-  check preprocessing("a\n   \n   \nb\n") == "a\n\n\nb\n"
-  check preprocessing("a\rb") == "a\nb"
-  check preprocessing("a\r\nb") == "a\nb"
-
 test "headers":
   check markdown("#h1") == "<h1>h1</h1>"
   check markdown("# h1") == "<h1>h1</h1>"
@@ -41,3 +34,13 @@ test "headers":
 
 test "text":
   check markdown("hello world") == "hello world"
+
+  test "preprocessing":
+    check preprocessing("a\n   \nb\n") == "a\n\nb\n"
+    check preprocessing("a\tb") == "a    b"
+    check preprocessing("a\n   \n   \nb\n") == "a\n\n\nb\n"
+    check preprocessing("a\rb") == "a\nb"
+    check preprocessing("a\r\nb") == "a\nb"
+
+test "newline":
+  check markdown("\n\n\n") == ""

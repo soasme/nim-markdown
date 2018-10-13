@@ -6,6 +6,8 @@
 import re, strutils, strformat, tables, sequtils, math
 
 type
+    MarkdownError* = object of Exception
+
     # Type for header element
     Header* = object
         doc: string
@@ -13,7 +15,8 @@ type
 
     # Signify the token type
     MarkdownTokenType* {.pure.} = enum
-        Header
+        Header,
+        Text
 
     # Hold two values: type: MarkdownTokenType, and xyzValue.
     # xyz is the particular type name.
@@ -23,9 +26,11 @@ type
         len: int
         case type*: MarkdownTokenType
         of MarkdownTokenType.Header: headerVal*: Header
+        of MarkdownTokenType.Text: textVal*: string
 
 var blockRules = @{
-    MarkdownTokenType.Header: re"^ *(#{1,6}) *([^\n]+?) *#* *(?:\n+|$)"
+    MarkdownTokenType.Header: re"^ *(#{1,6}) *([^\n]+?) *#* *(?:\n+|$)",
+    MarkdownTokenType.Text: re"^([^\n]+)",
 }.newTable
 
 # Replace `<` and `>` to HTML-safe characters.
@@ -77,19 +82,22 @@ proc findToken(doc: string, start: int, ruleType: MarkdownTokenType, regex: Rege
         var val: Header
         val.level = matches[0].len
         val.doc = matches[1]
-        result = MarkdownTokenRef(pos: start, len: size, type: MarkdownTokenType.Header, headerVal: val)  
+        result = MarkdownTokenRef(pos: start, len: size, type: MarkdownTokenType.Header, headerVal: val) 
+    of MarkdownTokenType.Text:
+        result = MarkdownTokenRef(pos: start, len: size, type: MarkdownTokenType.Text, textVal: matches[0]) 
 
 # Parse markdown document into a sequence of tokens.
 iterator parseTokens(doc: string): MarkdownTokenRef =
     var n = 0
-    while n < doc.len:
-        for ruleType, ruleRegex in blockRules:
-            let token = findToken(doc, n, ruleType, ruleRegex)
-            if token != nil:
-                n += token.len
-                yield token
-                break
-
+    block parseBlock:
+        while n < doc.len:
+            for ruleType, ruleRegex in blockRules:
+                let token = findToken(doc, n, ruleType, ruleRegex)
+                if token != nil:
+                    n += token.len
+                    yield token
+                    break parseBlock
+            raise newException(MarkdownError, fmt"unknown block rule at position {n}.")
 
 # Render header tag, for example, `<h1>`, `<h2>`, etc.
 # Example:
@@ -98,10 +106,15 @@ iterator parseTokens(doc: string): MarkdownTokenRef =
 proc renderHeader*(header: Header): string =
     result = fmt"<h{header.level}>{header.doc}</h{header.level}>"
 
+proc renderText*(text: string): string =
+    result = text.escapeAmpersandSeq.escapeTag
+
 proc renderToken(token: MarkdownTokenRef): string =
     case token.type
     of MarkdownTokenType.Header:
         result = renderHeader(token.headerVal)
+    of MarkdownTokenType.Text:
+        result = renderText(token.textVal)
 
 # Turn markdown-formatted string into HTML-formatting string.
 # By setting `escapse` to false, no HTML tag will be escaped.

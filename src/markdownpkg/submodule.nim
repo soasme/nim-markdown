@@ -29,6 +29,7 @@ type
     Header,
     IndentedBlockCode,
     FencingBlockCode,
+    Paragraph,
     Text,
     Newline
 
@@ -42,6 +43,7 @@ type
     of MarkdownTokenType.Header: headerVal*: Header
     of MarkdownTokenType.IndentedBlockCode: codeVal*: string
     of MarkdownTokenType.FencingBlockCode: fencingBlockCodeVal*: Fence
+    of MarkdownTokenType.Paragraph: paragraphVal*: string
     of MarkdownTokenType.Text: textVal*: string
     of MarkdownTokenType.Newline: newlineVal*: string
 
@@ -49,6 +51,12 @@ var blockRules = @{
   MarkdownTokenType.Header: re"^ *(#{1,6}) *([^\n]+?) *#* *(?:\n+|$)",
   MarkdownTokenType.IndentedBlockCode: re"^(( {4}[^\n]+\n*)+)",
   MarkdownTokenType.FencingBlockCode: re"^( *`{3,} *([^`\s]+)? *\n([\s\S]+?)\s*`{3} *(\n+|$))",
+  MarkdownTokenType.Paragraph: re(
+    r"^(((?:[^\n]+\n?" &
+    r"(?!" &
+    r" *(#{1,6}) *([^\n]+?) *#* *(?:\n+|$)" &
+    r"))+)\n*)"
+  ),
   MarkdownTokenType.Text: re"^([^\n]+)",
   MarkdownTokenType.Newline: re"^(\n+)",
 }.newTable
@@ -99,26 +107,24 @@ proc escapeCode*(doc: string): string =
   # Make code block in markdown document HTML-safe.
   result = doc.strip(leading=false, trailing=true).escapeTag.escapeAmpersandChar
 
-proc findToken(doc: string, ctx: MarkdownContext, start: int, ruleType: MarkdownTokenType, regex: Regex): MarkdownTokenRef =
+proc findToken(doc: string, ctx: MarkdownContext, start: var int, ruleType: MarkdownTokenType, regex: Regex): MarkdownTokenRef =
   # Find a markdown token from document `doc` at position `start`,
   # based on a rule type and regex rule.
   var matches: array[5, string]
 
-  let size = doc.matchLen(regex, matches=matches, start=start)
+  let size = doc[start .. doc.len - 1].matchLen(regex, matches=matches)
   if size == -1:
     return nil
 
   case ruleType
+  of MarkdownTokenType.Newline:
+    if matches[0].len > 1:
+      result = MarkdownTokenRef(pos: start, len: size, type: MarkdownTokenType.Newline, newlineVal: matches[0])
   of MarkdownTokenType.Header:
     var val: Header
     val.level = matches[0].len
     val.doc = matches[1]
     result = MarkdownTokenRef(pos: start, len: size, type: MarkdownTokenType.Header, headerVal: val) 
-  of MarkdownTokenType.Text:
-    result = MarkdownTokenRef(pos: start, len: size, type: MarkdownTokenType.Text, textVal: matches[0])
-  of MarkdownTokenType.Newline:
-    if matches[0].len > 1:
-      result = MarkdownTokenRef(pos: start, len: size, type: MarkdownTokenType.Newline, newlineVal: matches[0])
   of MarkdownTokenType.IndentedBlockCode:
     var code = matches[0].replace(re(r"^ {4}", {RegexFlag.reMultiLine}), "")
     result = MarkdownTokenRef(pos: start, len: size, type: MarkdownTokenType.IndentedBlockCode, codeVal: code)
@@ -127,19 +133,27 @@ proc findToken(doc: string, ctx: MarkdownContext, start: int, ruleType: Markdown
     val.lang = matches[1]
     val.code = matches[2]
     result = MarkdownTokenRef(pos: start, len: size, type: MarkdownTokenType.FencingBlockCode, fencingBlockCodeVal: val)
+  of MarkdownTokenType.Paragraph:
+    var val = matches[0].strip(chars={'\n', ' '})
+    result = MarkdownTokenRef(pos: start, len: size, type: MarkdownTokenType.Paragraph, paragraphVal: val)
+  of MarkdownTokenType.Text:
+    result = MarkdownTokenRef(pos: start, len: size, type: MarkdownTokenType.Text, textVal: matches[0])
+
+  start += size
 
 
 iterator parseTokens(doc: string, ctx: MarkdownContext): MarkdownTokenRef =
   # Parse markdown document into a sequence of tokens.
   var n = 0
-  block parseBlock:
-    while n < doc.len:
-      for ruleType, ruleRegex in blockRules:
-        let token = findToken(doc, ctx, n, ruleType, ruleRegex)
-        if token != nil:
-          n += token.len
-          yield token
-          break parseBlock
+  while n < doc.len:
+    var token: MarkdownTokenRef = nil
+    for ruleType, ruleRegex in blockRules:
+      echo(fmt"{ruleType} {n} {doc.len}")
+      token = findToken(doc, ctx, n, ruleType, ruleRegex)
+      if token != nil:
+        yield token
+        break
+    if token == nil:
       raise newException(MarkdownError, fmt"unknown block rule at position {n}.")
 
 
@@ -168,6 +182,9 @@ proc renderIndentedBlockCode*(code: string): string =
   # By default the indented block code doesn't support code highlight.
   result = fmt"<pre><code>{escapeCode(code)}</code></pre>"
 
+proc renderParagraph*(paragraph: string): string =
+  result = fmt"<p>{paragraph}</p>"
+
 proc renderToken(token: MarkdownTokenRef): string =
   # Render token.
   # This is a simple dispatcher function.
@@ -182,6 +199,8 @@ proc renderToken(token: MarkdownTokenRef): string =
     result = renderIndentedBlockCode(token.codeVal)
   of MarkdownTokenType.FencingBlockCode:
     result = renderFencingBlockCode(token.fencingBlockCodeVal)
+  of MarkdownTokenType.Paragraph:
+    result = renderParagraph(token.paragraphVal)
 
 # Turn markdown-formatted string into HTML-formatting string.
 # By setting `escapse` to false, no HTML tag will be escaped.

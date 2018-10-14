@@ -32,15 +32,12 @@ test "headers":
   check markdown("##### h5") == "<h5>h5</h5>"
   check markdown("###### h6") == "<h6>h6</h6>"
 
-test "text":
-  check markdown("hello world") == "hello world"
-
-  test "preprocessing":
-    check preprocessing("a\n   \nb\n") == "a\n\nb\n"
-    check preprocessing("a\tb") == "a    b"
-    check preprocessing("a\n   \n   \nb\n") == "a\n\n\nb\n"
-    check preprocessing("a\rb") == "a\nb"
-    check preprocessing("a\r\nb") == "a\nb"
+test "preprocessing":
+  check preprocessing("a\n   \nb\n") == "a\n\nb\n"
+  check preprocessing("a\tb") == "a    b"
+  check preprocessing("a\n   \n   \nb\n") == "a\n\n\nb\n"
+  check preprocessing("a\rb") == "a\nb"
+  check preprocessing("a\r\nb") == "a\nb"
 
 test "newline":
   check markdown("\n\n\n") == ""
@@ -55,3 +52,9 @@ test "fencing block code":
     ) == "<pre><code lang=\"nim\">proc helloworld():\n  echo(\"hello world\")</code></pre>"
   check markdown("```\nproc helloworld():\n  echo(\"hello world\")\n```"
     ) == "<pre><code lang=\"\">proc helloworld():\n  echo(\"hello world\")</code></pre>"
+
+test "paragraph":
+  check markdown("hello world") == "<p>hello world</p>"
+  check markdown("p1\np2\n") == "<p>p1\np2</p>"
+  check markdown("p1\n") == "<p>p1</p>"
+  check markdown("p1\n\np2\n") == "<p>p1</p><p>p2</p>"

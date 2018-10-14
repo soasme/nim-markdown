@@ -1,13 +1,9 @@
-# This is just an example to get you started. You may wish to put all of your
-# tests into a single file, or separate them into multiple `test1`, `test2`
-# etc. files (better names are recommended, just make sure the name starts with
-# the letter 't').
-#
 # To run these tests, simply execute `nimble test`.
+# If you have `watchdog`(pip install watchdog), you can run `make test` to watch testing while 
 
 import unittest
 
-import markdownpkg/submodule
+import markdownpkg/markdown
 
 test "escape <tag>":
   check escapeTag("hello <script>") == "hello &lt;script&gt;"

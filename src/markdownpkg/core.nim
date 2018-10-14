@@ -1,7 +1,17 @@
-# This is just an example to get you started. Users of your hybrid library will
-# import this file by writing ``import markdownpkg/submodule``. Feel free to rename or
-# remove this file altogether. You may create additional modules alongside
-# this file as required.
+# nim-markdown
+#
+# A Markdown parser in Nim programming language.
+#
+# Users of bin command can handle markdown document in a bash command like below.
+#
+# ```bash
+# $ markdown < file.md > file.html`
+# ```
+#
+# Users of library will import this file by writing ``import markdownpkg/core``.
+#
+# :copyright: (c) 2018 by Ju Lin.
+# :license: MIT.
 
 import re, strutils, strformat, tables, sequtils, math
 

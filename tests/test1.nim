@@ -45,7 +45,13 @@ test "text":
 test "newline":
   check markdown("\n\n\n") == ""
 
-test "code":
+test "indented block code":
   check markdown("    proc helloworld():\n") == "<pre><code>proc helloworld():</code></pre>"
   check markdown("    proc helloworld():\n        echo(\"hello world\")\n"
     ) == "<pre><code>proc helloworld():\n    echo(\"hello world\")</code></pre>"
+
+test "fencing block code":
+  check markdown("```nim\nproc helloworld():\n  echo(\"hello world\")\n```"
+    ) == "<pre><code lang=\"nim\">proc helloworld():\n  echo(\"hello world\")</code></pre>"
+  check markdown("```\nproc helloworld():\n  echo(\"hello world\")\n```"
+    ) == "<pre><code lang=\"\">proc helloworld():\n  echo(\"hello world\")</code></pre>"

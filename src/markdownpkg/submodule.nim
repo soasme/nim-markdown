@@ -149,7 +149,7 @@ proc findToken(doc: string, ctx: MarkdownContext, start: var int, ruleType: Mark
     result = MarkdownTokenRef(pos: start, len: size, type: MarkdownTokenType.Hrule, hruleVal: "")
   of MarkdownTokenType.BlockQuote:
     # XXX: quote can be yet another paragraph.
-    var quote = matches[0].replace(re(r"^ *> ?", {RegexFlag.reMultiLine}), "")
+    var quote = matches[0].replace(re(r"^ *> ?", {RegexFlag.reMultiLine}), "").strip(chars={'\n', ' '})
     result = MarkdownTokenRef(pos: start, len: size, type: MarkdownTokenType.BlockQuote, blockQuoteVal: quote)
   of MarkdownTokenType.IndentedBlockCode:
     var code = matches[0].replace(re(r"^ {4}", {RegexFlag.reMultiLine}), "")

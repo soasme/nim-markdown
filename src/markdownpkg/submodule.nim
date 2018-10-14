@@ -8,6 +8,12 @@ import re, strutils, strformat, tables, sequtils, math
 type
   MarkdownError* = object of Exception
 
+  # Type for saving parsing context.
+  MarkdownContext* = object
+    # `links` is for saving links like `[xyz]: https://...`.
+    # We need to save these links for forward/backward references.
+    links: Table[string, string]
+
   # Type for header element
   Header* = object
     doc: string
@@ -93,7 +99,7 @@ proc escapeCode*(doc: string): string =
   # Make code block in markdown document HTML-safe.
   result = doc.strip(leading=false, trailing=true).escapeTag.escapeAmpersandChar
 
-proc findToken(doc: string, start: int, ruleType: MarkdownTokenType, regex: Regex): MarkdownTokenRef =
+proc findToken(doc: string, ctx: MarkdownContext, start: int, ruleType: MarkdownTokenType, regex: Regex): MarkdownTokenRef =
   # Find a markdown token from document `doc` at position `start`,
   # based on a rule type and regex rule.
   var matches: array[5, string]
@@ -123,13 +129,13 @@ proc findToken(doc: string, start: int, ruleType: MarkdownTokenType, regex: Rege
     result = MarkdownTokenRef(pos: start, len: size, type: MarkdownTokenType.FencingBlockCode, fencingBlockCodeVal: val)
 
 
-iterator parseTokens(doc: string): MarkdownTokenRef =
+iterator parseTokens(doc: string, ctx: MarkdownContext): MarkdownTokenRef =
   # Parse markdown document into a sequence of tokens.
   var n = 0
   block parseBlock:
     while n < doc.len:
       for ruleType, ruleRegex in blockRules:
-        let token = findToken(doc, n, ruleType, ruleRegex)
+        let token = findToken(doc, ctx, n, ruleType, ruleRegex)
         if token != nil:
           n += token.len
           yield token
@@ -180,5 +186,6 @@ proc renderToken(token: MarkdownTokenRef): string =
 # Turn markdown-formatted string into HTML-formatting string.
 # By setting `escapse` to false, no HTML tag will be escaped.
 proc markdown*(doc: string, escape: bool = true): string =
-  for token in parsetokens(preprocessing(doc)):
+  var ctx: MarkdownContext
+  for token in parsetokens(preprocessing(doc), ctx):
       result &= rendertoken(token)

@@ -58,3 +58,9 @@ test "paragraph":
   check markdown("p1\np2\n") == "<p>p1\np2</p>"
   check markdown("p1\n") == "<p>p1</p>"
   check markdown("p1\n\np2\n") == "<p>p1</p><p>p2</p>"
+
+test "hrule":
+  check markdown("---\n") == "<hr>"
+  check markdown("___\n") == "<hr>"
+  check markdown("***\n") == "<hr>"
+  check markdown("   ---\n") == "<hr>"

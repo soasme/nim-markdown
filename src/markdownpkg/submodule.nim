@@ -27,6 +27,7 @@ type
   # Signify the token type
   MarkdownTokenType* {.pure.} = enum
     Header,
+    Hrule,
     IndentedBlockCode,
     FencingBlockCode,
     Paragraph,
@@ -41,6 +42,7 @@ type
     len: int
     case type*: MarkdownTokenType
     of MarkdownTokenType.Header: headerVal*: Header
+    of MarkdownTokenType.Hrule: hruleVal*: string
     of MarkdownTokenType.IndentedBlockCode: codeVal*: string
     of MarkdownTokenType.FencingBlockCode: fencingBlockCodeVal*: Fence
     of MarkdownTokenType.Paragraph: paragraphVal*: string
@@ -49,12 +51,14 @@ type
 
 var blockRules = @{
   MarkdownTokenType.Header: re"^ *(#{1,6}) *([^\n]+?) *#* *(?:\n+|$)",
+  MarkdownTokenType.Hrule: re"^ {0,3}[-*_](?: *[-*_]){2,} *(?:\n+|$)",
   MarkdownTokenType.IndentedBlockCode: re"^(( {4}[^\n]+\n*)+)",
   MarkdownTokenType.FencingBlockCode: re"^( *`{3,} *([^`\s]+)? *\n([\s\S]+?)\s*`{3} *(\n+|$))",
   MarkdownTokenType.Paragraph: re(
     r"^(((?:[^\n]+\n?" &
     r"(?!" &
     r" *(#{1,6}) *([^\n]+?) *#* *(?:\n+|$)" &
+    r" {0,3}[-*_](?: *[-*_]){2,} *(?:\n+|$)" &
     r"))+)\n*)"
   ),
   MarkdownTokenType.Text: re"^([^\n]+)",
@@ -125,6 +129,8 @@ proc findToken(doc: string, ctx: MarkdownContext, start: var int, ruleType: Mark
     val.level = matches[0].len
     val.doc = matches[1]
     result = MarkdownTokenRef(pos: start, len: size, type: MarkdownTokenType.Header, headerVal: val) 
+  of MarkdownTokenType.Hrule:
+    result = MarkdownTokenRef(pos: start, len: size, type: MarkdownTokenType.Hrule, hruleVal: "")
   of MarkdownTokenType.IndentedBlockCode:
     var code = matches[0].replace(re(r"^ {4}", {RegexFlag.reMultiLine}), "")
     result = MarkdownTokenRef(pos: start, len: size, type: MarkdownTokenType.IndentedBlockCode, codeVal: code)
@@ -148,7 +154,6 @@ iterator parseTokens(doc: string, ctx: MarkdownContext): MarkdownTokenRef =
   while n < doc.len:
     var token: MarkdownTokenRef = nil
     for ruleType, ruleRegex in blockRules:
-      echo(fmt"{ruleType} {n} {doc.len}")
       token = findToken(doc, ctx, n, ruleType, ruleRegex)
       if token != nil:
         yield token
@@ -185,12 +190,17 @@ proc renderIndentedBlockCode*(code: string): string =
 proc renderParagraph*(paragraph: string): string =
   result = fmt"<p>{paragraph}</p>"
 
+proc renderHrule(hrule: string): string =
+  result = "<hr>"
+
 proc renderToken(token: MarkdownTokenRef): string =
   # Render token.
   # This is a simple dispatcher function.
   case token.type
   of MarkdownTokenType.Header:
     result = renderHeader(token.headerVal)
+  of MarkdownTokenType.Hrule:
+    result = renderHrule(token.hruleVal)
   of MarkdownTokenType.Text:
     result = renderText(token.textVal)
   of MarkdownTokenType.Newline:

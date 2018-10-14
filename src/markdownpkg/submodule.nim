@@ -32,6 +32,7 @@ type
     FencingBlockCode,
     Paragraph,
     Text,
+    BlockQuote,
     Newline
 
   # Hold two values: type: MarkdownTokenType, and xyzValue.
@@ -43,6 +44,7 @@ type
     case type*: MarkdownTokenType
     of MarkdownTokenType.Header: headerVal*: Header
     of MarkdownTokenType.Hrule: hruleVal*: string
+    of MarkdownTokenType.BlockQuote: blockQuoteVal*: string
     of MarkdownTokenType.IndentedBlockCode: codeVal*: string
     of MarkdownTokenType.FencingBlockCode: fencingBlockCodeVal*: Fence
     of MarkdownTokenType.Paragraph: paragraphVal*: string
@@ -54,16 +56,29 @@ var blockRules = @{
   MarkdownTokenType.Hrule: re"^ {0,3}[-*_](?: *[-*_]){2,} *(?:\n+|$)",
   MarkdownTokenType.IndentedBlockCode: re"^(( {4}[^\n]+\n*)+)",
   MarkdownTokenType.FencingBlockCode: re"^( *`{3,} *([^`\s]+)? *\n([\s\S]+?)\s*`{3} *(\n+|$))",
+  MarkdownTokenType.BlockQuote: re"^(( *>[^\n]+(\n[^\n]+)*\n*)+)",
   MarkdownTokenType.Paragraph: re(
     r"^(((?:[^\n]+\n?" &
     r"(?!" &
-    r" *(#{1,6}) *([^\n]+?) *#* *(?:\n+|$)" &
-    r" {0,3}[-*_](?: *[-*_]){2,} *(?:\n+|$)" &
+    r" *(#{1,6}) *([^\n]+?) *#* *(?:\n+|$)|" & # header
+    r" {0,3}[-*_](?: *[-*_]){2,} *(?:\n+|$)|" & # hrule
+    r"(( *>[^\n]+(\n[^\n]+)*\n*)+)" & # blockQuote
     r"))+)\n*)"
   ),
   MarkdownTokenType.Text: re"^([^\n]+)",
   MarkdownTokenType.Newline: re"^(\n+)",
 }.newTable
+
+let blockParsingOrder = @[
+  MarkdownTokenType.Header,
+  MarkdownTokenType.Hrule,
+  MarkdownTokenType.IndentedBlockCode,
+  MarkdownTokenType.FencingBlockCode,
+  MarkdownTokenType.BlockQuote,
+  MarkdownTokenType.Paragraph,
+  MarkdownTokenType.Text,
+  MarkdownTokenType.Newline,
+]
 
 proc preprocessing*(doc: string): string =
   # Pre-processing the text
@@ -111,9 +126,10 @@ proc escapeCode*(doc: string): string =
   # Make code block in markdown document HTML-safe.
   result = doc.strip(leading=false, trailing=true).escapeTag.escapeAmpersandChar
 
-proc findToken(doc: string, ctx: MarkdownContext, start: var int, ruleType: MarkdownTokenType, regex: Regex): MarkdownTokenRef =
+proc findToken(doc: string, ctx: MarkdownContext, start: var int, ruleType: MarkdownTokenType): MarkdownTokenRef =
   # Find a markdown token from document `doc` at position `start`,
   # based on a rule type and regex rule.
+  let regex = blockRules[ruleType]
   var matches: array[5, string]
 
   let size = doc[start .. doc.len - 1].matchLen(regex, matches=matches)
@@ -131,6 +147,10 @@ proc findToken(doc: string, ctx: MarkdownContext, start: var int, ruleType: Mark
     result = MarkdownTokenRef(pos: start, len: size, type: MarkdownTokenType.Header, headerVal: val) 
   of MarkdownTokenType.Hrule:
     result = MarkdownTokenRef(pos: start, len: size, type: MarkdownTokenType.Hrule, hruleVal: "")
+  of MarkdownTokenType.BlockQuote:
+    # XXX: quote can be yet another paragraph.
+    var quote = matches[0].replace(re(r"^ *> ?", {RegexFlag.reMultiLine}), "")
+    result = MarkdownTokenRef(pos: start, len: size, type: MarkdownTokenType.BlockQuote, blockQuoteVal: quote)
   of MarkdownTokenType.IndentedBlockCode:
     var code = matches[0].replace(re(r"^ {4}", {RegexFlag.reMultiLine}), "")
     result = MarkdownTokenRef(pos: start, len: size, type: MarkdownTokenType.IndentedBlockCode, codeVal: code)
@@ -153,8 +173,8 @@ iterator parseTokens(doc: string, ctx: MarkdownContext): MarkdownTokenRef =
   var n = 0
   while n < doc.len:
     var token: MarkdownTokenRef = nil
-    for ruleType, ruleRegex in blockRules:
-      token = findToken(doc, ctx, n, ruleType, ruleRegex)
+    for ruleType in blockParsingOrder:
+      token = findToken(doc, ctx, n, ruleType)
       if token != nil:
         yield token
         break
@@ -193,6 +213,9 @@ proc renderParagraph*(paragraph: string): string =
 proc renderHrule(hrule: string): string =
   result = "<hr>"
 
+proc renderBlockQuote(blockQuote: string): string =
+  result = fmt"<blockquote>{blockQuote}</blockquote>"
+
 proc renderToken(token: MarkdownTokenRef): string =
   # Render token.
   # This is a simple dispatcher function.
@@ -211,6 +234,8 @@ proc renderToken(token: MarkdownTokenRef): string =
     result = renderFencingBlockCode(token.fencingBlockCodeVal)
   of MarkdownTokenType.Paragraph:
     result = renderParagraph(token.paragraphVal)
+  of MarkdownTokenType.BlockQuote:
+    result = renderBlockQuote(token.blockQuoteVal)
 
 # Turn markdown-formatted string into HTML-formatting string.
 # By setting `escapse` to false, no HTML tag will be escaped.

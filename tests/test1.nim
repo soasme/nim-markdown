@@ -64,3 +64,7 @@ test "hrule":
   check markdown("___\n") == "<hr>"
   check markdown("***\n") == "<hr>"
   check markdown("   ---\n") == "<hr>"
+
+test "quote":
+  check markdown("> blockquote") == "<blockquote>blockquote</blockquote>"
+  check markdown("> block\n> quote\n") == "<blockquote>block\nquote</blockquote>"

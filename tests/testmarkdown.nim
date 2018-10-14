@@ -64,3 +64,8 @@ test "hrule":
 test "quote":
   check markdown("> blockquote") == "<blockquote>blockquote</blockquote>"
   check markdown("> block\n> quote\n") == "<blockquote>block\nquote</blockquote>"
+
+test "bulleted item list":
+  check markdown("* a\n* b\n") == "<ul><li>a</li><li>b</li></ul>"
+  check markdown("+ a\n+ b\n") == "<ul><li>a</li><li>b</li></ul>"
+  check markdown("- a\n- b\n") == "<ul><li>a</li><li>b</li></ul>"

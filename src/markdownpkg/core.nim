@@ -23,6 +23,7 @@ type
     # `links` is for saving links like `[xyz]: https://...`.
     # We need to save these links for forward/backward references.
     links: Table[string, string]
+    listDepth: int
 
   # Type for header element
   Header* = object
@@ -34,6 +35,16 @@ type
     code: string
     lang: string
 
+  # Type for list item
+  ListItem* = object
+    doc: MarkdownTokenRef
+
+  # Type for list block
+  ListBlock* = object
+    elems: seq[ListItem]
+    depth: int
+    ordered: bool
+
   # Signify the token type
   MarkdownTokenType* {.pure.} = enum
     Header,
@@ -42,6 +53,8 @@ type
     FencingBlockCode,
     Paragraph,
     Text,
+    ListItem,
+    ListBlock,
     BlockQuote,
     Newline
 
@@ -60,6 +73,8 @@ type
     of MarkdownTokenType.Paragraph: paragraphVal*: string
     of MarkdownTokenType.Text: textVal*: string
     of MarkdownTokenType.Newline: newlineVal*: string
+    of MarkdownTokenType.ListBlock: listBlockVal*: ListBlock
+    of MarkdownTokenType.ListItem: listItemVal*: ListItem
 
 var blockRules = @{
   MarkdownTokenType.Header: re"^ *(#{1,6}) *([^\n]+?) *#* *(?:\n+|$)",
@@ -75,6 +90,18 @@ var blockRules = @{
     r"(( *>[^\n]+(\n[^\n]+)*\n*)+)" & # blockQuote
     r"))+)\n*)"
   ),
+  MarkdownTokenType.ListBlock: re(
+    r"^(" & # group 0 is itself.
+    r"( *)(?=[*+-]|\d+\.)" & # set group 1 to indent. 
+    r"(([*+-])?(?:\d+\.)?) " & # The leading of the indent is list mark `* `, `- `, `+ `, and `1. `.
+    r"[\s\S]+?" & # first list item content (optional).
+    r"(?:" & # support below block prepending the list block (non-capturing).
+    r"\n+(?=\1?(?:[-*_] *){3,}(?:\n+|$))" & # hrule
+    r"|\n+(?=\1(?(3)\d+\.|[*+-]) )" & # mix using 1. and */+/-.
+    r"|\n{2,}(?! )(?!\1(?:[*+-]|\d+\.) )\n*" &
+    r"|\s*$" &
+    r"))"
+  ),
   MarkdownTokenType.Text: re"^([^\n]+)",
   MarkdownTokenType.Newline: re"^(\n+)",
 }.newTable
@@ -85,9 +112,19 @@ let blockParsingOrder = @[
   MarkdownTokenType.IndentedBlockCode,
   MarkdownTokenType.FencingBlockCode,
   MarkdownTokenType.BlockQuote,
+  MarkdownTokenType.ListBlock,
   MarkdownTokenType.Paragraph,
-  MarkdownTokenType.Text,
   MarkdownTokenType.Newline,
+]
+
+let listParsingOrder = @[
+  MarkdownTokenType.Newline,
+  MarkdownTokenType.IndentedBlockCode,
+  MarkdownTokenType.FencingBlockCode,
+  MarkdownTokenType.Header,
+  MarkdownTokenType.Hrule,
+  MarkdownTokenType.BlockQuote,
+  MarkdownTokenType.Text,
 ]
 
 proc preprocessing*(doc: string): string =
@@ -169,6 +206,15 @@ proc findToken(doc: string, ctx: MarkdownContext, start: var int, ruleType: Mark
     val.lang = matches[1]
     val.code = matches[2]
     result = MarkdownTokenRef(pos: start, len: size, type: MarkdownTokenType.FencingBlockCode, fencingBlockCodeVal: val)
+  of MarkdownTokenType.ListItem:
+    var val: ListItem
+    # TODO: recursively parse val.doc
+    val.doc = MarkdownTokenRef(pos: start, len: size, type: MarkdownTokenType.Text, textVal: matches[0])
+    result = MarkdownTokenRef(pos: start, len: size, type: MarkdownTokenType.ListItem, listItemVal: val)
+  of MarkdownTokenType.ListBlock:
+    var val: ListBlock
+    # TODO: parse matching document and get a ListBlock here.
+    result = MarkdownTokenRef(pos: start, len: size, type: MarkdownTokenType.ListBlock, listBlockVal: val)
   of MarkdownTokenType.Paragraph:
     var val = matches[0].strip(chars={'\n', ' '})
     result = MarkdownTokenRef(pos: start, len: size, type: MarkdownTokenType.Paragraph, paragraphVal: val)
@@ -226,6 +272,12 @@ proc renderHrule(hrule: string): string =
 proc renderBlockQuote(blockQuote: string): string =
   result = fmt"<blockquote>{blockQuote}</blockquote>"
 
+proc renderListBlock(listBlock: ListBlock): string =
+  result = ""
+
+proc renderListItem(listItem: ListItem): string =
+  result = ""
+
 proc renderToken(token: MarkdownTokenRef): string =
   # Render token.
   # This is a simple dispatcher function.
@@ -246,6 +298,10 @@ proc renderToken(token: MarkdownTokenRef): string =
     result = renderParagraph(token.paragraphVal)
   of MarkdownTokenType.BlockQuote:
     result = renderBlockQuote(token.blockQuoteVal)
+  of MarkdownTokenType.ListBlock:
+    result = renderListBlock(token.listBlockVal)
+  of MarkdownTokenType.ListItem:
+    result = renderListItem(token.listItemVal)
 
 # Turn markdown-formatted string into HTML-formatting string.
 # By setting `escapse` to false, no HTML tag will be escaped.

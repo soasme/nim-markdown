@@ -325,25 +325,26 @@ proc renderHrule(hrule: string): string =
 proc renderBlockQuote(blockQuote: string): string =
   result = fmt"<blockquote>{blockQuote}</blockquote>"
 
-proc renderToken(token: MarkdownTokenRef): string;
+proc renderToken(ctx: MarkdownContext, token: MarkdownTokenRef): string;
 
-proc renderListBlock(listBlock: ListBlock): string =
+proc renderListBlock(ctx: MarkdownContext, listBlock: ListBlock): string =
   result = ""
   for el in listBlock.elems():
-    result &= renderToken(el.doc)
+    result &= renderToken(ctx, el.doc)
   if listBlock.ordered:
     result = fmt"<ol>{result}</ol>"
   else:
     result = fmt"<ul>{result}</ul>"
 
-proc renderListItem(listItem: ListItem): string =
-  let formattedDoc = renderToken(listItem.doc).strip(chars={'\n', ' '})
+proc renderListItem(ctx: MarkdownContext, listItem: ListItem): string =
+  let formattedDoc = renderToken(ctx, listItem.doc).strip(chars={'\n', ' '})
   result = fmt"<li>{formattedDoc}</li>"
 
-proc renderDefineLink(defineLink: DefineLink): string =
+proc renderDefineLink(ctx: MarkdownContext, defineLink: DefineLink): string =
+  echo(ctx.links)
   result = ""
 
-proc renderToken(token: MarkdownTokenRef): string =
+proc renderToken(ctx: MarkdownContext, token: MarkdownTokenRef): string =
   # Render token.
   # This is a simple dispatcher function.
   case token.type
@@ -364,15 +365,25 @@ proc renderToken(token: MarkdownTokenRef): string =
   of MarkdownTokenType.BlockQuote:
     result = renderBlockQuote(token.blockQuoteVal)
   of MarkdownTokenType.ListBlock:
-    result = renderListBlock(token.listBlockVal)
+    result = renderListBlock(ctx, token.listBlockVal)
   of MarkdownTokenType.ListItem:
-    result = renderListItem(token.listItemVal)
+    result = renderListItem(ctx, token.listItemVal)
   of MarkdownTokenType.DefineLink:
-    result = renderDefineLink(token.defineLinkVal)
+    result = renderDefineLink(ctx, token.defineLinkVal)
+
+proc buildContext(tokens: seq[MarkdownTokenRef]): MarkdownContext =
+  result = MarkdownContext(links: initTable[string, string]())
+  for token in tokens:
+    case token.type
+    of MarkdownTokenType.DefineLink:
+      result.links[token.defineLinkVal.text] = token.defineLinkVal.link
+    else:
+      discard
 
 # Turn markdown-formatted string into HTML-formatting string.
 # By setting `escapse` to false, no HTML tag will be escaped.
 proc markdown*(doc: string, escape: bool = true): string =
-  var ctx: MarkdownContext
-  for token in parseTokens(preprocessing(doc)):
-      result &= rendertoken(token)
+  let tokens = toSeq(parseTokens(preprocessing(doc)))
+  let ctx = buildContext(tokens)
+  for token in tokens:
+      result &= renderToken(ctx, token)

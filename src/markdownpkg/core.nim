@@ -41,7 +41,7 @@ type
 
   # Type for list block
   ListBlock* = object
-    elems: seq[ListItem]
+    elems: iterator(): ListItem
     depth: int
     ordered: bool
 
@@ -101,6 +101,11 @@ var blockRules = @{
     r"|\n{2,}(?! )(?!\1(?:[*+-]|\d+\.) )\n*" &
     r"|\s*$" &
     r"))"
+  ),
+  MarkdownTokenType.ListItem: re(
+    r"^(( *)(?:[*+-]|\d+\.) [^\n]*" &
+    r"(?:\n(?!\2(?:[*+-]|\d+\.) )[^\n]*)*)",
+    {RegexFlag.reMultiLine}
   ),
   MarkdownTokenType.Text: re"^([^\n]+)",
   MarkdownTokenType.Newline: re"^(\n+)",
@@ -173,7 +178,65 @@ proc escapeCode*(doc: string): string =
   # Make code block in markdown document HTML-safe.
   result = doc.strip(leading=false, trailing=true).escapeTag.escapeAmpersandChar
 
-proc findToken(doc: string, ctx: MarkdownContext, start: var int, ruleType: MarkdownTokenType): MarkdownTokenRef =
+proc findToken(doc: string, start: var int, ruleType: MarkdownTokenType): MarkdownTokenRef;
+
+iterator parseTokens(doc: string): MarkdownTokenRef =
+  # Parse markdown document into a sequence of tokens.
+  var n = 0
+  while n < doc.len:
+    var token: MarkdownTokenRef = nil
+    for ruleType in blockParsingOrder:
+      token = findToken(doc, n, ruleType)
+      if token != nil:
+        yield token
+        break
+    if token == nil:
+      raise newException(MarkdownError, fmt"unknown block rule at position {n}.")
+
+iterator parseListTokens(doc: string): MarkdownTokenRef =
+  let items = doc.findAll(blockRules[MarkdownTokenType.ListItem])
+  for index, item in items:
+    var val: ListItem
+    var text = item.replace(re"^ *(?:[*+-]|\d+\.) +", "")
+    val.doc = MarkdownTokenRef(pos: -1, len: item.len, type: MarkdownTokenType.Text, textVal: text)
+    yield MarkdownTokenRef(pos: -1, len: 1, type: MarkdownTokenType.ListItem, listItemVal: val)
+
+proc genNewlineToken(matches: openArray[string], pos: int, size: int): MarkdownTokenRef =
+  if matches[0].len > 1:
+    result = MarkdownTokenRef(pos: pos, len: size, type: MarkdownTokenType.Newline, newlineVal: matches[0])
+
+proc genHeaderToken(matches: openArray[string], pos: int, size: int): MarkdownTokenRef =
+  var val: Header
+  val.level = matches[0].len
+  val.doc = matches[1]
+  result = MarkdownTokenRef(pos: pos, len: size, type: MarkdownTokenType.Header, headerVal: val) 
+
+proc genHruleToken(matches: openArray[string], pos: int, size: int): MarkdownTokenRef =
+  result = MarkdownTokenRef(pos: pos, len: size, type: MarkdownTokenType.Hrule, hruleVal: "")
+
+proc genBlockQuoteToken(matches: openArray[string], pos: int, size: int): MarkdownTokenRef =
+  var quote = matches[0].replace(re(r"^ *> ?", {RegexFlag.reMultiLine}), "").strip(chars={'\n', ' '})
+  result = MarkdownTokenRef(pos: pos, len: size, type: MarkdownTokenType.BlockQuote, blockQuoteVal: quote)
+
+proc genIndentedBlockCode(matches: openArray[string], pos: int, size: int): MarkdownTokenRef =
+  var code = matches[0].replace(re(r"^ {4}", {RegexFlag.reMultiLine}), "")
+  result = MarkdownTokenRef(pos: pos, len: size, type: MarkdownTokenType.IndentedBlockCode, codeVal: code)
+
+proc genFencingBlockCode(matches: openArray[string], pos: int, size: int): MarkdownTokenRef =
+  var val: Fence
+  val.lang = matches[1]
+  val.code = matches[2]
+  result = MarkdownTokenRef(pos: pos, len: size, type: MarkdownTokenType.FencingBlockCode, fencingBlockCodeVal: val)
+
+proc genParagraph(matches: openArray[string], pos: int, size: int): MarkdownTokenRef =
+  var val = matches[0].strip(chars={'\n', ' '})
+  result = MarkdownTokenRef(pos: pos, len: size, type: MarkdownTokenType.Paragraph, paragraphVal: val)
+
+proc genText(matches: openArray[string], pos: int, size: int): MarkdownTokenRef =
+  result = MarkdownTokenRef(pos: pos, len: size, type: MarkdownTokenType.Text, textVal: matches[0])
+
+
+proc findToken(doc: string, start: var int, ruleType: MarkdownTokenType): MarkdownTokenRef =
   # Find a markdown token from document `doc` at position `start`,
   # based on a rule type and regex rule.
   let regex = blockRules[ruleType]
@@ -184,28 +247,12 @@ proc findToken(doc: string, ctx: MarkdownContext, start: var int, ruleType: Mark
     return nil
 
   case ruleType
-  of MarkdownTokenType.Newline:
-    if matches[0].len > 1:
-      result = MarkdownTokenRef(pos: start, len: size, type: MarkdownTokenType.Newline, newlineVal: matches[0])
-  of MarkdownTokenType.Header:
-    var val: Header
-    val.level = matches[0].len
-    val.doc = matches[1]
-    result = MarkdownTokenRef(pos: start, len: size, type: MarkdownTokenType.Header, headerVal: val) 
-  of MarkdownTokenType.Hrule:
-    result = MarkdownTokenRef(pos: start, len: size, type: MarkdownTokenType.Hrule, hruleVal: "")
-  of MarkdownTokenType.BlockQuote:
-    # XXX: quote can be yet another paragraph.
-    var quote = matches[0].replace(re(r"^ *> ?", {RegexFlag.reMultiLine}), "").strip(chars={'\n', ' '})
-    result = MarkdownTokenRef(pos: start, len: size, type: MarkdownTokenType.BlockQuote, blockQuoteVal: quote)
-  of MarkdownTokenType.IndentedBlockCode:
-    var code = matches[0].replace(re(r"^ {4}", {RegexFlag.reMultiLine}), "")
-    result = MarkdownTokenRef(pos: start, len: size, type: MarkdownTokenType.IndentedBlockCode, codeVal: code)
-  of MarkdownTokenType.FencingBlockCode:
-    var val: Fence
-    val.lang = matches[1]
-    val.code = matches[2]
-    result = MarkdownTokenRef(pos: start, len: size, type: MarkdownTokenType.FencingBlockCode, fencingBlockCodeVal: val)
+  of MarkdownTokenType.Newline: result = genNewlineToken(matches, start, size)
+  of MarkdownTokenType.Header: result = genHeaderToken(matches, start, size)
+  of MarkdownTokenType.Hrule: result = genHruleToken(matches, start, size)
+  of MarkdownTokenType.BlockQuote: result = genBlockQuoteToken(matches, start, size)
+  of MarkdownTokenType.IndentedBlockCode: result = genIndentedBlockCode(matches, start, size)
+  of MarkdownTokenType.FencingBlockCode: result = genFencingBlockCode(matches, start, size)
   of MarkdownTokenType.ListItem:
     var val: ListItem
     # TODO: recursively parse val.doc
@@ -213,30 +260,16 @@ proc findToken(doc: string, ctx: MarkdownContext, start: var int, ruleType: Mark
     result = MarkdownTokenRef(pos: start, len: size, type: MarkdownTokenType.ListItem, listItemVal: val)
   of MarkdownTokenType.ListBlock:
     var val: ListBlock
-    # TODO: parse matching document and get a ListBlock here.
+    val.elems = iterator(): ListItem =
+      for token in parseListTokens(matches[0]):
+        var item: ListItem
+        item.doc = token
+        yield item
     result = MarkdownTokenRef(pos: start, len: size, type: MarkdownTokenType.ListBlock, listBlockVal: val)
-  of MarkdownTokenType.Paragraph:
-    var val = matches[0].strip(chars={'\n', ' '})
-    result = MarkdownTokenRef(pos: start, len: size, type: MarkdownTokenType.Paragraph, paragraphVal: val)
-  of MarkdownTokenType.Text:
-    result = MarkdownTokenRef(pos: start, len: size, type: MarkdownTokenType.Text, textVal: matches[0])
+  of MarkdownTokenType.Paragraph: result = genParagraph(matches, start, size)
+  of MarkdownTokenType.Text: result = genText(matches, start, size)
 
   start += size
-
-
-iterator parseTokens(doc: string, ctx: MarkdownContext): MarkdownTokenRef =
-  # Parse markdown document into a sequence of tokens.
-  var n = 0
-  while n < doc.len:
-    var token: MarkdownTokenRef = nil
-    for ruleType in blockParsingOrder:
-      token = findToken(doc, ctx, n, ruleType)
-      if token != nil:
-        yield token
-        break
-    if token == nil:
-      raise newException(MarkdownError, fmt"unknown block rule at position {n}.")
-
 
 proc renderHeader*(header: Header): string =
   # Render header tag, for example, `<h1>`, `<h2>`, etc.
@@ -272,11 +305,17 @@ proc renderHrule(hrule: string): string =
 proc renderBlockQuote(blockQuote: string): string =
   result = fmt"<blockquote>{blockQuote}</blockquote>"
 
+proc renderToken(token: MarkdownTokenRef): string;
+
 proc renderListBlock(listBlock: ListBlock): string =
-  result = ""
+  result = "<ul>"
+  for el in listBlock.elems():
+    result &= renderToken(el.doc)
+  result &= "</ul>"
 
 proc renderListItem(listItem: ListItem): string =
-  result = ""
+  let formattedDoc = renderToken(listItem.doc).strip(chars={'\n', ' '})
+  result = fmt"<li>{formattedDoc}</li>"
 
 proc renderToken(token: MarkdownTokenRef): string =
   # Render token.
@@ -307,5 +346,5 @@ proc renderToken(token: MarkdownTokenRef): string =
 # By setting `escapse` to false, no HTML tag will be escaped.
 proc markdown*(doc: string, escape: bool = true): string =
   var ctx: MarkdownContext
-  for token in parsetokens(preprocessing(doc), ctx):
+  for token in parseTokens(preprocessing(doc)):
       result &= rendertoken(token)

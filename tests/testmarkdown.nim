@@ -69,3 +69,4 @@ test "bulleted item list":
   check markdown("* a\n* b\n") == "<ul><li>a</li><li>b</li></ul>"
   check markdown("+ a\n+ b\n") == "<ul><li>a</li><li>b</li></ul>"
   check markdown("- a\n- b\n") == "<ul><li>a</li><li>b</li></ul>"
+  check markdown("1. a\n2. b\n") == "<ol><li>a</li><li>b</li></ol>"

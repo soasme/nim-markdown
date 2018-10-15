@@ -193,6 +193,9 @@ iterator parseTokens(doc: string): MarkdownTokenRef =
     if token == nil:
       raise newException(MarkdownError, fmt"unknown block rule at position {n}.")
 
+# TODO: parse inline items.
+# TODO: parse list item tokens.
+
 iterator parseListTokens(doc: string): MarkdownTokenRef =
   let items = doc.findAll(blockRules[MarkdownTokenType.ListItem])
   for index, item in items:
@@ -235,6 +238,14 @@ proc genParagraph(matches: openArray[string], pos: int, size: int): MarkdownToke
 proc genText(matches: openArray[string], pos: int, size: int): MarkdownTokenRef =
   result = MarkdownTokenRef(pos: pos, len: size, type: MarkdownTokenType.Text, textVal: matches[0])
 
+proc genListBlock(matches: openArray[string], pos: int, size: int): MarkdownTokenRef =
+  var val: ListBlock
+  let doc = matches[0]
+  val.ordered = matches[2] =~ re"\d+."
+  val.elems = iterator(): ListItem =
+    for token in parseListTokens(doc):
+      yield ListItem(doc: token)
+  result = MarkdownTokenRef(pos: pos, len: size, type: MarkdownTokenType.ListBlock, listBlockVal: val)
 
 proc findToken(doc: string, start: var int, ruleType: MarkdownTokenType): MarkdownTokenRef =
   # Find a markdown token from document `doc` at position `start`,
@@ -258,14 +269,7 @@ proc findToken(doc: string, start: var int, ruleType: MarkdownTokenType): Markdo
     # TODO: recursively parse val.doc
     val.doc = MarkdownTokenRef(pos: start, len: size, type: MarkdownTokenType.Text, textVal: matches[0])
     result = MarkdownTokenRef(pos: start, len: size, type: MarkdownTokenType.ListItem, listItemVal: val)
-  of MarkdownTokenType.ListBlock:
-    var val: ListBlock
-    val.elems = iterator(): ListItem =
-      for token in parseListTokens(matches[0]):
-        var item: ListItem
-        item.doc = token
-        yield item
-    result = MarkdownTokenRef(pos: start, len: size, type: MarkdownTokenType.ListBlock, listBlockVal: val)
+  of MarkdownTokenType.ListBlock: result = genListBlock(matches, start, size)
   of MarkdownTokenType.Paragraph: result = genParagraph(matches, start, size)
   of MarkdownTokenType.Text: result = genText(matches, start, size)
 
@@ -308,10 +312,13 @@ proc renderBlockQuote(blockQuote: string): string =
 proc renderToken(token: MarkdownTokenRef): string;
 
 proc renderListBlock(listBlock: ListBlock): string =
-  result = "<ul>"
+  result = ""
   for el in listBlock.elems():
     result &= renderToken(el.doc)
-  result &= "</ul>"
+  if listBlock.ordered:
+    result = fmt"<ol>{result}</ol>"
+  else:
+    result = fmt"<ul>{result}</ul>"
 
 proc renderListItem(listItem: ListItem): string =
   let formattedDoc = renderToken(listItem.doc).strip(chars={'\n', ' '})

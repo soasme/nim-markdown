@@ -38,6 +38,14 @@ The basic usage of binary `markdown is like below:
 $ markdown < hello-world.md > hello-world.html
 ```
 
+## Development
+
+Run below command to test markdown modules:
+
+```
+$ nimble test
+```
+
 ## License
 
 nim-markdown is based on MIT license.

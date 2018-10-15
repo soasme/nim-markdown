@@ -45,6 +45,11 @@ type
     depth: int
     ordered: bool
 
+  # Type for defining link
+  DefineLink* = object
+    text: string
+    link: string
+
   # Signify the token type
   MarkdownTokenType* {.pure.} = enum
     Header,
@@ -56,6 +61,7 @@ type
     ListItem,
     ListBlock,
     BlockQuote,
+    DefineLink,
     Newline
 
   # Hold two values: type: MarkdownTokenType, and xyzValue.
@@ -75,6 +81,7 @@ type
     of MarkdownTokenType.Newline: newlineVal*: string
     of MarkdownTokenType.ListBlock: listBlockVal*: ListBlock
     of MarkdownTokenType.ListItem: listItemVal*: ListItem
+    of MarkdownTokenType.DefineLink: defineLinkVal*: DefineLink
 
 var blockRules = @{
   MarkdownTokenType.Header: re"^ *(#{1,6}) *([^\n]+?) *#* *(?:\n+|$)",
@@ -107,6 +114,7 @@ var blockRules = @{
     r"(?:\n(?!\2(?:[*+-]|\d+\.) )[^\n]*)*)",
     {RegexFlag.reMultiLine}
   ),
+  MarkdownTokenType.DefineLink: re"^( *\[([^^\]]+)\]: *<?([^\s>]+)>?(?: +[\""(]([^\n]+)[\"")])? *(?:\n+|$))",
   MarkdownTokenType.Text: re"^([^\n]+)",
   MarkdownTokenType.Newline: re"^(\n+)",
 }.newTable
@@ -118,6 +126,7 @@ let blockParsingOrder = @[
   MarkdownTokenType.FencingBlockCode,
   MarkdownTokenType.BlockQuote,
   MarkdownTokenType.ListBlock,
+  MarkdownTokenType.DefineLink,
   MarkdownTokenType.Paragraph,
   MarkdownTokenType.Newline,
 ]
@@ -238,6 +247,12 @@ proc genParagraph(matches: openArray[string], pos: int, size: int): MarkdownToke
 proc genText(matches: openArray[string], pos: int, size: int): MarkdownTokenRef =
   result = MarkdownTokenRef(pos: pos, len: size, type: MarkdownTokenType.Text, textVal: matches[0])
 
+proc genDefineLink(matches: openArray[string], pos: int, size: int): MarkdownTokenRef =
+  var val: DefineLink
+  val.text = matches[1]
+  val.link = matches[2]
+  result = MarkdownTokenRef(pos: pos, len: size, type: MarkdownTokenType.DefineLink, defineLinkVal: val)
+
 proc genListBlock(matches: openArray[string], pos: int, size: int): MarkdownTokenRef =
   var val: ListBlock
   let doc = matches[0]
@@ -264,6 +279,7 @@ proc findToken(doc: string, start: var int, ruleType: MarkdownTokenType): Markdo
   of MarkdownTokenType.BlockQuote: result = genBlockQuoteToken(matches, start, size)
   of MarkdownTokenType.IndentedBlockCode: result = genIndentedBlockCode(matches, start, size)
   of MarkdownTokenType.FencingBlockCode: result = genFencingBlockCode(matches, start, size)
+  of MarkdownTokenType.DefineLink: result = genDefineLink(matches, start, size)
   of MarkdownTokenType.ListItem:
     var val: ListItem
     # TODO: recursively parse val.doc
@@ -324,6 +340,9 @@ proc renderListItem(listItem: ListItem): string =
   let formattedDoc = renderToken(listItem.doc).strip(chars={'\n', ' '})
   result = fmt"<li>{formattedDoc}</li>"
 
+proc renderDefineLink(defineLink: DefineLink): string =
+  result = ""
+
 proc renderToken(token: MarkdownTokenRef): string =
   # Render token.
   # This is a simple dispatcher function.
@@ -348,6 +367,8 @@ proc renderToken(token: MarkdownTokenRef): string =
     result = renderListBlock(token.listBlockVal)
   of MarkdownTokenType.ListItem:
     result = renderListItem(token.listItemVal)
+  of MarkdownTokenType.DefineLink:
+    result = renderDefineLink(token.defineLinkVal)
 
 # Turn markdown-formatted string into HTML-formatting string.
 # By setting `escapse` to false, no HTML tag will be escaped.

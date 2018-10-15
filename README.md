@@ -4,8 +4,10 @@
 
 ## Install
 
+Work in progress. :)
+
 ```bash
-$ nimble install markdown
+$ nimble install markdown # won't work now.
 ```
 
 ## Library Usage

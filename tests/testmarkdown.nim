@@ -83,3 +83,5 @@ test "html block":
 
 test "inline autolink":
   check markdown("email to <test@example.com>") == "<p>email to <a href=\"mailto:test@example.com\">test@example.com</a></p>"
+  check markdown("go to <https://example.com>") == "<p>go to <a href=\"https://example.com\">https://example.com</a></p>"
+  check markdown("go to <http://example.com>") == "<p>go to <a href=\"http://example.com\">https://example.com</a></p>"

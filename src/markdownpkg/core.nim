@@ -301,10 +301,6 @@ proc renderText*(text: string): string =
   # Render text by escaping itself.
   result = text.escapeAmpersandSeq.escapeTag
 
-proc renderNewline*(newline: string): string =
-  # Render newline, which adds an empty string to the result.
-  result = ""
-
 proc renderFencingBlockCode*(fence: Fence): string =
   # Render fencing block code
   result = fmt("<pre><code lang=\"{fence.lang}\">{escapeCode(fence.code)}</code></pre>")
@@ -339,10 +335,6 @@ proc renderListItem(ctx: MarkdownContext, listItem: ListItem): string =
   let formattedDoc = renderToken(ctx, listItem.doc).strip(chars={'\n', ' '})
   result = fmt"<li>{formattedDoc}</li>"
 
-proc renderDefineLink(ctx: MarkdownContext, defineLink: DefineLink): string =
-  echo(ctx.links)
-  result = ""
-
 proc renderToken(ctx: MarkdownContext, token: MarkdownTokenRef): string =
   # Render token.
   # This is a simple dispatcher function.
@@ -353,8 +345,6 @@ proc renderToken(ctx: MarkdownContext, token: MarkdownTokenRef): string =
     result = renderHrule(token.hruleVal)
   of MarkdownTokenType.Text:
     result = renderText(token.textVal)
-  of MarkdownTokenType.Newline:
-    result = renderNewline(token.newlineVal)
   of MarkdownTokenType.IndentedBlockCode:
     result = renderIndentedBlockCode(token.codeVal)
   of MarkdownTokenType.FencingBlockCode:
@@ -367,10 +357,11 @@ proc renderToken(ctx: MarkdownContext, token: MarkdownTokenRef): string =
     result = renderListBlock(ctx, token.listBlockVal)
   of MarkdownTokenType.ListItem:
     result = renderListItem(ctx, token.listItemVal)
-  of MarkdownTokenType.DefineLink:
-    result = renderDefineLink(ctx, token.defineLinkVal)
+  else:
+    result = ""
 
 proc buildContext(tokens: seq[MarkdownTokenRef]): MarkdownContext =
+  # add building context
   result = MarkdownContext(links: initTable[string, string]())
   for token in tokens:
     case token.type

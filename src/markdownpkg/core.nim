@@ -68,7 +68,6 @@ type
   # xyz is the particular type name.
   MarkdownTokenRef* = ref MarkdownToken
   MarkdownToken* = object
-    pos: int
     len: int
     case type*: MarkdownTokenType
     of MarkdownTokenType.Header: headerVal*: Header
@@ -210,57 +209,57 @@ iterator parseListTokens(doc: string): MarkdownTokenRef =
   for index, item in items:
     var val: ListItem
     var text = item.replace(re"^ *(?:[*+-]|\d+\.) +", "")
-    val.doc = MarkdownTokenRef(pos: -1, len: item.len, type: MarkdownTokenType.Text, textVal: text)
-    yield MarkdownTokenRef(pos: -1, len: 1, type: MarkdownTokenType.ListItem, listItemVal: val)
+    val.doc = MarkdownTokenRef(len: item.len, type: MarkdownTokenType.Text, textVal: text)
+    yield MarkdownTokenRef(len: 1, type: MarkdownTokenType.ListItem, listItemVal: val)
 
-proc genNewlineToken(matches: openArray[string], pos: int, size: int): MarkdownTokenRef =
+proc genNewlineToken(matches: openArray[string]): MarkdownTokenRef =
   if matches[0].len > 1:
-    result = MarkdownTokenRef(pos: pos, len: size, type: MarkdownTokenType.Newline, newlineVal: matches[0])
+    result = MarkdownTokenRef(type: MarkdownTokenType.Newline, newlineVal: matches[0])
 
-proc genHeaderToken(matches: openArray[string], pos: int, size: int): MarkdownTokenRef =
+proc genHeaderToken(matches: openArray[string], ): MarkdownTokenRef =
   var val: Header
   val.level = matches[0].len
   val.doc = matches[1]
-  result = MarkdownTokenRef(pos: pos, len: size, type: MarkdownTokenType.Header, headerVal: val) 
+  result = MarkdownTokenRef(type: MarkdownTokenType.Header, headerVal: val) 
 
-proc genHruleToken(matches: openArray[string], pos: int, size: int): MarkdownTokenRef =
-  result = MarkdownTokenRef(pos: pos, len: size, type: MarkdownTokenType.Hrule, hruleVal: "")
+proc genHruleToken(matches: openArray[string]): MarkdownTokenRef =
+  result = MarkdownTokenRef(type: MarkdownTokenType.Hrule, hruleVal: "")
 
-proc genBlockQuoteToken(matches: openArray[string], pos: int, size: int): MarkdownTokenRef =
+proc genBlockQuoteToken(matches: openArray[string]): MarkdownTokenRef =
   var quote = matches[0].replace(re(r"^ *> ?", {RegexFlag.reMultiLine}), "").strip(chars={'\n', ' '})
-  result = MarkdownTokenRef(pos: pos, len: size, type: MarkdownTokenType.BlockQuote, blockQuoteVal: quote)
+  result = MarkdownTokenRef(type: MarkdownTokenType.BlockQuote, blockQuoteVal: quote)
 
-proc genIndentedBlockCode(matches: openArray[string], pos: int, size: int): MarkdownTokenRef =
+proc genIndentedBlockCode(matches: openArray[string]): MarkdownTokenRef =
   var code = matches[0].replace(re(r"^ {4}", {RegexFlag.reMultiLine}), "")
-  result = MarkdownTokenRef(pos: pos, len: size, type: MarkdownTokenType.IndentedBlockCode, codeVal: code)
+  result = MarkdownTokenRef(type: MarkdownTokenType.IndentedBlockCode, codeVal: code)
 
-proc genFencingBlockCode(matches: openArray[string], pos: int, size: int): MarkdownTokenRef =
+proc genFencingBlockCode(matches: openArray[string]): MarkdownTokenRef =
   var val: Fence
   val.lang = matches[1]
   val.code = matches[2]
-  result = MarkdownTokenRef(pos: pos, len: size, type: MarkdownTokenType.FencingBlockCode, fencingBlockCodeVal: val)
+  result = MarkdownTokenRef(type: MarkdownTokenType.FencingBlockCode, fencingBlockCodeVal: val)
 
-proc genParagraph(matches: openArray[string], pos: int, size: int): MarkdownTokenRef =
+proc genParagraph(matches: openArray[string]): MarkdownTokenRef =
   var val = matches[0].strip(chars={'\n', ' '})
-  result = MarkdownTokenRef(pos: pos, len: size, type: MarkdownTokenType.Paragraph, paragraphVal: val)
+  result = MarkdownTokenRef(type: MarkdownTokenType.Paragraph, paragraphVal: val)
 
-proc genText(matches: openArray[string], pos: int, size: int): MarkdownTokenRef =
-  result = MarkdownTokenRef(pos: pos, len: size, type: MarkdownTokenType.Text, textVal: matches[0])
+proc genText(matches: openArray[string]): MarkdownTokenRef =
+  result = MarkdownTokenRef(type: MarkdownTokenType.Text, textVal: matches[0])
 
-proc genDefineLink(matches: openArray[string], pos: int, size: int): MarkdownTokenRef =
+proc genDefineLink(matches: openArray[string]): MarkdownTokenRef =
   var val: DefineLink
   val.text = matches[1]
   val.link = matches[2]
-  result = MarkdownTokenRef(pos: pos, len: size, type: MarkdownTokenType.DefineLink, defineLinkVal: val)
+  result = MarkdownTokenRef(type: MarkdownTokenType.DefineLink, defineLinkVal: val)
 
-proc genListBlock(matches: openArray[string], pos: int, size: int): MarkdownTokenRef =
+proc genListBlock(matches: openArray[string]): MarkdownTokenRef =
   var val: ListBlock
   let doc = matches[0]
   val.ordered = matches[2] =~ re"\d+."
   val.elems = iterator(): ListItem =
     for token in parseListTokens(doc):
       yield ListItem(doc: token)
-  result = MarkdownTokenRef(pos: pos, len: size, type: MarkdownTokenType.ListBlock, listBlockVal: val)
+  result = MarkdownTokenRef(type: MarkdownTokenType.ListBlock, listBlockVal: val)
 
 proc findToken(doc: string, start: var int, ruleType: MarkdownTokenType): MarkdownTokenRef =
   # Find a markdown token from document `doc` at position `start`,
@@ -273,21 +272,21 @@ proc findToken(doc: string, start: var int, ruleType: MarkdownTokenType): Markdo
     return nil
 
   case ruleType
-  of MarkdownTokenType.Newline: result = genNewlineToken(matches, start, size)
-  of MarkdownTokenType.Header: result = genHeaderToken(matches, start, size)
-  of MarkdownTokenType.Hrule: result = genHruleToken(matches, start, size)
-  of MarkdownTokenType.BlockQuote: result = genBlockQuoteToken(matches, start, size)
-  of MarkdownTokenType.IndentedBlockCode: result = genIndentedBlockCode(matches, start, size)
-  of MarkdownTokenType.FencingBlockCode: result = genFencingBlockCode(matches, start, size)
-  of MarkdownTokenType.DefineLink: result = genDefineLink(matches, start, size)
+  of MarkdownTokenType.Newline: result = genNewlineToken(matches)
+  of MarkdownTokenType.Header: result = genHeaderToken(matches)
+  of MarkdownTokenType.Hrule: result = genHruleToken(matches)
+  of MarkdownTokenType.BlockQuote: result = genBlockQuoteToken(matches)
+  of MarkdownTokenType.IndentedBlockCode: result = genIndentedBlockCode(matches)
+  of MarkdownTokenType.FencingBlockCode: result = genFencingBlockCode(matches)
+  of MarkdownTokenType.DefineLink: result = genDefineLink(matches)
   of MarkdownTokenType.ListItem:
     var val: ListItem
     # TODO: recursively parse val.doc
-    val.doc = MarkdownTokenRef(pos: start, len: size, type: MarkdownTokenType.Text, textVal: matches[0])
-    result = MarkdownTokenRef(pos: start, len: size, type: MarkdownTokenType.ListItem, listItemVal: val)
-  of MarkdownTokenType.ListBlock: result = genListBlock(matches, start, size)
-  of MarkdownTokenType.Paragraph: result = genParagraph(matches, start, size)
-  of MarkdownTokenType.Text: result = genText(matches, start, size)
+    val.doc = MarkdownTokenRef(type: MarkdownTokenType.Text, textVal: matches[0])
+    result = MarkdownTokenRef(type: MarkdownTokenType.ListItem, listItemVal: val)
+  of MarkdownTokenType.ListBlock: result = genListBlock(matches)
+  of MarkdownTokenType.Paragraph: result = genParagraph(matches)
+  of MarkdownTokenType.Text: result = genText(matches)
 
   start += size
 

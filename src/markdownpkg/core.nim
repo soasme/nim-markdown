@@ -56,6 +56,11 @@ type
     anchor: string
     footnote: string
 
+  HTMLBlock* = object
+    tag: string
+    attributes: string
+    text: string
+
   # Signify the token type
   MarkdownTokenType* {.pure.} = enum
     Header,
@@ -69,6 +74,7 @@ type
     BlockQuote,
     DefineLink,
     DefineFootnote,
+    HTMLBlock,
     Newline
 
   # Hold two values: type: MarkdownTokenType, and xyzValue.
@@ -89,6 +95,17 @@ type
     of MarkdownTokenType.ListItem: listItemVal*: ListItem
     of MarkdownTokenType.DefineLink: defineLinkVal*: DefineLink
     of MarkdownTokenType.DefineFootnote: defineFootnoteVal*: DefineFootnote
+    of MarkdownTokenType.HTMLBlock: htmlBlockVal*: HTMLBlock
+
+const INLINE_TAGS = [
+    "a", "em", "strong", "small", "s", "cite", "q", "dfn", "abbr", "data",
+    "time", "code", "var", "samp", "kbd", "sub", "sup", "i", "b", "u", "mark",
+    "ruby", "rt", "rp", "bdi", "bdo", "span", "br", "wbr", "ins", "del",
+    "img", "font",
+]
+
+let blockTagAttribute = """\s*[a-zA-Z\-](?:\s*\=\s*(?:"[^"]*"|'[^']*'|[^\s'">]+))?"""
+let blockTag = r"(?!(?:" & fmt"{INLINE_TAGS.join(""|"")}" & r")\b)\w+(?!:/|[^\w\s@]*@)\b"
 
 var blockRules = @{
   MarkdownTokenType.Header: re"^ *(#{1,6}) *([^\n]+?) *#* *(?:\n+|$)",
@@ -128,6 +145,16 @@ var blockRules = @{
     r"(?: {1,}[^\n]*(?:\n+|$))*" &
     r"))"
   ),
+  MarkdownTokenType.HTMLBlock: re(
+    r"^(" &
+    r" *(?:" &
+    r"<!--[\s\S]*?-->" &
+    r"|<(" & blockTag & r")((?:" & blockTagAttribute & r")*?)>([\s\S]*?)<\/\1>" &
+    r"|<" & blockTag & r"(?:" & blockTagAttribute & r")*?\s*\/?>" &
+    r")" &
+    r" *(?:\n{2,}|\s*$)" &
+    r")"
+  ),
   MarkdownTokenType.Text: re"^([^\n]+)",
   MarkdownTokenType.Newline: re"^(\n+)",
 }.newTable
@@ -141,6 +168,7 @@ let blockParsingOrder = @[
   MarkdownTokenType.ListBlock,
   MarkdownTokenType.DefineLink,
   MarkdownTokenType.DefineFootnote,
+  MarkdownTokenType.HTMLBlock,
   MarkdownTokenType.Paragraph,
   MarkdownTokenType.Newline,
 ]
@@ -284,6 +312,18 @@ proc genListBlock(matches: openArray[string]): MarkdownTokenRef =
       yield ListItem(doc: token)
   result = MarkdownTokenRef(type: MarkdownTokenType.ListBlock, listBlockVal: val)
 
+proc genHTMLBlock(matches: openArray[string]): MarkdownTokenRef =
+  var val: HTMLBlock
+  if matches[1] == "":
+    val.tag = ""
+    val.attributes = ""
+    val.text = matches[0].strip
+  else:
+    val.tag = matches[1].strip
+    val.attributes = matches[2].strip
+    val.text = matches[3]
+  result = MarkdownTokenRef(type: MarkdownTokenType.HTMLBlock, htmlBlockVal: val)
+
 proc findToken(doc: string, start: var int, ruleType: MarkdownTokenType): MarkdownTokenRef =
   # Find a markdown token from document `doc` at position `start`,
   # based on a rule type and regex rule.
@@ -303,6 +343,7 @@ proc findToken(doc: string, start: var int, ruleType: MarkdownTokenType): Markdo
   of MarkdownTokenType.FencingBlockCode: result = genFencingBlockCode(matches)
   of MarkdownTokenType.DefineLink: result = genDefineLink(matches)
   of MarkdownTokenType.DefineFootnote: result = genDefineFootnote(matches)
+  of MarkdownTokenType.HTMLBlock: result = genHTMLBlock(matches)
   of MarkdownTokenType.ListItem:
     var val: ListItem
     # TODO: recursively parse val.doc
@@ -311,6 +352,8 @@ proc findToken(doc: string, start: var int, ruleType: MarkdownTokenType): Markdo
   of MarkdownTokenType.ListBlock: result = genListBlock(matches)
   of MarkdownTokenType.Paragraph: result = genParagraph(matches)
   of MarkdownTokenType.Text: result = genText(matches)
+  else:
+    result = genText(matches)
 
   start += size
 
@@ -358,6 +401,12 @@ proc renderListItem(ctx: MarkdownContext, listItem: ListItem): string =
   let formattedDoc = renderToken(ctx, listItem.doc).strip(chars={'\n', ' '})
   result = fmt"<li>{formattedDoc}</li>"
 
+proc renderHTMLBlock(ctx: MarkdownContext, htmlBlock: HTMLBlock): string =
+  if htmlBlock.tag == "":
+    result = htmlBlock.text
+  else:
+    result = fmt"<{htmlBlock.tag} {htmlBlock.attributes}>{htmlBlock.text}</{htmlBlock.tag}>"
+
 proc renderToken(ctx: MarkdownContext, token: MarkdownTokenRef): string =
   # Render token.
   # This is a simple dispatcher function.
@@ -380,6 +429,8 @@ proc renderToken(ctx: MarkdownContext, token: MarkdownTokenRef): string =
     result = renderListBlock(ctx, token.listBlockVal)
   of MarkdownTokenType.ListItem:
     result = renderListItem(ctx, token.listItemVal)
+  of MarkdownTokenType.HTMLBlock:
+    result = renderHTMLBlock(ctx, token.htmlBlockVal)
   else:
     result = ""
 

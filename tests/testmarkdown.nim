@@ -73,3 +73,11 @@ test "bulleted item list":
 
 test "define link":
   check markdown("[1]: https://example.com") == ""
+
+test "html block":
+  check markdown("<hr>\n\n") == "<hr>"
+  check markdown("<!-- comment -->\n\n") == "<!-- comment -->"
+  check markdown("<strong>hello world</strong>\n\n") == "<p><strong>hello world</strong></p>"
+  check markdown("<strong class='special'>hello world</strong>\n\n") == "<p><strong class='special'>hello world</strong></p>"
+  check markdown("<strong class=\"special\">hello world</strong>\n\n") == "<p><strong class=\"special\">hello world</strong></p>"
+

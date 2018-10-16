@@ -88,3 +88,6 @@ test "inline autolink":
 
 test "inline escape":
   check markdown("""\<p\>""") == "<p>&lt;p&gt;</p>"
+
+test "inline html":
+  check markdown("hello <em>world</em>") == "<p>hello <em>world</em></p>"

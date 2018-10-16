@@ -86,7 +86,8 @@ type
     Newline,
     AutoLink,
     InlineEscape,
-    InlineText
+    InlineText,
+    InlineHTML
 
   # Hold two values: type: MarkdownTokenType, and xyzValue.
   # xyz is the particular type name.
@@ -110,6 +111,7 @@ type
     of MarkdownTokenType.DefineLink: defineLinkVal*: DefineLink
     of MarkdownTokenType.DefineFootnote: defineFootnoteVal*: DefineFootnote
     of MarkdownTokenType.HTMLBlock: htmlBlockVal*: HTMLBlock
+    of MarkdownTokenType.InlineHTML: inlineHTMLVal*: HTMLBlock
 
 const INLINE_TAGS = [
     "a", "em", "strong", "small", "s", "cite", "q", "dfn", "abbr", "data",
@@ -176,6 +178,13 @@ var blockRules = @{
   MarkdownTokenType.InlineEscape: re(
     r"^\\([\\`*{}\[\]()#+\-.!_<>~|])"
   ),
+  MarkdownTokenType.InlineHTML: re(
+    r"^(" &
+    r"<!--[\s\S]*?-->" &
+    r"|<(\w+" & r"(?!:/|[^\w\s@]*@)\b" & r")((?:" & blockTagAttribute & r")*?)\s*>([\s\S]*?)<\/\1>" &
+    r"|<\w+" & r"(?!:/|[^\w\s@]*@)\b" & r"(?:" & blockTagAttribute & r")*?\s*\/?>" &
+    r")"
+  )
 }.newTable
 
 let blockParsingOrder = @[
@@ -204,6 +213,7 @@ let listParsingOrder = @[
 
 let inlineParsingOrder = @[
   MarkdownTokenType.InlineEscape,
+  MarkdownTokenType.InlineHTML,
   MarkdownTokenType.Newline,
   MarkdownTokenType.AutoLink,
   MarkdownTokenType.InlineText,
@@ -366,6 +376,18 @@ proc genInlineText(matches: openArray[string]): MarkdownTokenRef =
 proc genInlineEscape(matches: openArray[string]): MarkdownTokenRef =
   result = MarkdownTokenRef(type: MarkdownTokenType.InlineEscape, inlineEscapeVal: matches[0])
 
+proc genInlineHTML(matches: openArray[string]): MarkdownTokenRef =
+  var val: HTMLBlock
+  if matches[1] == "":
+    val.tag = ""
+    val.attributes = ""
+    val.text = matches[0].strip
+  else:
+    val.tag = matches[1].strip
+    val.attributes = matches[2].strip
+    val.text = matches[3]
+  result = MarkdownTokenRef(type: MarkdownTokenType.InlineHTML, inlineHTMLVal: val)
+
 proc findToken(doc: string, start: var int, ruleType: MarkdownTokenType): MarkdownTokenRef =
   # Find a markdown token from document `doc` at position `start`,
   # based on a rule type and regex rule.
@@ -397,6 +419,7 @@ proc findToken(doc: string, start: var int, ruleType: MarkdownTokenType): Markdo
   of MarkdownTokenType.AutoLink: result = genAutoLink(matches)
   of MarkdownTokenType.InlineText: result = genInlineText(matches)
   of MarkdownTokenType.InlineEscape: result = genInlineEscape(matches)
+  of MarkdownTokenType.InlineHTML: result = genInlineHTML(matches)
   else:
     result = genText(matches)
 
@@ -496,6 +519,8 @@ proc renderToken(ctx: MarkdownContext, token: MarkdownTokenRef): string =
     result = renderInlineEscape(ctx, token.inlineEscapeVal)
   of MarkdownTokenType.AutoLink:
     result = renderAutoLink(ctx, token.autoLinkVal)
+  of MarkdownTokenType.InlineHTML:
+    result = renderHTMLBlock(ctx, token.inlineHTMLVal)
   else:
     result = ""
 

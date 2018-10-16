@@ -80,4 +80,3 @@ test "html block":
   check markdown("<strong>hello world</strong>\n\n") == "<p><strong>hello world</strong></p>"
   check markdown("<strong class='special'>hello world</strong>\n\n") == "<p><strong class='special'>hello world</strong></p>"
   check markdown("<strong class=\"special\">hello world</strong>\n\n") == "<p><strong class=\"special\">hello world</strong></p>"
-

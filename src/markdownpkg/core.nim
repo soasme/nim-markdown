@@ -233,13 +233,13 @@ proc escapeCode*(doc: string): string =
   result = doc.strip(leading=false, trailing=true).escapeTag.escapeAmpersandChar
 
 
-iterator parseTokens(doc: string): MarkdownTokenRef =
+iterator parseTokens(doc: string, typeset: seq[MarkdownTokenType]): MarkdownTokenRef =
   # Parse markdown document into a sequence of tokens.
   var n = 0
   while n < doc.len:
     var token: MarkdownTokenRef = nil
-    for ruleType in blockParsingOrder:
-      token = findToken(doc, n, ruleType)
+    for type in typeset:
+      token = findToken(doc, n, type)
       if token != nil:
         yield token
         break
@@ -449,7 +449,7 @@ proc buildContext(tokens: seq[MarkdownTokenRef]): MarkdownContext =
 # Turn markdown-formatted string into HTML-formatting string.
 # By setting `escapse` to false, no HTML tag will be escaped.
 proc markdown*(doc: string, escape: bool = true): string =
-  let tokens = toSeq(parseTokens(preprocessing(doc)))
+  let tokens = toSeq(parseTokens(preprocessing(doc), blockParsingOrder))
   let ctx = buildContext(tokens)
   for token in tokens:
       result &= renderToken(ctx, token)

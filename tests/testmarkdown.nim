@@ -80,3 +80,6 @@ test "html block":
   check markdown("<strong>hello world</strong>\n\n") == "<p><strong>hello world</strong></p>"
   check markdown("<strong class='special'>hello world</strong>\n\n") == "<p><strong class='special'>hello world</strong></p>"
   check markdown("<strong class=\"special\">hello world</strong>\n\n") == "<p><strong class=\"special\">hello world</strong></p>"
+
+test "inline autolink":
+  check markdown("email to <test@example.com>") == "<p>email to <a href=\"mailto:test@example.com\">test@example.com</a></p>"

@@ -61,6 +61,14 @@ type
     attributes: string
     text: string
 
+  Paragraph* = object
+    dom: iterator(): MarkdownTokenRef
+
+  Link* = object
+    url: string
+    text: string
+    isEmail: bool
+
   # Signify the token type
   MarkdownTokenType* {.pure.} = enum
     Header,
@@ -75,7 +83,9 @@ type
     DefineLink,
     DefineFootnote,
     HTMLBlock,
-    Newline
+    Newline,
+    AutoLink,
+    InlineText
 
   # Hold two values: type: MarkdownTokenType, and xyzValue.
   # xyz is the particular type name.
@@ -88,9 +98,11 @@ type
     of MarkdownTokenType.BlockQuote: blockQuoteVal*: string
     of MarkdownTokenType.IndentedBlockCode: codeVal*: string
     of MarkdownTokenType.FencingBlockCode: fencingBlockCodeVal*: Fence
-    of MarkdownTokenType.Paragraph: paragraphVal*: string
+    of MarkdownTokenType.Paragraph: paragraphVal*: Paragraph
     of MarkdownTokenType.Text: textVal*: string
     of MarkdownTokenType.Newline: newlineVal*: string
+    of MarkdownTokenType.AutoLink: autoLinkVal*: Link
+    of MarkdownTokenType.InlineText: inlineTextVal*: string
     of MarkdownTokenType.ListBlock: listBlockVal*: ListBlock
     of MarkdownTokenType.ListItem: listItemVal*: ListItem
     of MarkdownTokenType.DefineLink: defineLinkVal*: DefineLink
@@ -157,6 +169,8 @@ var blockRules = @{
   ),
   MarkdownTokenType.Text: re"^([^\n]+)",
   MarkdownTokenType.Newline: re"^(\n+)",
+  MarkdownTokenType.AutoLink: re"^<([^ >]+(@|:)[^ >]+)>",
+  MarkdownTokenType.InlineText: re"^([\s\S]+?(?=[\\<!\[_*`~]|https?://| {2,}\n|$))",
 }.newTable
 
 let blockParsingOrder = @[
@@ -181,6 +195,12 @@ let listParsingOrder = @[
   MarkdownTokenType.Hrule,
   MarkdownTokenType.BlockQuote,
   MarkdownTokenType.Text,
+]
+
+let inlineParsingOrder = @[
+  MarkdownTokenType.Newline,
+  MarkdownTokenType.AutoLink,
+  MarkdownTokenType.InlineText,
 ]
 
 proc findToken(doc: string, start: var int, ruleType: MarkdownTokenType): MarkdownTokenRef;
@@ -231,7 +251,6 @@ proc escapeAmpersandSeq*(doc: string): string =
 proc escapeCode*(doc: string): string =
   # Make code block in markdown document HTML-safe.
   result = doc.strip(leading=false, trailing=true).escapeTag.escapeAmpersandChar
-
 
 iterator parseTokens(doc: string, typeset: seq[MarkdownTokenType]): MarkdownTokenRef =
   # Parse markdown document into a sequence of tokens.
@@ -285,7 +304,11 @@ proc genFencingBlockCode(matches: openArray[string]): MarkdownTokenRef =
   result = MarkdownTokenRef(type: MarkdownTokenType.FencingBlockCode, fencingBlockCodeVal: val)
 
 proc genParagraph(matches: openArray[string]): MarkdownTokenRef =
-  var val = matches[0].strip(chars={'\n', ' '})
+  var doc = matches[0].strip(chars={'\n', ' '})
+  var tokens = iterator(): MarkdownTokenRef =
+    for token in parseTokens(doc, inlineParsingOrder):
+      yield token
+  var val = Paragraph(dom: tokens)
   result = MarkdownTokenRef(type: MarkdownTokenType.Paragraph, paragraphVal: val)
 
 proc genText(matches: openArray[string]): MarkdownTokenRef =
@@ -324,6 +347,16 @@ proc genHTMLBlock(matches: openArray[string]): MarkdownTokenRef =
     val.text = matches[3]
   result = MarkdownTokenRef(type: MarkdownTokenType.HTMLBlock, htmlBlockVal: val)
 
+proc genAutoLink(matches: openArray[string]): MarkdownTokenRef =
+  var link: Link
+  link.url = matches[0]
+  link.text = matches[0]
+  link.isEmail = matches[1] == "@"
+  result = MarkdownTokenRef(type: MarkdownTokenType.AutoLink, autoLinkVal: link)
+
+proc genInlineText(matches: openArray[string]): MarkdownTokenRef =
+  result = MarkdownTokenRef(type: MarkdownTokenType.InlineText, inlineTextVal: matches[0])
+
 proc findToken(doc: string, start: var int, ruleType: MarkdownTokenType): MarkdownTokenRef =
   # Find a markdown token from document `doc` at position `start`,
   # based on a rule type and regex rule.
@@ -352,6 +385,8 @@ proc findToken(doc: string, start: var int, ruleType: MarkdownTokenType): Markdo
   of MarkdownTokenType.ListBlock: result = genListBlock(matches)
   of MarkdownTokenType.Paragraph: result = genParagraph(matches)
   of MarkdownTokenType.Text: result = genText(matches)
+  of MarkdownTokenType.AutoLink: result = genAutoLink(matches)
+  of MarkdownTokenType.InlineText: result = genInlineText(matches)
   else:
     result = genText(matches)
 
@@ -378,8 +413,10 @@ proc renderIndentedBlockCode*(code: string): string =
   # By default the indented block code doesn't support code highlight.
   result = fmt"<pre><code>{escapeCode(code)}</code></pre>"
 
-proc renderParagraph*(paragraph: string): string =
-  result = fmt"<p>{paragraph}</p>"
+proc renderParagraph*(ctx: MarkdownContext, paragraph: Paragraph): string =
+  for token in paragraph.dom():
+    result &= renderToken(ctx, token)
+  result = fmt"<p>{result}</p>"
 
 proc renderHrule(hrule: string): string =
   result = "<hr>"
@@ -407,6 +444,15 @@ proc renderHTMLBlock(ctx: MarkdownContext, htmlBlock: HTMLBlock): string =
   else:
     result = fmt"<{htmlBlock.tag} {htmlBlock.attributes}>{htmlBlock.text}</{htmlBlock.tag}>"
 
+proc renderInlineText(ctx: MarkdownContext, inlineText: string): string =
+  result = inlineText
+
+proc renderAutoLink(ctx: MarkdownContext, link: Link): string =
+  if link.isEmail:
+    result = fmt"""<a href="mailto:{link.url}">{link.text}</a>"""
+  else:
+    result = fmt"""<a href="{link.url}">{link.text}</a>"""
+
 proc renderToken(ctx: MarkdownContext, token: MarkdownTokenRef): string =
   # Render token.
   # This is a simple dispatcher function.
@@ -422,7 +468,7 @@ proc renderToken(ctx: MarkdownContext, token: MarkdownTokenRef): string =
   of MarkdownTokenType.FencingBlockCode:
     result = renderFencingBlockCode(token.fencingBlockCodeVal)
   of MarkdownTokenType.Paragraph:
-    result = renderParagraph(token.paragraphVal)
+    result = renderParagraph(ctx, token.paragraphVal)
   of MarkdownTokenType.BlockQuote:
     result = renderBlockQuote(token.blockQuoteVal)
   of MarkdownTokenType.ListBlock:
@@ -431,6 +477,10 @@ proc renderToken(ctx: MarkdownContext, token: MarkdownTokenRef): string =
     result = renderListItem(ctx, token.listItemVal)
   of MarkdownTokenType.HTMLBlock:
     result = renderHTMLBlock(ctx, token.htmlBlockVal)
+  of MarkdownTokenType.InlineText:
+    result = renderInlineText(ctx, token.inlineTextVal)
+  of MarkdownTokenType.AutoLink:
+    result = renderAutoLink(ctx, token.autoLinkVal)
   else:
     result = ""
 

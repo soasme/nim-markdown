@@ -85,6 +85,7 @@ type
     HTMLBlock,
     Newline,
     AutoLink,
+    InlineEscape,
     InlineText
 
   # Hold two values: type: MarkdownTokenType, and xyzValue.
@@ -103,6 +104,7 @@ type
     of MarkdownTokenType.Newline: newlineVal*: string
     of MarkdownTokenType.AutoLink: autoLinkVal*: Link
     of MarkdownTokenType.InlineText: inlineTextVal*: string
+    of MarkdownTokenType.InlineEscape: inlineEscapeVal*: string
     of MarkdownTokenType.ListBlock: listBlockVal*: ListBlock
     of MarkdownTokenType.ListItem: listItemVal*: ListItem
     of MarkdownTokenType.DefineLink: defineLinkVal*: DefineLink
@@ -171,6 +173,9 @@ var blockRules = @{
   MarkdownTokenType.Newline: re"^(\n+)",
   MarkdownTokenType.AutoLink: re"^<([^ >]+(@|:)[^ >]+)>",
   MarkdownTokenType.InlineText: re"^([\s\S]+?(?=[\\<!\[_*`~]|https?://| {2,}\n|$))",
+  MarkdownTokenType.InlineEscape: re(
+    r"^\\([\\`*{}\[\]()#+\-.!_<>~|])"
+  ),
 }.newTable
 
 let blockParsingOrder = @[
@@ -198,6 +203,7 @@ let listParsingOrder = @[
 ]
 
 let inlineParsingOrder = @[
+  MarkdownTokenType.InlineEscape,
   MarkdownTokenType.Newline,
   MarkdownTokenType.AutoLink,
   MarkdownTokenType.InlineText,
@@ -357,6 +363,9 @@ proc genAutoLink(matches: openArray[string]): MarkdownTokenRef =
 proc genInlineText(matches: openArray[string]): MarkdownTokenRef =
   result = MarkdownTokenRef(type: MarkdownTokenType.InlineText, inlineTextVal: matches[0])
 
+proc genInlineEscape(matches: openArray[string]): MarkdownTokenRef =
+  result = MarkdownTokenRef(type: MarkdownTokenType.InlineEscape, inlineEscapeVal: matches[0])
+
 proc findToken(doc: string, start: var int, ruleType: MarkdownTokenType): MarkdownTokenRef =
   # Find a markdown token from document `doc` at position `start`,
   # based on a rule type and regex rule.
@@ -387,6 +396,7 @@ proc findToken(doc: string, start: var int, ruleType: MarkdownTokenType): Markdo
   of MarkdownTokenType.Text: result = genText(matches)
   of MarkdownTokenType.AutoLink: result = genAutoLink(matches)
   of MarkdownTokenType.InlineText: result = genInlineText(matches)
+  of MarkdownTokenType.InlineEscape: result = genInlineEscape(matches)
   else:
     result = genText(matches)
 
@@ -447,6 +457,9 @@ proc renderHTMLBlock(ctx: MarkdownContext, htmlBlock: HTMLBlock): string =
 proc renderInlineText(ctx: MarkdownContext, inlineText: string): string =
   result = inlineText
 
+proc renderInlineEscape(ctx: MarkdownContext, inlineEscape: string): string =
+  result = inlineEscape.escapeAmpersandSeq.escapeTag
+
 proc renderAutoLink(ctx: MarkdownContext, link: Link): string =
   if link.isEmail:
     result = fmt"""<a href="mailto:{link.url}">{link.text}</a>"""
@@ -479,6 +492,8 @@ proc renderToken(ctx: MarkdownContext, token: MarkdownTokenRef): string =
     result = renderHTMLBlock(ctx, token.htmlBlockVal)
   of MarkdownTokenType.InlineText:
     result = renderInlineText(ctx, token.inlineTextVal)
+  of MarkdownTokenType.InlineEscape:
+    result = renderInlineEscape(ctx, token.inlineEscapeVal)
   of MarkdownTokenType.AutoLink:
     result = renderAutoLink(ctx, token.autoLinkVal)
   else:

@@ -23,6 +23,7 @@ type
     # `links` is for saving links like `[xyz]: https://...`.
     # We need to save these links for forward/backward references.
     links: Table[string, string]
+    footnotes: Table[string, string]
     listDepth: int
 
   # Type for header element
@@ -50,6 +51,11 @@ type
     text: string
     link: string
 
+  # Type for defining footnote
+  DefineFootnote* = object
+    anchor: string
+    footnote: string
+
   # Signify the token type
   MarkdownTokenType* {.pure.} = enum
     Header,
@@ -62,6 +68,7 @@ type
     ListBlock,
     BlockQuote,
     DefineLink,
+    DefineFootnote,
     Newline
 
   # Hold two values: type: MarkdownTokenType, and xyzValue.
@@ -81,6 +88,7 @@ type
     of MarkdownTokenType.ListBlock: listBlockVal*: ListBlock
     of MarkdownTokenType.ListItem: listItemVal*: ListItem
     of MarkdownTokenType.DefineLink: defineLinkVal*: DefineLink
+    of MarkdownTokenType.DefineFootnote: defineFootnoteVal*: DefineFootnote
 
 var blockRules = @{
   MarkdownTokenType.Header: re"^ *(#{1,6}) *([^\n]+?) *#* *(?:\n+|$)",
@@ -114,6 +122,12 @@ var blockRules = @{
     {RegexFlag.reMultiLine}
   ),
   MarkdownTokenType.DefineLink: re"^( *\[([^^\]]+)\]: *<?([^\s>]+)>?(?: +[\""(]([^\n]+)[\"")])? *(?:\n+|$))",
+  MarkdownTokenType.DefineFootnote: re(
+    r"^(\[\^([^\]]+)\]: *(" &
+    r"[^\n]*(?:\n+|$)" &
+    r"(?: {1,}[^\n]*(?:\n+|$))*" &
+    r"))"
+  ),
   MarkdownTokenType.Text: re"^([^\n]+)",
   MarkdownTokenType.Newline: re"^(\n+)",
 }.newTable
@@ -126,6 +140,7 @@ let blockParsingOrder = @[
   MarkdownTokenType.BlockQuote,
   MarkdownTokenType.ListBlock,
   MarkdownTokenType.DefineLink,
+  MarkdownTokenType.DefineFootnote,
   MarkdownTokenType.Paragraph,
   MarkdownTokenType.Newline,
 ]
@@ -254,6 +269,12 @@ proc genDefineLink(matches: openArray[string]): MarkdownTokenRef =
   val.link = matches[2]
   result = MarkdownTokenRef(type: MarkdownTokenType.DefineLink, defineLinkVal: val)
 
+proc genDefineFootnote(matches: openArray[string]): MarkdownTokenRef =
+  var val: DefineFootnote
+  val.anchor = matches[1]
+  val.footnote = matches[2]
+  result = MarkdownTokenRef(type: MarkdownTokenType.DefineFootnote, defineFootnoteVal: val)
+
 proc genListBlock(matches: openArray[string]): MarkdownTokenRef =
   var val: ListBlock
   let doc = matches[0]
@@ -281,6 +302,7 @@ proc findToken(doc: string, start: var int, ruleType: MarkdownTokenType): Markdo
   of MarkdownTokenType.IndentedBlockCode: result = genIndentedBlockCode(matches)
   of MarkdownTokenType.FencingBlockCode: result = genFencingBlockCode(matches)
   of MarkdownTokenType.DefineLink: result = genDefineLink(matches)
+  of MarkdownTokenType.DefineFootnote: result = genDefineFootnote(matches)
   of MarkdownTokenType.ListItem:
     var val: ListItem
     # TODO: recursively parse val.doc
@@ -363,11 +385,13 @@ proc renderToken(ctx: MarkdownContext, token: MarkdownTokenRef): string =
 
 proc buildContext(tokens: seq[MarkdownTokenRef]): MarkdownContext =
   # add building context
-  result = MarkdownContext(links: initTable[string, string]())
+  result = MarkdownContext(links: initTable[string, string](), footnotes: initTable[string, string]())
   for token in tokens:
     case token.type
     of MarkdownTokenType.DefineLink:
       result.links[token.defineLinkVal.text] = token.defineLinkVal.link
+    of MarkdownTokenType.DefineFootnote:
+      result.footnotes[token.defineFootnoteVal.anchor] = token.defineFootnoteVal.footnote
     else:
       discard
 

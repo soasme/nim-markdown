@@ -140,6 +140,9 @@ let listParsingOrder = @[
   MarkdownTokenType.Text,
 ]
 
+proc findToken(doc: string, start: var int, ruleType: MarkdownTokenType): MarkdownTokenRef;
+proc renderToken(ctx: MarkdownContext, token: MarkdownTokenRef): string;
+
 proc preprocessing*(doc: string): string =
   # Pre-processing the text
   result = doc.replace(re"\r\n|\r", "\n")
@@ -186,7 +189,6 @@ proc escapeCode*(doc: string): string =
   # Make code block in markdown document HTML-safe.
   result = doc.strip(leading=false, trailing=true).escapeTag.escapeAmpersandChar
 
-proc findToken(doc: string, start: var int, ruleType: MarkdownTokenType): MarkdownTokenRef;
 
 iterator parseTokens(doc: string): MarkdownTokenRef =
   # Parse markdown document into a sequence of tokens.
@@ -320,7 +322,6 @@ proc renderHrule(hrule: string): string =
 proc renderBlockQuote(blockQuote: string): string =
   result = fmt"<blockquote>{blockQuote}</blockquote>"
 
-proc renderToken(ctx: MarkdownContext, token: MarkdownTokenRef): string;
 
 proc renderListBlock(ctx: MarkdownContext, listBlock: ListBlock): string =
   result = ""

@@ -107,3 +107,7 @@ test "inline nolink":
 test "inline url":
   check markdown("https://example.com"
     ) == """<p><a href="https://example.com">https://example.com</a></p>"""
+
+test "inline double emphasis":
+  check markdown("**a**") == """<p><strong>a</strong></p>"""
+  check markdown("__a__") == """<p><strong>a</strong></p>"""

@@ -101,7 +101,8 @@ type
     InlineDoubleEmphasis,
     InlineEmphasis,
     InlineCode,
-    InlineBreak
+    InlineBreak,
+    InlineStrikethrough
 
   # Hold two values: type: MarkdownTokenType, and xyzValue.
   # xyz is the particular type name.
@@ -134,6 +135,7 @@ type
     of MarkdownTokenType.InlineEmphasis: inlineEmphasisVal*: string
     of MarkdownTokenType.InlineCode: inlineCodeVal*: string
     of MarkdownTokenType.InlineBreak: inlineBreakVal*: string
+    of MarkdownTokenType.InlineStrikethrough: inlineStrikethroughVal*: string
 
 const INLINE_TAGS = [
     "a", "em", "strong", "small", "s", "cite", "q", "dfn", "abbr", "data",
@@ -233,6 +235,7 @@ var blockRules = @{
   ),
   MarkdownTokenType.InlineCode: re"^((`+)\s*([\s\S]*?[^`])\s*\2(?!`))",
   MarkdownTokenType.InlineBreak: re"^( *\n(?!\s*$))",
+  MarkdownTokenType.InlineStrikethrough: re"^(~~(?=\S)([\s\S]*?\S)~~)",
 }.newTable
 
 let blockParsingOrder = @[
@@ -270,6 +273,7 @@ let inlineParsingOrder = @[
   MarkdownTokenType.InlineEmphasis,
   MarkdownTokenType.InlineCode,
   MarkdownTokenType.InlineBreak,
+  MarkdownTokenType.InlineStrikethrough,
   MarkdownTokenType.Newline,
   MarkdownTokenType.AutoLink,
   MarkdownTokenType.InlineText,
@@ -494,6 +498,9 @@ proc genInlineCode(matches: openArray[string]): MarkdownTokenRef =
 proc genInlineBreak(matches: openArray[string]): MarkdownTokenRef =
   result = MarkdownTokenRef(type: MarkdownTokenType.InlineBreak, inlineBreakVal: "")
 
+proc genInlineStrikethrough(matches: openArray[string]): MarkdownTokenRef =
+  result = MarkdownTokenRef(type: MarkdownTokenType.InlineStrikethrough, inlineStrikethroughVal: matches[1])
+
 proc findToken(doc: string, start: var int, ruleType: MarkdownTokenType): MarkdownTokenRef =
   # Find a markdown token from document `doc` at position `start`,
   # based on a rule type and regex rule.
@@ -534,6 +541,7 @@ proc findToken(doc: string, start: var int, ruleType: MarkdownTokenType): Markdo
   of MarkdownTokenType.InlineEmphasis: result = genInlineEmphasis(matches)
   of MarkdownTokenType.InlineCode: result = genInlineCode(matches)
   of MarkdownTokenType.InlineBreak: result = genInlineBreak(matches)
+  of MarkdownTokenType.InlineStrikethrough: result = genInlineStrikethrough(matches)
   else:
     result = genText(matches)
 
@@ -635,6 +643,9 @@ proc renderInlineCode(ctx: MarkdownContext, code: string): string =
 proc renderInlineBreak(ctx: MarkdownContext, code: string): string =
   result = fmt"<br>"
 
+proc renderInlineStrikethrough(ctx: MarkdownContext, text: string): string =
+  result = fmt"<del>{text}</del>"
+
 proc renderToken(ctx: MarkdownContext, token: MarkdownTokenRef): string =
   # Render token.
   # This is a simple dispatcher function.
@@ -683,6 +694,8 @@ proc renderToken(ctx: MarkdownContext, token: MarkdownTokenRef): string =
     result = renderInlineCode(ctx, token.inlineCodeVal)
   of MarkdownTokenType.InlineBreak:
     result = renderInlineBreak(ctx, token.inlineBreakVal)
+  of MarkdownTokenType.InlineStrikethrough:
+    result = renderInlineStrikethrough(ctx, token.inlineStrikethroughVal)
   else:
     result = ""
 

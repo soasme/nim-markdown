@@ -123,3 +123,6 @@ test "inline code":
 
 test "inline break":
   check markdown("hello\nworld") == """<p>hello<br>world</p>"""
+
+test "inline strikethrough":
+  check markdown("~~hello~~") == "<p><del>hello</del></p>"

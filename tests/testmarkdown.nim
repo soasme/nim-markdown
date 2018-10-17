@@ -67,9 +67,12 @@ test "quote":
 
 test "bulleted item list":
   check markdown("* a\n* b\n") == "<ul><li>a</li><li>b</li></ul>"
+  check markdown("* a\n  * b\n") == "<ul><li>a<ul><li>b</li></ul></li></ul>"
+  check markdown("* a\n  * b\n* c") == "<ul><li>a<ul><li>b</li></ul></li><li>c</li></ul>"
   check markdown("+ a\n+ b\n") == "<ul><li>a</li><li>b</li></ul>"
   check markdown("- a\n- b\n") == "<ul><li>a</li><li>b</li></ul>"
   check markdown("1. a\n2. b\n") == "<ol><li>a</li><li>b</li></ol>"
+  check markdown("1. a\n* b\n") == "<ol><li>a</li><li>b</li></ol>"
 
 test "define link":
   check markdown("[1]: https://example.com") == ""

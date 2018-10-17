@@ -38,11 +38,11 @@ type
 
   # Type for list item
   ListItem* = object
-    doc: MarkdownTokenRef
+    dom: seq[MarkdownTokenRef]
 
   # Type for list block
   ListBlock* = object
-    elems: iterator(): ListItem
+    elems: seq[MarkdownTokenRef]
     depth: int
     ordered: bool
 
@@ -265,6 +265,8 @@ let listParsingOrder = @[
   MarkdownTokenType.Header,
   MarkdownTokenType.Hrule,
   MarkdownTokenType.BlockQuote,
+  MarkdownTokenType.ListBlock,
+  MarkdownTokenType.HTMLBlock,
   MarkdownTokenType.Text,
 ]
 
@@ -353,14 +355,6 @@ iterator parseTokens(doc: string, typeset: seq[MarkdownTokenType]): MarkdownToke
 # TODO: parse inline items.
 # TODO: parse list item tokens.
 
-iterator parseListTokens(doc: string): MarkdownTokenRef =
-  let items = doc.findAll(blockRules[MarkdownTokenType.ListItem])
-  for index, item in items:
-    var val: ListItem
-    var text = item.replace(re"^ *(?:[*+-]|\d+\.) +", "")
-    val.doc = MarkdownTokenRef(len: item.len, type: MarkdownTokenType.Text, textVal: text)
-    yield MarkdownTokenRef(len: 1, type: MarkdownTokenType.ListItem, listItemVal: val)
-
 proc genNewlineToken(matches: openArray[string]): MarkdownTokenRef =
   if matches[0].len > 1:
     result = MarkdownTokenRef(type: MarkdownTokenType.Newline, newlineVal: matches[0])
@@ -411,13 +405,19 @@ proc genDefineFootnote(matches: openArray[string]): MarkdownTokenRef =
   val.footnote = matches[2]
   result = MarkdownTokenRef(type: MarkdownTokenType.DefineFootnote, defineFootnoteVal: val)
 
+iterator parseListTokens(doc: string): MarkdownTokenRef =
+  let items = doc.findAll(blockRules[MarkdownTokenType.ListItem])
+  for index, item in items:
+    var val: ListItem
+    var text = item.replace(re"^ *(?:[*+-]|\d+\.) +", "").strip
+    val.dom = toSeq(parseTokens(text, listParsingOrder))
+    yield MarkdownTokenRef(len: 1, type: MarkdownTokenType.ListItem, listItemVal: val)
+    
 proc genListBlock(matches: openArray[string]): MarkdownTokenRef =
   var val: ListBlock
   let doc = matches[0]
   val.ordered = matches[2] =~ re"\d+."
-  val.elems = iterator(): ListItem =
-    for token in parseListTokens(doc):
-      yield ListItem(doc: token)
+  val.elems = toSeq(parseListTokens(doc))
   result = MarkdownTokenRef(type: MarkdownTokenType.ListBlock, listBlockVal: val)
 
 proc genHTMLBlock(matches: openArray[string]): MarkdownTokenRef =
@@ -534,11 +534,6 @@ proc findToken(doc: string, start: var int, ruleType: MarkdownTokenType): Markdo
   of MarkdownTokenType.DefineLink: result = genDefineLink(matches)
   of MarkdownTokenType.DefineFootnote: result = genDefineFootnote(matches)
   of MarkdownTokenType.HTMLBlock: result = genHTMLBlock(matches)
-  of MarkdownTokenType.ListItem:
-    var val: ListItem
-    # TODO: recursively parse val.doc
-    val.doc = MarkdownTokenRef(type: MarkdownTokenType.Text, textVal: matches[0])
-    result = MarkdownTokenRef(type: MarkdownTokenType.ListItem, listItemVal: val)
   of MarkdownTokenType.ListBlock: result = genListBlock(matches)
   of MarkdownTokenType.Paragraph: result = genParagraph(matches)
   of MarkdownTokenType.Text: result = genText(matches)
@@ -593,19 +588,19 @@ proc renderHrule(hrule: string): string =
 proc renderBlockQuote(blockQuote: string): string =
   result = fmt"<blockquote>{blockQuote}</blockquote>"
 
+proc renderListItem(ctx: MarkdownContext, listItem: ListItem): string =
+  for el in listItem.dom:
+    result &= renderToken(ctx, el)
+  result = fmt"<li>{result}</li>"
 
 proc renderListBlock(ctx: MarkdownContext, listBlock: ListBlock): string =
   result = ""
-  for el in listBlock.elems():
-    result &= renderToken(ctx, el.doc)
+  for el in listBlock.elems:
+    result &= renderListItem(ctx, el.listItemVal)
   if listBlock.ordered:
     result = fmt"<ol>{result}</ol>"
   else:
     result = fmt"<ul>{result}</ul>"
-
-proc renderListItem(ctx: MarkdownContext, listItem: ListItem): string =
-  let formattedDoc = renderToken(ctx, listItem.doc).strip(chars={'\n', ' '})
-  result = fmt"<li>{formattedDoc}</li>"
 
 proc renderHTMLBlock(ctx: MarkdownContext, htmlBlock: HTMLBlock): string =
   if htmlBlock.tag == "":

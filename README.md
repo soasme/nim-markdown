@@ -42,6 +42,21 @@ Run below command to test markdown modules:
 $ nimble test
 ```
 
+## Roadmap
+
+Priorities (WIP for top to bottom):
+
+* Feature complete and correctness.
+* Documentation & tutorial.
+* Support controlling options, for example, escaping, text wrapping, html santinize, etc.
+* Refactor in a extention friendly code organization.
+* Benchmark.
+* Support converting from HTML to Markdown.
+
+## Changelog
+
+* v0.1.0, 17 Oct 2018, initial release.
+
 ## License
 
 nim-markdown is based on MIT license.

@@ -100,7 +100,8 @@ type
     InlineURL,
     InlineDoubleEmphasis,
     InlineEmphasis,
-    InlineCode
+    InlineCode,
+    InlineBreak
 
   # Hold two values: type: MarkdownTokenType, and xyzValue.
   # xyz is the particular type name.
@@ -132,6 +133,7 @@ type
     of MarkdownTokenType.InlineDoubleEmphasis: inlineDoubleEmphasisVal*: string
     of MarkdownTokenType.InlineEmphasis: inlineEmphasisVal*: string
     of MarkdownTokenType.InlineCode: inlineCodeVal*: string
+    of MarkdownTokenType.InlineBreak: inlineBreakVal*: string
 
 const INLINE_TAGS = [
     "a", "em", "strong", "small", "s", "cite", "q", "dfn", "abbr", "data",
@@ -194,7 +196,7 @@ var blockRules = @{
   MarkdownTokenType.Text: re"^([^\n]+)",
   MarkdownTokenType.Newline: re"^(\n+)",
   MarkdownTokenType.AutoLink: re"^<([^ >]+(@|:)[^ >]+)>",
-  MarkdownTokenType.InlineText: re"^([\s\S]+?(?=[\\<!\[_*`~]|https?://| {2,}\n|$))",
+  MarkdownTokenType.InlineText: re"^([\s\S]+?(?=[\\<!\[_*`~]|https?://| *\n|$))",
   MarkdownTokenType.InlineEscape: re(
     r"^\\([\\`*{}\[\]()#+\-.!_<>~|])"
   ),
@@ -230,6 +232,7 @@ var blockRules = @{
     r"|\*([\s\S]+?)\*(?!\*))"
   ),
   MarkdownTokenType.InlineCode: re"^((`+)\s*([\s\S]*?[^`])\s*\2(?!`))",
+  MarkdownTokenType.InlineBreak: re"^( *\n(?!\s*$))",
 }.newTable
 
 let blockParsingOrder = @[
@@ -266,6 +269,7 @@ let inlineParsingOrder = @[
   MarkdownTokenType.InlineDoubleEmphasis,
   MarkdownTokenType.InlineEmphasis,
   MarkdownTokenType.InlineCode,
+  MarkdownTokenType.InlineBreak,
   MarkdownTokenType.Newline,
   MarkdownTokenType.AutoLink,
   MarkdownTokenType.InlineText,
@@ -487,6 +491,9 @@ proc genInlineCode(matches: openArray[string]): MarkdownTokenRef =
   var code = matches[2]
   result = MarkdownTokenRef(type: MarkdownTokenType.InlineCode, inlineCodeVal: code)
 
+proc genInlineBreak(matches: openArray[string]): MarkdownTokenRef =
+  result = MarkdownTokenRef(type: MarkdownTokenType.InlineBreak, inlineBreakVal: "")
+
 proc findToken(doc: string, start: var int, ruleType: MarkdownTokenType): MarkdownTokenRef =
   # Find a markdown token from document `doc` at position `start`,
   # based on a rule type and regex rule.
@@ -526,6 +533,7 @@ proc findToken(doc: string, start: var int, ruleType: MarkdownTokenType): Markdo
   of MarkdownTokenType.InlineDoubleEmphasis: result = genInlineDoubleEmphasis(matches)
   of MarkdownTokenType.InlineEmphasis: result = genInlineEmphasis(matches)
   of MarkdownTokenType.InlineCode: result = genInlineCode(matches)
+  of MarkdownTokenType.InlineBreak: result = genInlineBreak(matches)
   else:
     result = genText(matches)
 
@@ -624,6 +632,9 @@ proc renderInlineCode(ctx: MarkdownContext, code: string): string =
   let formattedCode = code.strip.escapeAmpersandChar.escapeTag
   result = fmt"""<code>{formattedCode}</code>"""
 
+proc renderInlineBreak(ctx: MarkdownContext, code: string): string =
+  result = fmt"<br>"
+
 proc renderToken(ctx: MarkdownContext, token: MarkdownTokenRef): string =
   # Render token.
   # This is a simple dispatcher function.
@@ -670,6 +681,8 @@ proc renderToken(ctx: MarkdownContext, token: MarkdownTokenRef): string =
     result = renderInlineEmphasis(ctx, token.inlineEmphasisVal)
   of MarkdownTokenType.InlineCode:
     result = renderInlineCode(ctx, token.inlineCodeVal)
+  of MarkdownTokenType.InlineBreak:
+    result = renderInlineBreak(ctx, token.inlineBreakVal)
   else:
     result = ""
 

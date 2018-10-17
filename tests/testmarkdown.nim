@@ -51,7 +51,7 @@ test "fencing block code":
 
 test "paragraph":
   check markdown("hello world") == "<p>hello world</p>"
-  check markdown("p1\np2\n") == "<p>p1\np2</p>"
+  check markdown("p1\np2\n") == "<p>p1<br>p2</p>"
   check markdown("p1\n") == "<p>p1</p>"
   check markdown("p1\n\np2\n") == "<p>p1</p><p>p2</p>"
 
@@ -120,3 +120,6 @@ test "inline code":
   check markdown("`code`") == """<p><code>code</code></p>"""
   check markdown("``code``") == """<p><code>code</code></p>"""
   check markdown("```code```") == """<p><code>code</code></p>"""
+
+test "inline break":
+  check markdown("hello\nworld") == """<p>hello<br>world</p>"""

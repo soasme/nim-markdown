@@ -75,6 +75,9 @@ type
     text: string
     isImage: bool
 
+  RefFootnote* = object
+    anchor: string
+
   # Signify the token type
   MarkdownTokenType* {.pure.} = enum
     Header,
@@ -102,7 +105,8 @@ type
     InlineEmphasis,
     InlineCode,
     InlineBreak,
-    InlineStrikethrough
+    InlineStrikethrough,
+    InlineFootnote
 
   # Hold two values: type: MarkdownTokenType, and xyzValue.
   # xyz is the particular type name.
@@ -136,6 +140,7 @@ type
     of MarkdownTokenType.InlineCode: inlineCodeVal*: string
     of MarkdownTokenType.InlineBreak: inlineBreakVal*: string
     of MarkdownTokenType.InlineStrikethrough: inlineStrikethroughVal*: string
+    of MarkdownTokenType.InlineFootnote: inlineFootnoteVal*: RefFootnote
 
 const INLINE_TAGS = [
     "a", "em", "strong", "small", "s", "cite", "q", "dfn", "abbr", "data",
@@ -236,6 +241,7 @@ var blockRules = @{
   MarkdownTokenType.InlineCode: re"^((`+)\s*([\s\S]*?[^`])\s*\2(?!`))",
   MarkdownTokenType.InlineBreak: re"^( *\n(?!\s*$))",
   MarkdownTokenType.InlineStrikethrough: re"^(~~(?=\S)([\s\S]*?\S)~~)",
+  MarkdownTokenType.InlineFootnote: re"^(\[\^([^\]]+)\])",
 }.newTable
 
 let blockParsingOrder = @[
@@ -266,6 +272,7 @@ let inlineParsingOrder = @[
   MarkdownTokenType.InlineEscape,
   MarkdownTokenType.InlineHTML,
   MarkdownTokenType.InlineLink,
+  MarkdownTokenType.InlineFootnote,
   MarkdownTokenType.InlineRefLink,
   MarkdownTokenType.InlineNoLink,
   MarkdownTokenType.InlineURL,
@@ -274,7 +281,6 @@ let inlineParsingOrder = @[
   MarkdownTokenType.InlineCode,
   MarkdownTokenType.InlineBreak,
   MarkdownTokenType.InlineStrikethrough,
-  MarkdownTokenType.Newline,
   MarkdownTokenType.AutoLink,
   MarkdownTokenType.InlineText,
 ]
@@ -327,6 +333,9 @@ proc escapeAmpersandSeq*(doc: string): string =
 proc escapeCode*(doc: string): string =
   # Make code block in markdown document HTML-safe.
   result = doc.strip(leading=false, trailing=true).escapeTag.escapeAmpersandChar
+
+proc slugify(doc: string): string =
+  result = doc.toLower.escapeAmpersandSeq.escapeTag.escapeQuote.replace(re"\s+", "-")
 
 iterator parseTokens(doc: string, typeset: seq[MarkdownTokenType]): MarkdownTokenRef =
   # Parse markdown document into a sequence of tokens.
@@ -501,6 +510,10 @@ proc genInlineBreak(matches: openArray[string]): MarkdownTokenRef =
 proc genInlineStrikethrough(matches: openArray[string]): MarkdownTokenRef =
   result = MarkdownTokenRef(type: MarkdownTokenType.InlineStrikethrough, inlineStrikethroughVal: matches[1])
 
+proc genInlineFootnote(matches: openArray[string]): MarkdownTokenRef =
+  let footnote = RefFootnote(anchor: matches[1])
+  result = MarkdownTokenRef(type: MarkdownTokenType.InlineFootnote, inlineFootnoteVal: footnote)
+
 proc findToken(doc: string, start: var int, ruleType: MarkdownTokenType): MarkdownTokenRef =
   # Find a markdown token from document `doc` at position `start`,
   # based on a rule type and regex rule.
@@ -542,6 +555,7 @@ proc findToken(doc: string, start: var int, ruleType: MarkdownTokenType): Markdo
   of MarkdownTokenType.InlineCode: result = genInlineCode(matches)
   of MarkdownTokenType.InlineBreak: result = genInlineBreak(matches)
   of MarkdownTokenType.InlineStrikethrough: result = genInlineStrikethrough(matches)
+  of MarkdownTokenType.InlineFootnote: result = genInlineFootnote(matches)
   else:
     result = genText(matches)
 
@@ -646,6 +660,11 @@ proc renderInlineBreak(ctx: MarkdownContext, code: string): string =
 proc renderInlineStrikethrough(ctx: MarkdownContext, text: string): string =
   result = fmt"<del>{text}</del>"
 
+proc renderInlineFootnote(ctx: MarkdownContext, footnote: RefFootnote): string =
+  let slug = slugify(footnote.anchor)
+  result = fmt"""<sup class="footnote-ref" id="footnote-ref-{slug}">""" &
+    fmt"""<a href="#footnote-{slug}">{footnote.anchor}</a></sup>"""
+
 proc renderToken(ctx: MarkdownContext, token: MarkdownTokenRef): string =
   # Render token.
   # This is a simple dispatcher function.
@@ -696,6 +715,8 @@ proc renderToken(ctx: MarkdownContext, token: MarkdownTokenRef): string =
     result = renderInlineBreak(ctx, token.inlineBreakVal)
   of MarkdownTokenType.InlineStrikethrough:
     result = renderInlineStrikethrough(ctx, token.inlineStrikethroughVal)
+  of MarkdownTokenType.InlineFootnote:
+    result = renderInlineFootnote(ctx, token.inlineFootnoteVal)
   else:
     result = ""
 

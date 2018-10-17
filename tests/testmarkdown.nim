@@ -126,3 +126,7 @@ test "inline break":
 
 test "inline strikethrough":
   check markdown("~~hello~~") == "<p><del>hello</del></p>"
+
+test "inline footnote":
+  check markdown("[^x]\n\n[^x]: abc") == """<p><sup class="footnote-ref" id="footnote-ref-x">""" &
+    """<a href="#footnote-x">x</a></sup></p>"""

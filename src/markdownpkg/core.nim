@@ -70,6 +70,11 @@ type
     isImage: bool
     isEmail: bool
 
+  RefLink* = object
+    id: string
+    text: string
+    isImage: bool
+
   # Signify the token type
   MarkdownTokenType* {.pure.} = enum
     Header,
@@ -89,7 +94,8 @@ type
     InlineEscape,
     InlineText,
     InlineHTML,
-    InlineLink
+    InlineLink,
+    InlineRefLink
 
   # Hold two values: type: MarkdownTokenType, and xyzValue.
   # xyz is the particular type name.
@@ -115,6 +121,7 @@ type
     of MarkdownTokenType.HTMLBlock: htmlBlockVal*: HTMLBlock
     of MarkdownTokenType.InlineHTML: inlineHTMLVal*: HTMLBlock
     of MarkdownTokenType.InlineLink: inlineLinkVal*: Link
+    of MarkdownTokenType.InlineRefLink: inlineRefLinkVal*: RefLink
 
 const INLINE_TAGS = [
     "a", "em", "strong", "small", "s", "cite", "q", "dfn", "abbr", "data",
@@ -195,6 +202,11 @@ var blockRules = @{
     r"\s*([\s\S]*?)" &
     r"\))"
   ),
+  MarkdownTokenType.InlineRefLink: re(
+    r"^(!?\[" &
+    r"((?:\[[^^\]]*\]|[^\[\]]|\](?=[^\[]*\]))*)" &
+    r"\]\s*\[([^^\]]*)\])"
+  )
 }.newTable
 
 let blockParsingOrder = @[
@@ -225,6 +237,7 @@ let inlineParsingOrder = @[
   MarkdownTokenType.InlineEscape,
   MarkdownTokenType.InlineHTML,
   MarkdownTokenType.InlineLink,
+  MarkdownTokenType.InlineRefLink,
   MarkdownTokenType.Newline,
   MarkdownTokenType.AutoLink,
   MarkdownTokenType.InlineText,
@@ -408,6 +421,13 @@ proc genInlineHTML(matches: openArray[string]): MarkdownTokenRef =
     val.text = matches[3]
   result = MarkdownTokenRef(type: MarkdownTokenType.InlineHTML, inlineHTMLVal: val)
 
+proc genInlineRefLink(matches: openArray[string]): MarkdownTokenRef =
+  var link: RefLink
+  link.id = matches[1]
+  link.text = matches[2]
+  link.isImage = matches[0][0] == '!'
+  result = MarkdownTokenRef(type: MarkdownTokenType.InlineRefLink, inlineRefLinkVal: link)
+
 proc findToken(doc: string, start: var int, ruleType: MarkdownTokenType): MarkdownTokenRef =
   # Find a markdown token from document `doc` at position `start`,
   # based on a rule type and regex rule.
@@ -441,6 +461,7 @@ proc findToken(doc: string, start: var int, ruleType: MarkdownTokenType): Markdo
   of MarkdownTokenType.InlineEscape: result = genInlineEscape(matches)
   of MarkdownTokenType.InlineHTML: result = genInlineHTML(matches)
   of MarkdownTokenType.InlineLink: result = genInlineLink(matches)
+  of MarkdownTokenType.InlineRefLink: result = genInlineRefLink(matches)
   else:
     result = genText(matches)
 
@@ -516,6 +537,16 @@ proc renderInlineLink(ctx: MarkdownContext, link: Link): string =
   else:
     result = fmt"""<a href="{link.url}">{link.text}</a>"""
 
+proc renderInlineRefLink(ctx: MarkdownContext, link: RefLink): string =
+  if ctx.links.hasKey(link.id):
+    let url = ctx.links[link.id]
+    if link.isImage:
+      result = fmt"""<img src="{url}" alt="{link.text}">"""
+    else:
+      result = fmt"""<a href="{url}">{link.text}</a>"""
+  else:
+    result = fmt"[{link.id}][{link.text}]"
+
 proc renderToken(ctx: MarkdownContext, token: MarkdownTokenRef): string =
   # Render token.
   # This is a simple dispatcher function.
@@ -550,6 +581,8 @@ proc renderToken(ctx: MarkdownContext, token: MarkdownTokenRef): string =
     result = renderHTMLBlock(ctx, token.inlineHTMLVal)
   of MarkdownTokenType.InlineLink:
     result = renderInlineLink(ctx, token.inlineLinkVal)
+  of MarkdownTokenType.InlineRefLink:
+    result = renderInlineRefLink(ctx, token.inlineRefLinkVal)
   else:
     result = ""
 

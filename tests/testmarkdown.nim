@@ -95,3 +95,7 @@ test "inline html":
 test "inline link":
   check markdown("[test](https://example.com)") == """<p><a href="https://example.com">test</a></p>"""
   check markdown("![test](https://example.com)") == """<p><img src="https://example.com" alt="test"></p>"""
+
+test "ref link":
+  check markdown("[test][Example]\n\n[test]: https://example.com"
+    ) == """<p><a href="https://example.com">Example</a></p>"""

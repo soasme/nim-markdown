@@ -103,3 +103,7 @@ test "inline reflink":
 test "inline nolink":
   check markdown("[test]\n\n[test]: https://example.com"
     ) == """<p><a href="https://example.com">test</a></p>"""
+
+test "inline url":
+  check markdown("https://example.com"
+    ) == """<p><a href="https://example.com">https://example.com</a></p>"""

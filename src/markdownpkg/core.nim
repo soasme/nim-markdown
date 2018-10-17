@@ -96,7 +96,8 @@ type
     InlineHTML,
     InlineLink,
     InlineRefLink,
-    InlineNoLink
+    InlineNoLink,
+    InlineURL
 
   # Hold two values: type: MarkdownTokenType, and xyzValue.
   # xyz is the particular type name.
@@ -124,6 +125,7 @@ type
     of MarkdownTokenType.InlineLink: inlineLinkVal*: Link
     of MarkdownTokenType.InlineRefLink: inlineRefLinkVal*: RefLink
     of MarkdownTokenType.InlineNoLink: inlineNoLinkVal*: RefLink
+    of MarkdownTokenType.InlineURL: inlineURLVal*: string
 
 const INLINE_TAGS = [
     "a", "em", "strong", "small", "s", "cite", "q", "dfn", "abbr", "data",
@@ -210,6 +212,9 @@ var blockRules = @{
     r"\]\s*\[([^^\]]*)\])"
   ),
   MarkdownTokenType.InlineNoLink: re"^(!?\[((?:\[[^\]]*\]|[^\[\]])*)\])",
+  MarkdownTokenType.InlineURL: re(
+    """^(https?:\/\/[^\s<]+[^<.,:;"')\]\s])"""
+  ),
 }.newTable
 
 let blockParsingOrder = @[
@@ -242,6 +247,7 @@ let inlineParsingOrder = @[
   MarkdownTokenType.InlineLink,
   MarkdownTokenType.InlineRefLink,
   MarkdownTokenType.InlineNoLink,
+  MarkdownTokenType.InlineURL,
   MarkdownTokenType.Newline,
   MarkdownTokenType.AutoLink,
   MarkdownTokenType.InlineText,
@@ -439,6 +445,9 @@ proc genInlineNoLink(matches: openArray[string]): MarkdownTokenRef =
   link.isImage = matches[0][0] == '!'
   result = MarkdownTokenRef(type: MarkdownTokenType.InlineNoLink, inlineNoLinkVal: link)
 
+proc genInlineURL(matches: openArray[string]): MarkdownTokenRef =
+  let url = matches[0]
+  result = MarkdownTokenRef(type: MarkdownTokenType.InlineURL, inlineURLVal: url)
 
 proc findToken(doc: string, start: var int, ruleType: MarkdownTokenType): MarkdownTokenRef =
   # Find a markdown token from document `doc` at position `start`,
@@ -475,6 +484,7 @@ proc findToken(doc: string, start: var int, ruleType: MarkdownTokenType): Markdo
   of MarkdownTokenType.InlineLink: result = genInlineLink(matches)
   of MarkdownTokenType.InlineRefLink: result = genInlineRefLink(matches)
   of MarkdownTokenType.InlineNoLink: result = genInlineNoLink(matches)
+  of MarkdownTokenType.InlineURL: result = genInlineURL(matches)
   else:
     result = genText(matches)
 
@@ -560,6 +570,9 @@ proc renderInlineRefLink(ctx: MarkdownContext, link: RefLink): string =
   else:
     result = fmt"[{link.id}][{link.text}]"
 
+proc renderInlineURL(ctx: MarkdownContext, url: string): string =
+  result = fmt"""<a href="{url}">{url}</a>"""
+
 proc renderToken(ctx: MarkdownContext, token: MarkdownTokenRef): string =
   # Render token.
   # This is a simple dispatcher function.
@@ -598,6 +611,8 @@ proc renderToken(ctx: MarkdownContext, token: MarkdownTokenRef): string =
     result = renderInlineRefLink(ctx, token.inlineRefLinkVal)
   of MarkdownTokenType.InlineNoLink:
     result = renderInlineRefLink(ctx, token.inlineNoLinkVal)
+  of MarkdownTokenType.InlineURL:
+    result = renderInlineURL(ctx, token.inlineURLVal)
   else:
     result = ""
 

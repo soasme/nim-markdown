@@ -111,3 +111,7 @@ test "inline url":
 test "inline double emphasis":
   check markdown("**a**") == """<p><strong>a</strong></p>"""
   check markdown("__a__") == """<p><strong>a</strong></p>"""
+
+test "inline emphasis":
+  check markdown("*a*") == """<p><em>a</em></p>"""
+  check markdown("_a_") == """<p><em>a</em></p>"""

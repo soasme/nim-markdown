@@ -98,7 +98,8 @@ type
     InlineRefLink,
     InlineNoLink,
     InlineURL,
-    InlineDoubleEmphasis
+    InlineDoubleEmphasis,
+    InlineEmphasis
 
   # Hold two values: type: MarkdownTokenType, and xyzValue.
   # xyz is the particular type name.
@@ -128,6 +129,7 @@ type
     of MarkdownTokenType.InlineNoLink: inlineNoLinkVal*: RefLink
     of MarkdownTokenType.InlineURL: inlineURLVal*: string
     of MarkdownTokenType.InlineDoubleEmphasis: inlineDoubleEmphasisVal*: string
+    of MarkdownTokenType.InlineEmphasis: inlineEmphasisVal*: string
 
 const INLINE_TAGS = [
     "a", "em", "strong", "small", "s", "cite", "q", "dfn", "abbr", "data",
@@ -221,6 +223,10 @@ var blockRules = @{
     r"^(_{2}([\s\S]+?)_{2}(?!_)" &
     r"|\*{2}([\s\S]+?)\*{2}(?!\*))"
   ),
+  MarkdownTokenType.InlineEmphasis: re(
+    r"^(_([\s\S]+?)_(?!_)" &
+    r"|\*([\s\S]+?)\*(?!\*))"
+  ),
 }.newTable
 
 let blockParsingOrder = @[
@@ -255,6 +261,7 @@ let inlineParsingOrder = @[
   MarkdownTokenType.InlineNoLink,
   MarkdownTokenType.InlineURL,
   MarkdownTokenType.InlineDoubleEmphasis,
+  MarkdownTokenType.InlineEmphasis,
   MarkdownTokenType.Newline,
   MarkdownTokenType.AutoLink,
   MarkdownTokenType.InlineText,
@@ -464,6 +471,14 @@ proc genInlineDoubleEmphasis(matches: openArray[string]): MarkdownTokenRef =
     text = matches[2]
   result = MarkdownTokenRef(type: MarkdownTokenType.InlineDoubleEmphasis, inlineDoubleEmphasisVal: text)
 
+proc genInlineEmphasis(matches: openArray[string]): MarkdownTokenRef =
+  var text: string
+  if matches[0][0] == '_':
+    text = matches[1]
+  else:
+    text = matches[2]
+  result = MarkdownTokenRef(type: MarkdownTokenType.InlineEmphasis, inlineEmphasisVal: text)
+
 proc findToken(doc: string, start: var int, ruleType: MarkdownTokenType): MarkdownTokenRef =
   # Find a markdown token from document `doc` at position `start`,
   # based on a rule type and regex rule.
@@ -501,6 +516,7 @@ proc findToken(doc: string, start: var int, ruleType: MarkdownTokenType): Markdo
   of MarkdownTokenType.InlineNoLink: result = genInlineNoLink(matches)
   of MarkdownTokenType.InlineURL: result = genInlineURL(matches)
   of MarkdownTokenType.InlineDoubleEmphasis: result = genInlineDoubleEmphasis(matches)
+  of MarkdownTokenType.InlineEmphasis: result = genInlineEmphasis(matches)
   else:
     result = genText(matches)
 
@@ -592,6 +608,9 @@ proc renderInlineURL(ctx: MarkdownContext, url: string): string =
 proc renderInlineDoubleEmphasis(ctx: MarkdownContext, text: string): string =
   result = fmt"""<strong>{text}</strong>"""
 
+proc renderInlineEmphasis(ctx: MarkdownContext, text: string): string =
+  result = fmt"""<em>{text}</em>"""
+
 proc renderToken(ctx: MarkdownContext, token: MarkdownTokenRef): string =
   # Render token.
   # This is a simple dispatcher function.
@@ -634,6 +653,8 @@ proc renderToken(ctx: MarkdownContext, token: MarkdownTokenRef): string =
     result = renderInlineURL(ctx, token.inlineURLVal)
   of MarkdownTokenType.InlineDoubleEmphasis:
     result = renderInlineDoubleEmphasis(ctx, token.inlineDoubleEmphasisVal)
+  of MarkdownTokenType.InlineEmphasis:
+    result = renderInlineEmphasis(ctx, token.inlineEmphasisVal)
   else:
     result = ""
 

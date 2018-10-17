@@ -352,9 +352,6 @@ iterator parseTokens(doc: string, typeset: seq[MarkdownTokenType]): MarkdownToke
     if token == nil:
       raise newException(MarkdownError, fmt"unknown block rule at position {n}.")
 
-# TODO: parse inline items.
-# TODO: parse list item tokens.
-
 proc genNewlineToken(matches: openArray[string]): MarkdownTokenRef =
   if matches[0].len > 1:
     result = MarkdownTokenRef(type: MarkdownTokenType.Newline, newlineVal: matches[0])

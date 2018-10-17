@@ -1,4 +1,4 @@
-# nim-markdown
+# nim-markdown (WIP)
 
 `nim-markdown` is a Markdown Parser in Nim programming language.
 

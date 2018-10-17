@@ -42,6 +42,8 @@ Run below command to test markdown modules:
 $ nimble test
 ```
 
+The [Markdown Parser](https://enqueuezero.com/drafts/markdown-parser.html) serves as a guidence on the implementation of `nim-markdown`, or in any generic programming language.
+
 ## Roadmap
 
 Priorities (WIP for top to bottom):

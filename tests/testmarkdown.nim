@@ -115,3 +115,8 @@ test "inline double emphasis":
 test "inline emphasis":
   check markdown("*a*") == """<p><em>a</em></p>"""
   check markdown("_a_") == """<p><em>a</em></p>"""
+
+test "inline code":
+  check markdown("`code`") == """<p><code>code</code></p>"""
+  check markdown("``code``") == """<p><code>code</code></p>"""
+  check markdown("```code```") == """<p><code>code</code></p>"""

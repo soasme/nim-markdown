@@ -95,7 +95,8 @@ type
     InlineText,
     InlineHTML,
     InlineLink,
-    InlineRefLink
+    InlineRefLink,
+    InlineNoLink
 
   # Hold two values: type: MarkdownTokenType, and xyzValue.
   # xyz is the particular type name.
@@ -122,6 +123,7 @@ type
     of MarkdownTokenType.InlineHTML: inlineHTMLVal*: HTMLBlock
     of MarkdownTokenType.InlineLink: inlineLinkVal*: Link
     of MarkdownTokenType.InlineRefLink: inlineRefLinkVal*: RefLink
+    of MarkdownTokenType.InlineNoLink: inlineNoLinkVal*: RefLink
 
 const INLINE_TAGS = [
     "a", "em", "strong", "small", "s", "cite", "q", "dfn", "abbr", "data",
@@ -206,7 +208,8 @@ var blockRules = @{
     r"^(!?\[" &
     r"((?:\[[^^\]]*\]|[^\[\]]|\](?=[^\[]*\]))*)" &
     r"\]\s*\[([^^\]]*)\])"
-  )
+  ),
+  MarkdownTokenType.InlineNoLink: re"^(!?\[((?:\[[^\]]*\]|[^\[\]])*)\])",
 }.newTable
 
 let blockParsingOrder = @[
@@ -238,6 +241,7 @@ let inlineParsingOrder = @[
   MarkdownTokenType.InlineHTML,
   MarkdownTokenType.InlineLink,
   MarkdownTokenType.InlineRefLink,
+  MarkdownTokenType.InlineNoLink,
   MarkdownTokenType.Newline,
   MarkdownTokenType.AutoLink,
   MarkdownTokenType.InlineText,
@@ -428,6 +432,14 @@ proc genInlineRefLink(matches: openArray[string]): MarkdownTokenRef =
   link.isImage = matches[0][0] == '!'
   result = MarkdownTokenRef(type: MarkdownTokenType.InlineRefLink, inlineRefLinkVal: link)
 
+proc genInlineNoLink(matches: openArray[string]): MarkdownTokenRef =
+  var link: RefLink
+  link.id = matches[1]
+  link.text = matches[1]
+  link.isImage = matches[0][0] == '!'
+  result = MarkdownTokenRef(type: MarkdownTokenType.InlineNoLink, inlineNoLinkVal: link)
+
+
 proc findToken(doc: string, start: var int, ruleType: MarkdownTokenType): MarkdownTokenRef =
   # Find a markdown token from document `doc` at position `start`,
   # based on a rule type and regex rule.
@@ -462,6 +474,7 @@ proc findToken(doc: string, start: var int, ruleType: MarkdownTokenType): Markdo
   of MarkdownTokenType.InlineHTML: result = genInlineHTML(matches)
   of MarkdownTokenType.InlineLink: result = genInlineLink(matches)
   of MarkdownTokenType.InlineRefLink: result = genInlineRefLink(matches)
+  of MarkdownTokenType.InlineNoLink: result = genInlineNoLink(matches)
   else:
     result = genText(matches)
 
@@ -583,6 +596,8 @@ proc renderToken(ctx: MarkdownContext, token: MarkdownTokenRef): string =
     result = renderInlineLink(ctx, token.inlineLinkVal)
   of MarkdownTokenType.InlineRefLink:
     result = renderInlineRefLink(ctx, token.inlineRefLinkVal)
+  of MarkdownTokenType.InlineNoLink:
+    result = renderInlineRefLink(ctx, token.inlineNoLinkVal)
   else:
     result = ""
 

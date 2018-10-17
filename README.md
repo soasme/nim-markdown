@@ -2,6 +2,8 @@
 
 `nim-markdown` is a Markdown Parser in Nim programming language.
 
+[![Donate to this project using Patreon](https://img.shields.io/badge/patreon-donate-green.svg?style=for-the-badge&colorB=green)](https://patreon.com/enqueuezero)
+
 ## Install
 
 Work in progress. :)

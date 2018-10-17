@@ -67,6 +67,7 @@ type
   Link* = object
     url: string
     text: string
+    isImage: bool
     isEmail: bool
 
   # Signify the token type
@@ -87,7 +88,8 @@ type
     AutoLink,
     InlineEscape,
     InlineText,
-    InlineHTML
+    InlineHTML,
+    InlineLink
 
   # Hold two values: type: MarkdownTokenType, and xyzValue.
   # xyz is the particular type name.
@@ -112,6 +114,7 @@ type
     of MarkdownTokenType.DefineFootnote: defineFootnoteVal*: DefineFootnote
     of MarkdownTokenType.HTMLBlock: htmlBlockVal*: HTMLBlock
     of MarkdownTokenType.InlineHTML: inlineHTMLVal*: HTMLBlock
+    of MarkdownTokenType.InlineLink: inlineLinkVal*: Link
 
 const INLINE_TAGS = [
     "a", "em", "strong", "small", "s", "cite", "q", "dfn", "abbr", "data",
@@ -184,7 +187,14 @@ var blockRules = @{
     r"|<(\w+" & r"(?!:/|[^\w\s@]*@)\b" & r")((?:" & blockTagAttribute & r")*?)\s*>([\s\S]*?)<\/\1>" &
     r"|<\w+" & r"(?!:/|[^\w\s@]*@)\b" & r"(?:" & blockTagAttribute & r")*?\s*\/?>" &
     r")"
-  )
+  ),
+  MarkdownTokenType.InlineLink: re(
+    r"^(!?\[" &
+    r"((?:\[[^^\]]*\]|[^\[\]]|\](?=[^\[]*\]))*)" &
+    r"\]\(" &
+    r"\s*([\s\S]*?)" &
+    r"\))"
+  ),
 }.newTable
 
 let blockParsingOrder = @[
@@ -214,6 +224,7 @@ let listParsingOrder = @[
 let inlineParsingOrder = @[
   MarkdownTokenType.InlineEscape,
   MarkdownTokenType.InlineHTML,
+  MarkdownTokenType.InlineLink,
   MarkdownTokenType.Newline,
   MarkdownTokenType.AutoLink,
   MarkdownTokenType.InlineText,
@@ -368,6 +379,7 @@ proc genAutoLink(matches: openArray[string]): MarkdownTokenRef =
   link.url = matches[0]
   link.text = matches[0]
   link.isEmail = matches[1] == "@"
+  link.isImage = false
   result = MarkdownTokenRef(type: MarkdownTokenType.AutoLink, autoLinkVal: link)
 
 proc genInlineText(matches: openArray[string]): MarkdownTokenRef =
@@ -375,6 +387,14 @@ proc genInlineText(matches: openArray[string]): MarkdownTokenRef =
 
 proc genInlineEscape(matches: openArray[string]): MarkdownTokenRef =
   result = MarkdownTokenRef(type: MarkdownTokenType.InlineEscape, inlineEscapeVal: matches[0])
+
+proc genInlineLink(matches: openArray[string]): MarkdownTokenRef =
+  var link: Link
+  link.url = matches[2]
+  link.text = matches[1]
+  link.isEmail = false
+  link.isImage = matches[0][0] == '!'
+  result = MarkdownTokenRef(type: MarkdownTokenType.InlineLink, inlineLinkVal: link)
 
 proc genInlineHTML(matches: openArray[string]): MarkdownTokenRef =
   var val: HTMLBlock
@@ -420,6 +440,7 @@ proc findToken(doc: string, start: var int, ruleType: MarkdownTokenType): Markdo
   of MarkdownTokenType.InlineText: result = genInlineText(matches)
   of MarkdownTokenType.InlineEscape: result = genInlineEscape(matches)
   of MarkdownTokenType.InlineHTML: result = genInlineHTML(matches)
+  of MarkdownTokenType.InlineLink: result = genInlineLink(matches)
   else:
     result = genText(matches)
 
@@ -489,6 +510,12 @@ proc renderAutoLink(ctx: MarkdownContext, link: Link): string =
   else:
     result = fmt"""<a href="{link.url}">{link.text}</a>"""
 
+proc renderInlineLink(ctx: MarkdownContext, link: Link): string =
+  if link.isImage:
+    result = fmt"""<img src="{link.url}" alt="{link.text}">"""
+  else:
+    result = fmt"""<a href="{link.url}">{link.text}</a>"""
+
 proc renderToken(ctx: MarkdownContext, token: MarkdownTokenRef): string =
   # Render token.
   # This is a simple dispatcher function.
@@ -521,6 +548,8 @@ proc renderToken(ctx: MarkdownContext, token: MarkdownTokenRef): string =
     result = renderAutoLink(ctx, token.autoLinkVal)
   of MarkdownTokenType.InlineHTML:
     result = renderHTMLBlock(ctx, token.inlineHTMLVal)
+  of MarkdownTokenType.InlineLink:
+    result = renderInlineLink(ctx, token.inlineLinkVal)
   else:
     result = ""
 

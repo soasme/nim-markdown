@@ -93,4 +93,5 @@ test "inline html":
   check markdown("hello <em>world</em>") == "<p>hello <em>world</em></p>"
 
 test "inline link":
-  check markdown("[test](https://example.com)") == """<a href="https://example.com">test</a>"""
+  check markdown("[test](https://example.com)") == """<p><a href="https://example.com">test</a></p>"""
+  check markdown("![test](https://example.com)") == """<p><img src="https://example.com" alt="test"></p>"""

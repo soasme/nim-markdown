@@ -4,7 +4,7 @@
 ##
 ## Usage of the binary: convert markdown document in bash like below.::
 ##
-##    $ markdown < file.md > file.html`
+##    $ markdown < file.md > file.html
 ##
 ## Usage of the library: import this file by writing `import markdown`.::
 ##

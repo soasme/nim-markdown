@@ -3,6 +3,7 @@
 `nim-markdown` is a beautiful Markdown Parser in the Nim world.
 
 [![Donate to this project using Patreon](https://img.shields.io/badge/patreon-donate-green.svg?style=for-the-badge&colorB=green)](https://patreon.com/enqueuezero)
+[![Documentation](https://img.shields.io/badge/documentation-passed-brightgreen.svg)](https://www.soasme.com/nim-markdown/markdown.html)
 
 ## Install
 

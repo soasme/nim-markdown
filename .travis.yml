@@ -22,3 +22,6 @@ before_script:
   - export PATH="nim-master/bin:$PATH"
 script:
   - nim compile --verbosity:0 --run tests/testmarkdown
+cache:
+  directories:
+    - nim-master

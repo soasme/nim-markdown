@@ -22,6 +22,7 @@ before_script:
   - export PATH="nim-master/bin:$PATH"
 script:
   - nim compile --verbosity:0 --run tests/testmarkdown
+  - nim doc --docSeeSrcUrl:https://github.com/soasme/nim-makrdown/blob/master --project src/markdown.nim
 cache:
   directories:
     - nim-master

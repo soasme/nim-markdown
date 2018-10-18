@@ -12,7 +12,8 @@
 ##     echo(s)
 ##
 ## :copyright: (c) 2018 by Ju Lin.
-##
+## :repo: https://github.com/soasme/nim-markdown
+## :patreon: https://www.patreon.com/join/enqueuezero
 ## :license: MIT.
 
 import re, strutils, strformat, tables, sequtils, math

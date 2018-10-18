@@ -53,7 +53,7 @@ Priorities (WIP for top to bottom):
 * Feature complete and correctness.
 * Documentation & tutorial.
 * Support controlling options, for example, escaping, text wrapping, html santinize, etc.
-* Refactor in a extention friendly code organization.
+* Refactor the codebase in a extention friendly way.
 * Benchmark.
 * Support converting from HTML to Markdown.
 

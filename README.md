@@ -60,12 +60,9 @@ Priorities (WIP for top to bottom):
 
 ## Changelog
 
-Pending:
-
-* import from `markdown` instead `markdownpkg/core`.
-
 Released:
 
+* v0.1.1, 18 Oct 2018, import from `markdown` instead `markdownpkg/core`.
 * v0.1.0, 17 Oct 2018, initial release.
 
 ## License

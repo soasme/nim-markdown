@@ -3,7 +3,7 @@
 
 import unittest
 
-import markdownpkg/core
+import markdown
 
 test "escape <tag>":
   check escapeTag("hello <script>") == "hello &lt;script&gt;"

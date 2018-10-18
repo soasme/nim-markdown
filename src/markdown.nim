@@ -2,11 +2,11 @@
 #
 ## A beautiful Markdown parser in the Nim world.
 ##
-## Usage of the binary: convert markdown document in bash like below.
+## Usage of the binary: convert markdown document in bash like below.::
 ##
 ##    $ markdown < file.md > file.html`
 ##
-## Usage of the library: import this file by writing ``import markdown``.
+## Usage of the library: import this file by writing `import markdown`.::
 ##
 ##     let s = markdown("# hello world")
 ##     echo(s)
@@ -21,8 +21,8 @@ type
   MarkdownError* = object of Exception ## The error object for markdown parsing and rendering.
 
   MarkdownContext* = object ## The type for saving parsing context.
-    links: Table[string, string] ## a table of reference to links defined in the form like `[xyz]: https://...`.
-    footnotes: Table[string, string] ## a table of reference to footnotes defined in the form like `[^xyz]: note`.
+    links: Table[string, string]
+    footnotes: Table[string, string]
     listDepth: int
 
   Header* = object ## The type for storing header element.
@@ -291,21 +291,21 @@ proc preprocessing*(doc: string): string =
 
 proc escapeTag*(doc: string): string =
   ## Replace `<` and `>` to HTML-safe characters.
-  ## Example:
+  ## Example::
   ##     check escapeTag("<tag>") == "&lt;tag&gt;"
   result = doc.replace("<", "&lt;")
   result = result.replace(">", "&gt;")
 
 proc escapeQuote*(doc: string): string =
   ## Replace `'` and `"` to HTML-safe characters.
-  ## Example:
+  ## Example::
   ##     check escapeTag("'tag'") == "&quote;tag&quote;"
   result = doc.replace("'", "&quote;")
   result = result.replace("\"", "&quote;")
 
 proc escapeAmpersandChar*(doc: string): string =
   ## Replace character `&` to HTML-safe characters.
-  ## Example:
+  ## Example::
   ##     check escapeAmpersandChar("&amp;") ==  "&amp;amp;"
   result = doc.replace("&", "&amp;")
 
@@ -315,7 +315,7 @@ proc escapeAmpersandSeq*(doc: string): string =
   ## Replace `&` from a sequence of characters starting from it to HTML-safe characters.
   ## It's useful to keep those have been escaped.
   ##
-  ## Example:
+  ## Example::
   ##     check escapeAmpersandSeq("&") == "&"
   ##     escapeAmpersandSeq("&amp;") == "&amp;"
   result = doc.replace(sub=reAmpersandSeq, by="&amp;")
@@ -542,25 +542,25 @@ proc findToken(doc: string, start: var int, ruleType: MarkdownTokenType): Markdo
 
   start += size
 
-proc renderHeader*(header: Header): string =
+proc renderHeader(header: Header): string =
   # Render header tag, for example, `<h1>`, `<h2>`, etc.
   result = fmt"<h{header.level}>{header.doc}</h{header.level}>"
 
-proc renderText*(text: string): string =
+proc renderText(text: string): string =
   # Render text by escaping itself.
   result = text.escapeAmpersandSeq.escapeTag
 
-proc renderFencingBlockCode*(fence: Fence): string =
+proc renderFencingBlockCode(fence: Fence): string =
   # Render fencing block code
   result = fmt("<pre><code lang=\"{fence.lang}\">{escapeCode(fence.code)}</code></pre>")
 
-proc renderIndentedBlockCode*(code: string): string =
+proc renderIndentedBlockCode(code: string): string =
   # Render indented block code.
   # The code content will be escaped as it might contains HTML tags.
   # By default the indented block code doesn't support code highlight.
   result = fmt"<pre><code>{escapeCode(code)}</code></pre>"
 
-proc renderParagraph*(ctx: MarkdownContext, paragraph: Paragraph): string =
+proc renderParagraph(ctx: MarkdownContext, paragraph: Paragraph): string =
   for token in paragraph.dom():
     result &= renderToken(ctx, token)
   result = fmt"<p>{result}</p>"

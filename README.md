@@ -18,7 +18,7 @@ The basic usage of library `markdown` is comprised of a three-step. Example mini
 
 ```nim
 # 1. import pkg.
-import markdownpkg/core
+import markdown
 
 # 2. transform md to html.
 let html = markdown("# Hello World\nHappy writing Markdown document!")

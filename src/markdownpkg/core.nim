@@ -1,85 +1,77 @@
 # nim-markdown
 #
-# A Markdown parser in Nim programming language.
-#
-# Users of bin command can handle markdown document in a bash command like below.
-#
-# ```bash
-# $ markdown < file.md > file.html`
-# ```
-#
-# Users of library will import this file by writing ``import markdownpkg/core``.
-#
-# :copyright: (c) 2018 by Ju Lin.
-# :license: MIT.
+## A beautiful Markdown parser in the Nim world.
+##
+## Usage of the binary: convert markdown document in bash like below.
+##
+##    $ markdown < file.md > file.html`
+##
+## Usage of the library: import this file by writing ``import markdownpkg/core``.
+##
+##     let s = markdown("# hello world")
+##     echo(s)
+##
+## :copyright: (c) 2018 by Ju Lin.
+##
+## :license: MIT.
 
 import re, strutils, strformat, tables, sequtils, math
 
 type
-  MarkdownError* = object of Exception
+  MarkdownError* = object of Exception ## The error object for markdown parsing and rendering.
 
-  # Type for saving parsing context.
-  MarkdownContext* = object
-    # `links` is for saving links like `[xyz]: https://...`.
-    # We need to save these links for forward/backward references.
-    links: Table[string, string]
-    footnotes: Table[string, string]
+  MarkdownContext* = object ## The type for saving parsing context.
+    links: Table[string, string] ## a table of reference to links defined in the form like `[xyz]: https://...`.
+    footnotes: Table[string, string] ## a table of reference to footnotes defined in the form like `[^xyz]: note`.
     listDepth: int
 
-  # Type for header element
-  Header* = object
+  Header* = object ## The type for storing header element.
     doc: string
     level: int
 
-  # Type for fencing block code
-  Fence* = object
+  Fence* = object ## The type for fencing block code
     code: string
     lang: string
 
-  # Type for list item
-  ListItem* = object
+  ListItem* = object ## The type for the list item
     dom: seq[MarkdownTokenRef]
 
-  # Type for list block
-  ListBlock* = object
+  ListBlock* = object ## The type for the list block
     elems: seq[MarkdownTokenRef]
     depth: int
     ordered: bool
 
-  # Type for defining link
-  DefineLink* = object
+  DefineLink* = object ## The type for defining a link
     text: string
     link: string
 
-  # Type for defining footnote
-  DefineFootnote* = object
+  DefineFootnote* = object ## The type for defining a footnote
     anchor: string
     footnote: string
 
-  HTMLBlock* = object
+  HTMLBlock* = object ## The type for a raw HTML block.
     tag: string
     attributes: string
     text: string
 
-  Paragraph* = object
+  Paragraph* = object ## The type for a paragraph
     dom: iterator(): MarkdownTokenRef
 
-  Link* = object
+  Link* = object ## The type for a link in full format.
     url: string
     text: string
     isImage: bool
     isEmail: bool
 
-  RefLink* = object
+  RefLink* = object ## The type for a link in referencing mode.
     id: string
     text: string
     isImage: bool
 
-  RefFootnote* = object
+  RefFootnote* = object ## The type for a footnote in referencing mode.
     anchor: string
 
-  # Signify the token type
-  MarkdownTokenType* {.pure.} = enum
+  MarkdownTokenType* {.pure.} = enum # All token types
     Header,
     Hrule,
     IndentedBlockCode,
@@ -108,9 +100,9 @@ type
     InlineStrikethrough,
     InlineFootnote
 
-  # Hold two values: type: MarkdownTokenType, and xyzValue.
-  # xyz is the particular type name.
-  MarkdownTokenRef* = ref MarkdownToken
+  MarkdownTokenRef* = ref MarkdownToken ## Hold two values:
+                                        ## * type: MarkdownTokenType
+                                        ## * xyzValue: xyz is the particular type name.
   MarkdownToken* = object
     len: int
     case type*: MarkdownTokenType
@@ -142,7 +134,7 @@ type
     of MarkdownTokenType.InlineStrikethrough: inlineStrikethroughVal*: string
     of MarkdownTokenType.InlineFootnote: inlineFootnoteVal*: RefFootnote
 
-const INLINE_TAGS = [
+const INLINE_TAGS* = [
     "a", "em", "strong", "small", "s", "cite", "q", "dfn", "abbr", "data",
     "time", "code", "var", "samp", "kbd", "sub", "sup", "i", "b", "u", "mark",
     "ruby", "rt", "rp", "bdi", "bdo", "span", "br", "wbr", "ins", "del",
@@ -291,56 +283,53 @@ proc findToken(doc: string, start: var int, ruleType: MarkdownTokenType): Markdo
 proc renderToken(ctx: MarkdownContext, token: MarkdownTokenRef): string;
 
 proc preprocessing*(doc: string): string =
-  # Pre-processing the text
+  ## Pre-processing the text.
   result = doc.replace(re"\r\n|\r", "\n")
   result = result.replace(re"\t", "    ")
   result = result.replace("\u2424", " ")
   result = result.replace(re(r"^ +$", {RegexFlag.reMultiLine}), "")
 
 proc escapeTag*(doc: string): string =
-  # Replace `<` and `>` to HTML-safe characters.
-  # Example:
-  #   >>> escapeTag("<tag>")
-  #   "&lt;tag&gt;"
+  ## Replace `<` and `>` to HTML-safe characters.
+  ## Example:
+  ##     check escapeTag("<tag>") == "&lt;tag&gt;"
   result = doc.replace("<", "&lt;")
   result = result.replace(">", "&gt;")
 
 proc escapeQuote*(doc: string): string =
-  # Replace `'` and `"` to HTML-safe characters.
-  # Example:
-  #   >>> escapeTag("'tag'")
-  #   "&quote;tag&quote;"
+  ## Replace `'` and `"` to HTML-safe characters.
+  ## Example:
+  ##     check escapeTag("'tag'") == "&quote;tag&quote;"
   result = doc.replace("'", "&quote;")
   result = result.replace("\"", "&quote;")
 
 proc escapeAmpersandChar*(doc: string): string =
-  # Replace character `&` to HTML-safe characters.
-  # Example:
-  #   >>> escapeAmpersandChar("&amp;")
-  #   &amp;amp;
+  ## Replace character `&` to HTML-safe characters.
+  ## Example:
+  ##     check escapeAmpersandChar("&amp;") ==  "&amp;amp;"
   result = doc.replace("&", "&amp;")
 
 let reAmpersandSeq = re"&(?!#?\w+;)"
 
 proc escapeAmpersandSeq*(doc: string): string =
-  # Replace `&` from a sequence of characters starting from it to HTML-safe characters.
-  # It's useful to keep those have been escaped.
-  # Example:
-  #   >>> escapeAmpersandSeq("&") # In this case, it's like `escapeAmpersandChar`.
-  #   "&"
-  #   >>> escapeAmpersandSeq("&amp;") # In this case, we preserve that has escaped.
-  #   "&amp;"
+  ## Replace `&` from a sequence of characters starting from it to HTML-safe characters.
+  ## It's useful to keep those have been escaped.
+  ##
+  ## Example:
+  ##     check escapeAmpersandSeq("&") == "&"
+  ##     escapeAmpersandSeq("&amp;") == "&amp;"
   result = doc.replace(sub=reAmpersandSeq, by="&amp;")
 
 proc escapeCode*(doc: string): string =
-  # Make code block in markdown document HTML-safe.
+  ## Make code block in markdown document HTML-safe.
   result = doc.strip(leading=false, trailing=true).escapeTag.escapeAmpersandChar
 
-proc slugify(doc: string): string =
+proc slugify*(doc: string): string =
+  ## Convert the footnote key to a url-friendly key.
   result = doc.toLower.escapeAmpersandSeq.escapeTag.escapeQuote.replace(re"\s+", "-")
 
-iterator parseTokens(doc: string, typeset: seq[MarkdownTokenType]): MarkdownTokenRef =
-  # Parse markdown document into a sequence of tokens.
+iterator parseTokens*(doc: string, typeset: seq[MarkdownTokenType]): MarkdownTokenRef =
+  ## Parse markdown document into a sequence of tokens.
   var n = 0
   while n < doc.len:
     var token: MarkdownTokenRef = nil
@@ -512,8 +501,8 @@ proc genInlineFootnote(matches: openArray[string]): MarkdownTokenRef =
   result = MarkdownTokenRef(type: MarkdownTokenType.InlineFootnote, inlineFootnoteVal: footnote)
 
 proc findToken(doc: string, start: var int, ruleType: MarkdownTokenType): MarkdownTokenRef =
-  # Find a markdown token from document `doc` at position `start`,
-  # based on a rule type and regex rule.
+  ## Find a markdown token from document `doc` at position `start`,
+  ## based on a rule type and regex rule.
   let regex = blockRules[ruleType]
   var matches: array[5, string]
 
@@ -555,9 +544,6 @@ proc findToken(doc: string, start: var int, ruleType: MarkdownTokenType): Markdo
 
 proc renderHeader*(header: Header): string =
   # Render header tag, for example, `<h1>`, `<h2>`, etc.
-  # Example:
-  #   >>> renderHeader("hello world", level=1)
-  #   "<h1>hello world</h1>"
   result = fmt"<h{header.level}>{header.doc}</h{header.level}>"
 
 proc renderText*(text: string): string =
@@ -657,58 +643,34 @@ proc renderInlineFootnote(ctx: MarkdownContext, footnote: RefFootnote): string =
   result = fmt"""<sup class="footnote-ref" id="footnote-ref-{slug}">""" &
     fmt"""<a href="#footnote-{slug}">{footnote.anchor}</a></sup>"""
 
-proc renderToken(ctx: MarkdownContext, token: MarkdownTokenRef): string =
-  # Render token.
-  # This is a simple dispatcher function.
+proc renderToken*(ctx: MarkdownContext, token: MarkdownTokenRef): string =
+  ## Render token.
+  ## This is a simple dispatcher function.
   case token.type
-  of MarkdownTokenType.Header:
-    result = renderHeader(token.headerVal)
-  of MarkdownTokenType.Hrule:
-    result = renderHrule(token.hruleVal)
-  of MarkdownTokenType.Text:
-    result = renderText(token.textVal)
-  of MarkdownTokenType.IndentedBlockCode:
-    result = renderIndentedBlockCode(token.codeVal)
-  of MarkdownTokenType.FencingBlockCode:
-    result = renderFencingBlockCode(token.fencingBlockCodeVal)
-  of MarkdownTokenType.Paragraph:
-    result = renderParagraph(ctx, token.paragraphVal)
-  of MarkdownTokenType.BlockQuote:
-    result = renderBlockQuote(token.blockQuoteVal)
-  of MarkdownTokenType.ListBlock:
-    result = renderListBlock(ctx, token.listBlockVal)
-  of MarkdownTokenType.ListItem:
-    result = renderListItem(ctx, token.listItemVal)
-  of MarkdownTokenType.HTMLBlock:
-    result = renderHTMLBlock(ctx, token.htmlBlockVal)
-  of MarkdownTokenType.InlineText:
-    result = renderInlineText(ctx, token.inlineTextVal)
-  of MarkdownTokenType.InlineEscape:
-    result = renderInlineEscape(ctx, token.inlineEscapeVal)
-  of MarkdownTokenType.AutoLink:
-    result = renderAutoLink(ctx, token.autoLinkVal)
-  of MarkdownTokenType.InlineHTML:
-    result = renderHTMLBlock(ctx, token.inlineHTMLVal)
-  of MarkdownTokenType.InlineLink:
-    result = renderInlineLink(ctx, token.inlineLinkVal)
-  of MarkdownTokenType.InlineRefLink:
-    result = renderInlineRefLink(ctx, token.inlineRefLinkVal)
-  of MarkdownTokenType.InlineNoLink:
-    result = renderInlineRefLink(ctx, token.inlineNoLinkVal)
-  of MarkdownTokenType.InlineURL:
-    result = renderInlineURL(ctx, token.inlineURLVal)
-  of MarkdownTokenType.InlineDoubleEmphasis:
-    result = renderInlineDoubleEmphasis(ctx, token.inlineDoubleEmphasisVal)
-  of MarkdownTokenType.InlineEmphasis:
-    result = renderInlineEmphasis(ctx, token.inlineEmphasisVal)
-  of MarkdownTokenType.InlineCode:
-    result = renderInlineCode(ctx, token.inlineCodeVal)
-  of MarkdownTokenType.InlineBreak:
-    result = renderInlineBreak(ctx, token.inlineBreakVal)
-  of MarkdownTokenType.InlineStrikethrough:
-    result = renderInlineStrikethrough(ctx, token.inlineStrikethroughVal)
-  of MarkdownTokenType.InlineFootnote:
-    result = renderInlineFootnote(ctx, token.inlineFootnoteVal)
+  of MarkdownTokenType.Header: result = renderHeader(token.headerVal)
+  of MarkdownTokenType.Hrule: result = renderHrule(token.hruleVal)
+  of MarkdownTokenType.Text: result = renderText(token.textVal)
+  of MarkdownTokenType.IndentedBlockCode: result = renderIndentedBlockCode(token.codeVal)
+  of MarkdownTokenType.FencingBlockCode: result = renderFencingBlockCode(token.fencingBlockCodeVal)
+  of MarkdownTokenType.Paragraph: result = renderParagraph(ctx, token.paragraphVal)
+  of MarkdownTokenType.BlockQuote: result = renderBlockQuote(token.blockQuoteVal)
+  of MarkdownTokenType.ListBlock: result = renderListBlock(ctx, token.listBlockVal)
+  of MarkdownTokenType.ListItem: result = renderListItem(ctx, token.listItemVal)
+  of MarkdownTokenType.HTMLBlock: result = renderHTMLBlock(ctx, token.htmlBlockVal)
+  of MarkdownTokenType.InlineText: result = renderInlineText(ctx, token.inlineTextVal)
+  of MarkdownTokenType.InlineEscape: result = renderInlineEscape(ctx, token.inlineEscapeVal)
+  of MarkdownTokenType.AutoLink: result = renderAutoLink(ctx, token.autoLinkVal)
+  of MarkdownTokenType.InlineHTML: result = renderHTMLBlock(ctx, token.inlineHTMLVal)
+  of MarkdownTokenType.InlineLink: result = renderInlineLink(ctx, token.inlineLinkVal)
+  of MarkdownTokenType.InlineRefLink: result = renderInlineRefLink(ctx, token.inlineRefLinkVal)
+  of MarkdownTokenType.InlineNoLink: result = renderInlineRefLink(ctx, token.inlineNoLinkVal)
+  of MarkdownTokenType.InlineURL: result = renderInlineURL(ctx, token.inlineURLVal)
+  of MarkdownTokenType.InlineDoubleEmphasis: result = renderInlineDoubleEmphasis(ctx, token.inlineDoubleEmphasisVal)
+  of MarkdownTokenType.InlineEmphasis: result = renderInlineEmphasis(ctx, token.inlineEmphasisVal)
+  of MarkdownTokenType.InlineCode: result = renderInlineCode(ctx, token.inlineCodeVal)
+  of MarkdownTokenType.InlineBreak: result = renderInlineBreak(ctx, token.inlineBreakVal)
+  of MarkdownTokenType.InlineStrikethrough: result = renderInlineStrikethrough(ctx, token.inlineStrikethroughVal)
+  of MarkdownTokenType.InlineFootnote: result = renderInlineFootnote(ctx, token.inlineFootnoteVal)
   else:
     result = ""
 
@@ -724,9 +686,8 @@ proc buildContext(tokens: seq[MarkdownTokenRef]): MarkdownContext =
     else:
       discard
 
-# Turn markdown-formatted string into HTML-formatting string.
-# By setting `escapse` to false, no HTML tag will be escaped.
-proc markdown*(doc: string, escape: bool = true): string =
+proc markdown*(doc: string): string =
+  ## Convert markdown string `doc` into an HTML string.
   let tokens = toSeq(parseTokens(preprocessing(doc), blockParsingOrder))
   let ctx = buildContext(tokens)
   for token in tokens:

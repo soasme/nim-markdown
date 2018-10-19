@@ -78,11 +78,29 @@ test "define link":
   check markdown("[1]: https://example.com") == ""
 
 test "html block":
-  check markdown("<hr>\n\n") == "<hr>"
-  check markdown("<!-- comment -->\n\n") == "<!-- comment -->"
-  check markdown("<strong>hello world</strong>\n\n") == "<p><strong>hello world</strong></p>"
-  check markdown("<strong class='special'>hello world</strong>\n\n") == "<p><strong class='special'>hello world</strong></p>"
-  check markdown("<strong class=\"special\">hello world</strong>\n\n") == "<p><strong class=\"special\">hello world</strong></p>"
+  check markdown("<hr>\n\n", "keephtml: true") == "<hr>"
+  check markdown("<!-- comment -->\n\n", "keephtml: true") == "<!-- comment -->"
+  check markdown("<strong>hello world</strong>\n\n", "keephtml: true") == "<p><strong>hello world</strong></p>"
+  check markdown("<strong class='special'>hello world</strong>\n\n", "keephtml: true") == "<p><strong class='special'>hello world</strong></p>"
+  check markdown("<strong class=\"special\">hello world</strong>\n\n", "keephtml: true") == "<p><strong class=\"special\">hello world</strong></p>"
+
+test "html block: default not keeping":
+  check markdown("<hr>\n\n") == "&lt;hr&gt;"
+  check markdown("<!-- comment -->\n\n") == "&lt;!-- comment --&gt;"
+  check markdown("<strong>hello world</strong>\n\n") == "<p>&lt;strong&gt;hello world&lt;/strong&gt;</p>"
+  check markdown("<strong class='special'>hello world</strong>\n\n"
+    ) == "<p>&lt;strong class='special'&gt;hello world&lt;/strong&gt;</p>"
+  check markdown("<strong class=\"special\">hello world</strong>\n\n"
+    ) == "<p>&lt;strong class=\"special\"&gt;hello world&lt;/strong&gt;</p>"
+
+test "html block: force not keeping":
+  check markdown("<hr>\n\n", "keephtml: false") == "&lt;hr&gt;"
+  check markdown("<!-- comment -->\n\n", "keephtml: false") == "&lt;!-- comment --&gt;"
+  check markdown("<strong>hello world</strong>\n\n", "keephtml: false") == "<p>&lt;strong&gt;hello world&lt;/strong&gt;</p>"
+  check markdown("<strong class='special'>hello world</strong>\n\n", "keephtml: false"
+    ) == "<p>&lt;strong class='special'&gt;hello world&lt;/strong&gt;</p>"
+  check markdown("<strong class=\"special\">hello world</strong>\n\n", "keephtml: false"
+    ) == "<p>&lt;strong class=\"special\"&gt;hello world&lt;/strong&gt;</p>"
 
 test "inline autolink":
   check markdown("email to <test@example.com>") == "<p>email to <a href=\"mailto:test@example.com\">test@example.com</a></p>"
@@ -93,7 +111,8 @@ test "inline escape":
   check markdown("""\<p\>""") == "<p>&lt;p&gt;</p>"
 
 test "inline html":
-  check markdown("hello <em>world</em>") == "<p>hello <em>world</em></p>"
+  check markdown("hello <em>world</em>", "keephtml: true") == "<p>hello <em>world</em></p>"
+  check markdown("hello <em>world</em>") == "<p>hello &lt;em&gt;world&lt;/em&gt;</p>"
 
 test "inline link":
   check markdown("[test](https://example.com)") == """<p><a href="https://example.com" title="">test</a></p>"""

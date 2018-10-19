@@ -74,6 +74,7 @@ type
     links: Table[string, Link]
     footnotes: Table[string, string]
     escape: bool
+    keepHTML: bool
     listDepth: int
 
   MarkdownTokenType* {.pure.} = enum # All token types
@@ -602,6 +603,8 @@ proc renderHTMLBlock(ctx: MarkdownContext, htmlBlock: HTMLBlock): string =
     else:
       space = " "
     result = fmt"<{htmlBlock.tag}{space}{htmlBlock.attributes}>{htmlBlock.text}</{htmlBlock.tag}>"
+  if not ctx.keepHTML:
+    result = result.escapeAmpersandSeq.escapeTag
 
 proc renderInlineEscape(ctx: MarkdownContext, inlineEscape: string): string =
   result = inlineEscape.escapeAmpersandSeq.escapeTag
@@ -691,7 +694,9 @@ proc renderToken*(ctx: MarkdownContext, token: MarkdownTokenRef): string =
 
 proc needEscape(config: string): bool =
   var matches: array[1, string]
-  let pos = config.find(re"(?:^|\n+)escape:\s*(true|false)(?:\n|$)", matches)
+  let pos = config.find(
+    re(r"(?:^|\n+)escape:\s*(true|false)(?:\n|$)", {RegexFlag.reIgnoreCase}),
+    matches)
   if pos == -1:
     result = false
   elif matches[0] != "true":
@@ -699,12 +704,25 @@ proc needEscape(config: string): bool =
   else:
     result = true
 
+proc needKeepHTML(config: string): bool =
+  var matches: array[1, string]
+  let pos = config.find(
+    re(r"(?:^|\n+)keephtml:\s*(true|false)(?:\n|$)", {RegexFlag.reIgnoreCase}),
+    matches)
+  if pos == -1:
+    result = false
+  elif matches[0] == "true":
+    result = true
+  else:
+    result = false
+
 proc buildContext(tokens: seq[MarkdownTokenRef], config: string): MarkdownContext =
   # add building context
   result = MarkdownContext(
     links: initTable[string, Link](),
     footnotes: initTable[string, string](),
     escape: needEscape(config),
+    keepHTML: needKeepHTML(config),
   )
   for token in tokens:
     case token.type
@@ -719,7 +737,8 @@ proc buildContext(tokens: seq[MarkdownTokenRef], config: string): MarkdownContex
       discard
 
 proc markdown*(doc: string, config: string = """
-escape: true
+Escape: true
+KeepHTML: false
 """): string =
   ## Convert markdown string `doc` into an HTML string.
   let tokens = toSeq(parseTokens(preprocessing(doc), blockParsingOrder))

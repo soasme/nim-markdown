@@ -71,7 +71,7 @@ Priorities (WIP for top to bottom):
 
 Released:
 
-* v0.1.2, TBD, add parameter `config` to proc `markdown` & support `[url](<text> "title")`.
+* v0.1.2, 19 Oct 2018, add parameter `config` to proc `markdown` & support `[url](<text> "title")`.
 * v0.1.1, 18 Oct 2018, import from `markdown` instead `markdownpkg/core`.
 * v0.1.0, 17 Oct 2018, initial release.
 

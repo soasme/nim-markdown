@@ -72,7 +72,7 @@ Test markdown modules incrementally whenever modified the code. It requires you 
 $ nimble watch
 ```
 
-The [Markdown Parser](https://enqueuezero.com/drafts/markdown-parser.html) serves as a guidance on the implementation of `nim-markdown`, or in any generic programming language.
+The [Markdown Parser](https://enqueuezero.com/markdown-parser.html) serves as a guidance on the implementation of `nim-markdown`, or in any generic programming language.
 
 ## Roadmap
 

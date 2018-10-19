@@ -101,11 +101,16 @@ test "inline link":
 
 test "inline reflink":
   check markdown("[test][Example]\n\n[test]: https://example.com"
-    ) == """<p><a href="https://example.com">Example</a></p>"""
+    ) == """<p><a href="https://example.com" title="">Example</a></p>"""
+  check markdown("[test][Example]\n\n[test]: https://example.com \"TEST\""
+    ) == """<p><a href="https://example.com" title="TEST">Example</a></p>"""
 
 test "inline nolink":
   check markdown("[test]\n\n[test]: https://example.com"
-    ) == """<p><a href="https://example.com">test</a></p>"""
+    ) == """<p><a href="https://example.com" title="">test</a></p>"""
+  check markdown("[test]\n\n[test]: https://example.com \"TEST\""
+    ) == """<p><a href="https://example.com" title="TEST">test</a></p>"""
+
 
 test "inline url":
   check markdown("https://example.com"

@@ -21,11 +21,6 @@ import re, strutils, strformat, tables, sequtils, math
 type
   MarkdownError* = object of Exception ## The error object for markdown parsing and rendering.
 
-  MarkdownContext* = object ## The type for saving parsing context.
-    links: Table[string, string]
-    footnotes: Table[string, string]
-    listDepth: int
-
   Header* = object ## The type for storing header element.
     doc: string
     level: int
@@ -44,6 +39,7 @@ type
 
   DefineLink* = object ## The type for defining a link
     text: string
+    title: string
     link: string
 
   DefineFootnote* = object ## The type for defining a footnote
@@ -61,16 +57,23 @@ type
   Link* = object ## The type for a link in full format.
     url: string
     text: string
+    title: string
     isImage: bool
     isEmail: bool
 
   RefLink* = object ## The type for a link in referencing mode.
     id: string
     text: string
+    title: string
     isImage: bool
 
   RefFootnote* = object ## The type for a footnote in referencing mode.
     anchor: string
+
+  MarkdownContext* = object ## The type for saving parsing context.
+    links: Table[string, Link]
+    footnotes: Table[string, string]
+    listDepth: int
 
   MarkdownTokenType* {.pure.} = enum # All token types
     Header,
@@ -384,6 +387,7 @@ proc genDefineLink(matches: openArray[string]): MarkdownTokenRef =
   var val: DefineLink
   val.text = matches[1]
   val.link = matches[2]
+  val.title = matches[3]
   result = MarkdownTokenRef(type: MarkdownTokenType.DefineLink, defineLinkVal: val)
 
 proc genDefineFootnote(matches: openArray[string]): MarkdownTokenRef =
@@ -612,11 +616,11 @@ proc renderInlineLink(ctx: MarkdownContext, link: Link): string =
 
 proc renderInlineRefLink(ctx: MarkdownContext, link: RefLink): string =
   if ctx.links.hasKey(link.id):
-    let url = ctx.links[link.id]
-    if link.isImage:
-      result = fmt"""<img src="{url}" alt="{link.text}">"""
+    let definedLink = ctx.links[link.id]
+    if definedLink.isImage:
+      result = fmt"""<img src="{definedLink.url}" alt="{link.text}">"""
     else:
-      result = fmt"""<a href="{url}">{link.text}</a>"""
+      result = fmt"""<a href="{definedLink.url}" title="{definedLink.title}">{link.text}</a>"""
   else:
     result = fmt"[{link.id}][{link.text}]"
 
@@ -677,11 +681,14 @@ proc renderToken*(ctx: MarkdownContext, token: MarkdownTokenRef): string =
 
 proc buildContext(tokens: seq[MarkdownTokenRef]): MarkdownContext =
   # add building context
-  result = MarkdownContext(links: initTable[string, string](), footnotes: initTable[string, string]())
+  result = MarkdownContext(links: initTable[string, Link](), footnotes: initTable[string, string]())
   for token in tokens:
     case token.type
     of MarkdownTokenType.DefineLink:
-      result.links[token.defineLinkVal.text] = token.defineLinkVal.link
+      result.links[token.defineLinkVal.text] = Link(
+        url: token.defineLinkVal.link,
+        text: token.defineLinkVal.text,
+        title: token.defineLinkVal.title)
     of MarkdownTokenType.DefineFootnote:
       result.footnotes[token.defineFootnoteVal.anchor] = token.defineFootnoteVal.footnote
     else:

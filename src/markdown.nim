@@ -11,6 +11,46 @@
 ##     let s = markdown("# hello world")
 ##     echo(s)
 ##
+## Options are passed as config string. Choices of options are listed below:
+##
+## * `KeepHTML`, default `false`.
+## * `Escape`, default `true`.
+##
+## With the default option, `Nim & Markdown` will be translated into `Nim &amp; Markdown`.
+## If you want to escape no characters in the document, turn off `Escape`::
+##
+##     let config = """
+##     Escape: false
+##     """
+##
+##     let doc = """
+##     # Hello World
+##
+##     Nim & Markdown
+##     """
+##
+##     let html = markdown(doc, config)
+##     echo(html) # <h1>Hello World</h1><p>Nim & Markdown</p>
+##
+## With the default option, `<em>Markdown</em>` will be translated into `&lt;em&gt;Markdown&lt;/em&gt;`.
+## It's always recommended not keeping html when converting unless you know what you're doing.
+##
+## If you want to keep the raw html in the document, turn on `KeepHTML`::
+##
+##     let config = """
+##     Escape: true
+##     """
+##
+##     let doc = """
+##     # Hello World
+##
+##     Happy writing <em>Markdown</em> document!
+##     """
+##
+##     let html = markdown(doc, config)
+##     echo(html)
+##     # <h1>Hello World</h1><p>Happy writing <em>Markdown</em> document!</p>
+##
 ## :copyright: (c) 2018 by Ju Lin.
 ## :repo: https://github.com/soasme/nim-markdown
 ## :patreon: https://www.patreon.com/join/enqueuezero

@@ -30,59 +30,6 @@ let html = markdown("# Hello World\nHappy writing Markdown document!")
 echo(html)
 ```
 
-### Options
-
-Options are passed as config string. Choices of options are listed below:
-
-* `KeepHTML`, default `false`.
-* `Escape`, default `true`.
-
-#### Escape
-
-With the default option, `Nim & Markdown` will be translated into `Nim &amp; Markdown`.
-If you don't want to escaping characters in the document, turn off `Escape`.
-
-```nim
-let config = """
-Escape: false
-KeepHTML: false
-"""
-
-let doc = """
-# Hello World
-
-Nim & Markdown
-"""
-
-let html = markdown(doc, config)
-echo(html)
-# <h1>Hello World</h1><p>Nim & Markdown</p>
-```
-
-#### Keep HTML
-
-With the default option, `<em>Markdown</em>` will be translated into `&lt;em&gt;Markdown&lt;/em&gt;`.
-It's always recommended not keeping html when converting unless you know what you're doing.
-
-If you want to keep the raw html in the document, turn on `KeepHTML`:
-
-```nim
-let config = """
-Escape: true
-KeepHTML: true
-"""
-
-let doc = """
-# Hello World
-
-Happy writing <em>Markdown</em> document!
-"""
-
-let html = markdown(doc, config)
-echo(html)
-# <h1>Hello World</h1><p>Happy writing <em>Markdown</em> document!</p>
-```
-
 ## Binary Usage
 
 The basic usage of binary `markdown is like below:
@@ -123,6 +70,7 @@ Priorities (WIP for top to bottom):
 
 Released:
 
+* v0.1.2, TBD, add parameter `config` to proc `markdown` & support `[url](<text> "title")`.
 * v0.1.1, 18 Oct 2018, import from `markdown` instead `markdownpkg/core`.
 * v0.1.0, 17 Oct 2018, initial release.
 

@@ -12,6 +12,12 @@ Install via `nimble` in your project root.
 
 ```bash
 $ nimble install markdown
+
+# or with current stable version
+$ nimble install markdown@">= 0.2.0"
+
+# or with the latest version
+$ nimble install markdown@#head
 ```
 
 Or simply copy paste `src/markdown.nim` into your project.

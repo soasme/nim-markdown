@@ -4,6 +4,7 @@
 
 [![Donate to this project using Patreon](https://img.shields.io/badge/patreon-donate-green.svg?style=for-the-badge&colorB=green)](https://patreon.com/enqueuezero)
 [![Documentation](https://img.shields.io/badge/documentation-passed-brightgreen.svg?style=for-the-badge&longCache=true)](https://www.soasme.com/nim-markdown/markdown.html)
+[![Build Status](https://travis-ci.org/soasme/nim-markdown.svg?branch=master)](https://travis-ci.org/soasme/nim-markdown)
 
 ## Install
 
@@ -17,7 +18,7 @@ The package is in review. [nim-lang/packages#899](https://github.com/nim-lang/pa
 
 ## Library Usage
 
-The basic usage of library `markdown` is comprised of a three-step. Example minimal code is like below.
+Below is the minimal usage of using `markdown` as a library.
 
 ```nim
 # 1. import pkg.
@@ -32,7 +33,7 @@ echo(html)
 
 ## Binary Usage
 
-The basic usage of binary `markdown is like below:
+The usage of binary `markdown is like below:
 
 ```
 # Read from stdin and write to stdout.

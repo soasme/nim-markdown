@@ -554,9 +554,12 @@ proc renderHeader(header: Header): string =
   # Render header tag, for example, `<h1>`, `<h2>`, etc.
   result = fmt"<h{header.level}>{header.doc}</h{header.level}>"
 
-proc renderText(text: string): string =
+proc renderText(ctx: MarkdownContext, text: string): string =
   # Render text by escaping itself.
-  result = text.escapeAmpersandSeq.escapeTag
+  if ctx.escape:
+    result = text.escapeAmpersandSeq.escapeTag
+  else:
+    result = text
 
 proc renderFencingBlockCode(fence: Fence): string =
   # Render fencing block code
@@ -667,7 +670,7 @@ proc renderToken*(ctx: MarkdownContext, token: MarkdownTokenRef): string =
   case token.type
   of MarkdownTokenType.Header: result = renderHeader(token.headerVal)
   of MarkdownTokenType.Hrule: result = renderHrule(token.hruleVal)
-  of MarkdownTokenType.Text: result = renderText(token.textVal)
+  of MarkdownTokenType.Text: result = renderText(ctx, token.textVal)
   of MarkdownTokenType.IndentedBlockCode: result = renderIndentedBlockCode(token.codeVal)
   of MarkdownTokenType.FencingBlockCode: result = renderFencingBlockCode(token.fencingBlockCodeVal)
   of MarkdownTokenType.Paragraph: result = renderParagraph(ctx, token.paragraphVal)

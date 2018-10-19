@@ -163,8 +163,6 @@ test "inline footnote":
   check markdown("[^x]\n\n[^x]: abc") == """<p><sup class="footnote-ref" id="footnote-ref-x">""" &
     """<a href="#footnote-x">x</a></sup></p>"""
 
-test "1 < 2":
-  check markdown("1 < 2") == "<p>1 &lt; 2</p>"
-
 test "escape \\":
-  check markdown(r"\# abc") == "<p># abc</p>"
+  check markdown("1 < 2") == "<p>1 &lt; 2</p>"
+  check markdown("1 < 2", "escape: false") == "<p>1 < 2</p>"

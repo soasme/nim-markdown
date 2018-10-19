@@ -8,13 +8,13 @@
 
 ## Install
 
-Work in progress. :)
+Install via `nimble` in your project root.
 
 ```bash
-$ nimble install markdown # won't work now.
+$ nimble install markdown
 ```
 
-The package is in review. [nim-lang/packages#899](https://github.com/nim-lang/packages/pull/899).
+Or simply copy paste `src/markdown.nim` into your project.
 
 ## Library Usage
 
@@ -70,7 +70,7 @@ The [Markdown Parser](https://enqueuezero.com/drafts/markdown-parser.html) serve
 
 ## Roadmap
 
-Priorities (WIP for top to bottom):
+Priorities:
 
 * Feature complete and correctness.
 * Documentation & tutorial.
@@ -83,6 +83,7 @@ Priorities (WIP for top to bottom):
 
 Released:
 
+* v0.2.0, 20 Oct 2018, package published [nim-lang/packages#899](https://github.com/nim-lang/packages/pull/899).
 * v0.1.2, 19 Oct 2018, add parameter `config` to proc `markdown` & support `[url](<text> "title")`.
 * v0.1.1, 18 Oct 2018, import from `markdown` instead `markdownpkg/core`.
 * v0.1.0, 17 Oct 2018, initial release.

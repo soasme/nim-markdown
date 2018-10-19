@@ -31,6 +31,12 @@ let html = markdown("# Hello World\nHappy writing Markdown document!")
 echo(html)
 ```
 
+Below are some useful links:
+
+* The API documentation: <https://www.soasme.com/nim-markdown/markdown.html>
+* The dev guide: <https://enqueuezero.com/markdown-parser.html>
+* The cheat sheet: <https://github.com/adam-p/markdown-here/wiki/Markdown-Cheatsheet>
+
 ## Binary Usage
 
 The usage of binary `markdown is like below:
@@ -44,14 +50,20 @@ $ markdown < hello-world.md > hello-world.html
 
 Build markdown binary:
 
-```
+```bash
 $ nimble build
 ```
 
 Test markdown modules:
 
-```
+```bash
 $ nimble test
+```
+
+Test markdown modules incrementally whenever modified the code. It requires you to have `watchdog` installed.
+
+```bash
+$ nimble watch
 ```
 
 The [Markdown Parser](https://enqueuezero.com/drafts/markdown-parser.html) serves as a guidance on the implementation of `nim-markdown`, or in any generic programming language.

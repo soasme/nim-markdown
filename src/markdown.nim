@@ -58,6 +58,8 @@
 
 import re, strutils, strformat, tables, sequtils, math
 
+CONST MARKDOWN_VERSION = "0.2.0"
+
 type
   MarkdownError* = object of Exception ## The error object for markdown parsing and rendering.
 

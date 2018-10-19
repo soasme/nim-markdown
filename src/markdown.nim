@@ -214,7 +214,7 @@ var blockRules = @{
     r"^(!?\[" &
     r"((?:\[[^^\]]*\]|[^\[\]]|\](?=[^\[]*\]))*)" &
     r"\]\(" &
-    r"\s*([\s\S]*?)" &
+    r"\s*(<)?([\s\S]*?)(?(3)>)(?:\s+['""]([\s\S]*?)['""])?\s*" &
     r"\))"
   ),
   MarkdownTokenType.InlineRefLink: re(
@@ -439,10 +439,11 @@ proc genInlineEscape(matches: openArray[string]): MarkdownTokenRef =
 
 proc genInlineLink(matches: openArray[string]): MarkdownTokenRef =
   var link: Link
-  link.url = matches[2]
-  link.text = matches[1]
   link.isEmail = false
   link.isImage = matches[0][0] == '!'
+  link.text = matches[1]
+  link.url = matches[3]
+  link.title = matches[4]
   result = MarkdownTokenRef(type: MarkdownTokenType.InlineLink, inlineLinkVal: link)
 
 proc genInlineHTML(matches: openArray[string]): MarkdownTokenRef =
@@ -612,7 +613,7 @@ proc renderInlineLink(ctx: MarkdownContext, link: Link): string =
   if link.isImage:
     result = fmt"""<img src="{link.url}" alt="{link.text}">"""
   else:
-    result = fmt"""<a href="{link.url}">{link.text}</a>"""
+    result = fmt"""<a href="{link.url}" title="{link.title}">{link.text}</a>"""
 
 proc renderInlineRefLink(ctx: MarkdownContext, link: RefLink): string =
   if ctx.links.hasKey(link.id):

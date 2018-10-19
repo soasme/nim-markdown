@@ -165,3 +165,6 @@ test "inline footnote":
 
 test "1 < 2":
   check markdown("1 < 2") == "<p>1 &lt; 2</p>"
+
+test "escape \\":
+  check markdown(r"\# abc") == "<p># abc</p>"

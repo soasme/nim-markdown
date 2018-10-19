@@ -13,7 +13,7 @@ test "escape quote":
 
 test "escape & character":
   check escapeAmpersandChar("hello & world") == "hello &amp; world"
-
+  
 test "escape & sequence":
   check escapeAmpersandSeq("hello & world") == "hello &amp; world"
   check escapeAmpersandSeq("hello &amp; world") == "hello &amp; world"
@@ -143,3 +143,6 @@ test "inline strikethrough":
 test "inline footnote":
   check markdown("[^x]\n\n[^x]: abc") == """<p><sup class="footnote-ref" id="footnote-ref-x">""" &
     """<a href="#footnote-x">x</a></sup></p>"""
+
+test "1 < 2":
+  check markdown("1 < 2") == "<p>1 &lt; 2</p>"

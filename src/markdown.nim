@@ -73,6 +73,7 @@ type
   MarkdownContext* = object ## The type for saving parsing context.
     links: Table[string, Link]
     footnotes: Table[string, string]
+    escape: bool
     listDepth: int
 
   MarkdownTokenType* {.pure.} = enum # All token types
@@ -206,7 +207,7 @@ var blockRules = @{
   MarkdownTokenType.InlineHTML: re(
     r"^(" &
     r"<!--[\s\S]*?-->" &
-    r"|<(\w+" & r"(?!:/|[^\w\s@]*@)\b" & r")((?:" & blockTagAttribute & r")*?)\s*>([\s\S]*?)<\/\1>" &
+    r"|<(\w+" & r"(?!:/|[^\w\s@]*@)\b" & r")((?:" & blockTagAttribute & r")*?)\s*>([\s\S]*?)<\/\2>" &
     r"|<\w+" & r"(?!:/|[^\w\s@]*@)\b" & r"(?:" & blockTagAttribute & r")*?\s*\/?>" &
     r")"
   ),
@@ -595,13 +596,21 @@ proc renderHTMLBlock(ctx: MarkdownContext, htmlBlock: HTMLBlock): string =
   if htmlBlock.tag == "":
     result = htmlBlock.text
   else:
-    result = fmt"<{htmlBlock.tag} {htmlBlock.attributes}>{htmlBlock.text}</{htmlBlock.tag}>"
-
-proc renderInlineText(ctx: MarkdownContext, inlineText: string): string =
-  result = inlineText
+    var space: string
+    if htmlBlock.attributes == "":
+      space = ""
+    else:
+      space = " "
+    result = fmt"<{htmlBlock.tag}{space}{htmlBlock.attributes}>{htmlBlock.text}</{htmlBlock.tag}>"
 
 proc renderInlineEscape(ctx: MarkdownContext, inlineEscape: string): string =
   result = inlineEscape.escapeAmpersandSeq.escapeTag
+
+proc renderInlineText(ctx: MarkdownContext, inlineText: string): string =
+  if ctx.escape:
+    result = renderInlineEscape(ctx, inlineText)
+  else:
+    result = inlineText
 
 proc renderAutoLink(ctx: MarkdownContext, link: Link): string =
   if link.isEmail:
@@ -680,9 +689,23 @@ proc renderToken*(ctx: MarkdownContext, token: MarkdownTokenRef): string =
   else:
     result = ""
 
-proc buildContext(tokens: seq[MarkdownTokenRef]): MarkdownContext =
+proc needEscape(config: string): bool =
+  var matches: array[1, string]
+  let pos = config.find(re"(?:^|\n+)escape:\s*(true|false)(?:\n|$)", matches)
+  if pos == -1:
+    result = false
+  elif matches[0] != "true":
+    result = false
+  else:
+    result = true
+
+proc buildContext(tokens: seq[MarkdownTokenRef], config: string): MarkdownContext =
   # add building context
-  result = MarkdownContext(links: initTable[string, Link](), footnotes: initTable[string, string]())
+  result = MarkdownContext(
+    links: initTable[string, Link](),
+    footnotes: initTable[string, string](),
+    escape: needEscape(config),
+  )
   for token in tokens:
     case token.type
     of MarkdownTokenType.DefineLink:
@@ -695,10 +718,12 @@ proc buildContext(tokens: seq[MarkdownTokenRef]): MarkdownContext =
     else:
       discard
 
-proc markdown*(doc: string): string =
+proc markdown*(doc: string, config: string = """
+escape: true
+"""): string =
   ## Convert markdown string `doc` into an HTML string.
   let tokens = toSeq(parseTokens(preprocessing(doc), blockParsingOrder))
-  let ctx = buildContext(tokens)
+  let ctx = buildContext(tokens, config)
   for token in tokens:
       result &= renderToken(ctx, token)
 

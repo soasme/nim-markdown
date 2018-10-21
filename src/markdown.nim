@@ -665,6 +665,25 @@ proc renderHTMLBlock(ctx: MarkdownContext, htmlBlock: HTMLBlock): string =
   if not ctx.keepHTML:
     result = result.escapeAmpersandSeq.escapeTag
 
+proc renderHTMLTable*(ctx: MarkdownContext, table: HTMLTable): string =
+  result &= "<table>"
+  result &= "<th>"
+  for headCell in table.head.cells:
+    result &= "<td>"
+    for token in headCell.dom:
+      result &= renderToken(ctx, token)
+    result &= "</td>"
+  result &= "</th>"
+  for row in table.body:
+    result &= "<tr>"
+    for cell in row.cells:
+      result &= "<td>"
+      for token in cell.dom:
+        result &= renderToken(ctx, token)
+      result &= "</td>"
+    result &= "</tr>"
+  result &= "</table>"
+
 proc renderInlineEscape(ctx: MarkdownContext, inlineEscape: string): string =
   result = inlineEscape.escapeAmpersandSeq.escapeTag
 

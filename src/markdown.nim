@@ -112,6 +112,20 @@ type
   RefFootnote* = object ## The type for a footnote in referencing mode.
     anchor: string
 
+  TableCell* = object
+    dom: seq[MarkdownTokenRef]
+    align: string
+
+  TableHead* = object
+    cells: seq[TableCell]
+
+  TableRow* = object
+    cells: seq[TableCell]
+
+  HTMLTable* = object
+    head: TableHead
+    body: seq[TableRow]
+
   MarkdownContext* = object ## The type for saving parsing context.
     links: Table[string, Link]
     footnotes: Table[string, string]

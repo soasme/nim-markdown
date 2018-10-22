@@ -210,7 +210,7 @@ let blockTag = r"(?!(?:" & fmt"{INLINE_TAGS.join(""|"")}" & r")\b)\w+(?!:/|[^\w\
 
 var blockRules = @{
   MarkdownTokenType.Header: re"^ *(#{1,6}) *([^\n]+?) *#* *(?:\n+|$)",
-  MarkdownTokenType.ThematicBreak: re"^ {0,3}[-*_](?: *[-*_]){2,} *(?:\n+|$)",
+  MarkdownTokenType.ThematicBreak: re"^ {0,3}([-*_])(?: *\1){2,} *(?:\n+|$)",
   MarkdownTokenType.IndentedBlockCode: re"^(( {4}[^\n]+\n*)+)",
   MarkdownTokenType.FencingBlockCode: re"^( *`{3,} *([^`\s]+)? *\n([\s\S]+?)\s*`{3} *(\n+|$))",
   MarkdownTokenType.BlockQuote: re"^(( *>[^\n]+(\n[^\n]+)*\n*)+)",
@@ -290,12 +290,12 @@ var blockRules = @{
     """^(https?:\/\/[^\s<]+[^<.,:;"')\]\s])"""
   ),
   MarkdownTokenType.InlineDoubleEmphasis: re(
-    r"^(_{2}([\s\S]+?)_{2}(?!_)" &
-    r"|\*{2}([\s\S]+?)\*{2}(?!\*))"
+    r"^(_{2}([\S]+?)_{2}(?!_)" &
+    r"|\*{2}([\S]+?)\*{2}(?!\*))"
   ),
   MarkdownTokenType.InlineEmphasis: re(
-    r"^(_([\s\S]+?)_(?!_)" &
-    r"|\*([\s\S]+?)\*(?!\*))"
+    r"^(_([\S]+?)_(?!_)" &
+    r"|\*([\S]+?)\*(?!\*))"
   ),
   MarkdownTokenType.InlineCode: re"^((`+)\s*([\s\S]*?[^`])\s*\2(?!`))",
   MarkdownTokenType.InlineBreak: re"^( *\n(?!\s*$))",

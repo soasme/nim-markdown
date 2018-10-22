@@ -248,3 +248,39 @@ test "gfm 19":
 
 test "gfm 20":
   check markdown("_____________________________________") == "<hr />"
+
+test "gfm 21":
+  check markdown(" - - -") == "<hr />"
+
+test "gfm 22":
+  check markdown(" **  * ** * ** * **") == "<hr />"
+
+test "gfm 23":
+  check markdown("-     -      -      -") == "<hr />"
+
+test "gfm 24":
+  check markdown("- - - -    ") == "<hr />"
+
+test "gfm 25":
+  check markdown("_ _ _ _ a\n\na------\n\n---a---") == "<p>_ _ _ _ a</p><p>a------</p><p>---a---</p>"
+
+test "gfm 26":
+  check markdown(" *-*") == "<p><em>-</em></p>"
+
+test "gfm 27":
+  check markdown("- foo\n***\n- bar") == """<ul>
+  <li>foo</li>
+  </ul>
+  <hr />
+  <ul>
+  <li>bar</li>
+  </ul>""".replace(re"\n *", "")
+
+test "gfm 28":
+  check markdown("""Foo
+***
+bar""") == "<p>Foo</p><hr /><p>bar</p>"
+
+test "gfm 29":
+  # TODO: need to implement setext heading
+  skip # check markdown("Foo\n---\nbar") == "<h2>Foo</h2><p>bar</p>"

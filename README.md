@@ -87,6 +87,10 @@ Priorities:
 
 ## ChangeLog
 
+Next Release:
+
+* support html table block.
+
 Released:
 
 * v0.2.0, 20 Oct 2018, package published [nim-lang/packages#899](https://github.com/nim-lang/packages/pull/899).

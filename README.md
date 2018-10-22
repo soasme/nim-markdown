@@ -78,12 +78,11 @@ The [Markdown Parser](https://enqueuezero.com/markdown-parser.html) serves as a 
 
 Priorities:
 
-* Feature complete and correctness.
-* Documentation & tutorial.
-* Support controlling options, for example, escaping, text wrapping, html sanitize, etc.
-* Refactor the codebase in a extension friendly way.
+* Provide a correct implementation of GitHub Flavored Markdown Specification, or notably referred to as [GFM](https://github.github.com/gfm/). (#4)
+* Support more controlling options, for example, escaping, text wrapping, html sanitize, etc.
+* Write tutorial & document on how to extend this library.
+* Support converting from HTML to Markdown. (#1)
 * Benchmark.
-* Support converting from HTML to Markdown.
 
 Features:
 

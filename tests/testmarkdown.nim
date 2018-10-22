@@ -31,7 +31,6 @@ test "headers":
 
 test "preprocessing":
   check preprocessing("a\n   \nb\n") == "a\n\nb\n"
-  check preprocessing("a\tb") == "a    b"
   check preprocessing("a\n   \n   \nb\n") == "a\n\n\nb\n"
   check preprocessing("a\rb") == "a\nb"
   check preprocessing("a\r\nb") == "a\nb"
@@ -206,3 +205,13 @@ test "table":
     <tr><td>Cell 3</td><td>Cell 4</td></tr>
   </tbody>
 </table>""".replace(re"\n *", "")
+
+# https://github.github.com/gfm/
+
+test "gfm 1, 2, 3":
+  discard """Tabs in lines are not expanded to spaces.
+  However, in contexts where whitespace helps to define block structure,
+  tabs behave as if they were replaced by spaces with a tab stop of 4 characters."""
+  check markdown("\tfoo\tbaz\t\tbim") == "<pre><code>foo\tbaz\t\tbim</code></pre>"
+  check markdown("  \tfoo\tbaz\t\tbim") == "<pre><code>foo\tbaz\t\tbim</code></pre>"
+  check markdown("    a\ta\n    ὐ\ta") == "<pre><code>a\ta\nὐ\ta</code></pre>"

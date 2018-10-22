@@ -353,7 +353,8 @@ proc renderToken*(ctx: MarkdownContext, token: MarkdownTokenRef): string;
 proc preprocessing*(doc: string): string =
   ## Pre-processing the text.
   result = doc.replace(re"\r\n|\r", "\n")
-  result = result.replace(re"\t", "    ")
+  result = result.replace(re"^\t", "    ")
+  result = result.replace(re"^ {1,3}\t", "    ")
   result = result.replace("\u2424", " ")
   result = result.replace(re(r"^ +$", {RegexFlag.reMultiLine}), "")
 

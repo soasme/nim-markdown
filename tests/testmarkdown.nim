@@ -220,3 +220,5 @@ test "gfm 4, 5, 6, 7, 8, 9, 10, 11":
   discard "tab case failed."
   skip
 
+test "gfm 2.3 Insecure characters":
+  check markdown("\u0000 insecure") == "<p>\ufffd insecure</p>"

@@ -114,6 +114,7 @@ Features:
 
 Released:
 
+* v0.3.1, 22 Oct 2018, bugfix: soft line breaks (gfm 6.13).
 * v0.3.0, 22 Oct 2018, support html table block (#3).
 * v0.2.0, 20 Oct 2018, package published [nim-lang/packages#899](https://github.com/nim-lang/packages/pull/899).
 * v0.1.2, 19 Oct 2018, add parameter `config` to proc `markdown` & support `[url](<text> "title")`.

@@ -85,9 +85,33 @@ Priorities:
 * Benchmark.
 * Support converting from HTML to Markdown.
 
+Features:
+
+- [x] Header
+- [x] Hrule
+- [x] Indented code block
+- [x] Fence code block
+- [x] Blockquote
+- [x] Ordered/Un-ordered List
+- [x] Nested lists
+- [x] Raw HTML block
+- [x] Table
+- [x] Footnote
+- [x] Ref Link
+- [x] Inline Link
+- [x] Auto link
+- [x] Image Link
+- [x] Emphasis
+- [x] Double Emphasis
+- [x] Strikethrough
+- [x] Link Break
+- [x] Inline Code
+- [x] Inline HTML
+- [x] Escape
+- [x] Paragraph
+- [ ] Want new features? Issues or pull requests are welcome. ;)
+
 ## ChangeLog
-
-
 
 Released:
 

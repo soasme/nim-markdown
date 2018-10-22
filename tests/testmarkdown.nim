@@ -215,3 +215,8 @@ test "gfm 1, 2, 3":
   check markdown("\tfoo\tbaz\t\tbim") == "<pre><code>foo\tbaz\t\tbim</code></pre>"
   check markdown("  \tfoo\tbaz\t\tbim") == "<pre><code>foo\tbaz\t\tbim</code></pre>"
   check markdown("    a\ta\n    ὐ\ta") == "<pre><code>a\ta\nὐ\ta</code></pre>"
+
+test "gfm 4, 5, 6, 7, 8, 9, 10, 11":
+  discard "tab case failed."
+  skip
+

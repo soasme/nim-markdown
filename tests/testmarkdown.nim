@@ -282,5 +282,22 @@ test "gfm 28":
 bar""") == "<p>Foo</p><hr /><p>bar</p>"
 
 test "gfm 29":
-  # TODO: need to implement setext heading
   check markdown("Foo\n---\nbar") == "<h2>Foo</h2><p>bar</p>"
+
+test "gfm 30":
+  check markdown("* Foo\n* * *\n* Bar") == """<ul>
+  <li>Foo</li>
+  </ul>
+  <hr />
+  <ul>
+  <li>Bar</li>
+  </ul>""".replace(re"\n *", "")
+
+test "gfm 31":
+  skip
+  # check markdown("- Foo\n- * * *") == """<ul>
+  # <li>Foo</li>
+  # <li>
+  # <hr />
+  # </li>
+  # </ul>""".replace(re"\n *", "")

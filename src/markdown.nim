@@ -487,19 +487,33 @@ proc genHTMLBlock(matches: openArray[string]): MarkdownTokenRef =
     val.text = matches[3]
   result = MarkdownTokenRef(type: MarkdownTokenType.HTMLBlock, htmlBlockVal: val)
 
+proc findAlign(align: string): seq[string] =
+  for cellAlign in align.replace(re"\| *$", "").split(re" *\| *"):
+    if cellAlign.find(re"^ *-+: *$") != -1:
+      result.add("right")
+    elif cellAlign.find(re"^ *:-+: *$") != -1:
+      result.add("center")
+    elif cellAlign.find(re"^ *:-+ *$") != -1:
+      result.add("left")
+    else:
+      result.add("")
+
 proc genHTMLTable*(matches: openArray[string]): MarkdownTokenRef =
   var head: TableHead
   var headTokens = matches[1].replace(re"^ *| *\| *$", "").split(re" *\| *")
+  var aligns = findAlign(matches[2])
   head.cells = newSeq[TableCell](len(headTokens))
   for index, headCell in headTokens:
+    head.cells[index].align = aligns[index]
     head.cells[index].dom = toSeq(parseTokens(headCell, inlineParsingOrder))
 
-  var body = newSeq[TableRow](headTokens.len)
   var bodyItems = matches[3].replace(re"\n$", "").split("\n")
+  var body = newSeq[TableRow](bodyItems.len)
   for i, row in bodyItems:
     var rowCells = row.replace(re"^ *\| *| *\| *$", "").split(re" *(?<!\\)\| *")
+    body[i].cells = newSeq[TableCell](rowCells.len)
     for j, rowItem in rowCells:
-      body[i].cells.add(TableCell(dom: toSeq(parseTokens(rowItem.replace(re"\\\\\|", "|"), inlineParsingOrder))))
+      body[i].cells[j] = TableCell(dom: toSeq(parseTokens(rowItem.replace(re"\\\\\|", "|"), inlineParsingOrder)))
 
   var val = HTMLTable(head: head, body: body)
   result = MarkdownTokenRef(type: MarkdownTokenType.HTMLTable, htmlTableVal: val)
@@ -689,25 +703,28 @@ proc renderHTMLBlock(ctx: MarkdownContext, htmlBlock: HTMLBlock): string =
   if not ctx.keepHTML:
     result = result.escapeAmpersandSeq.escapeTag
 
+proc renderHTMLTableCell(ctx: MarkdownContext, cell: TableCell, tag: string): string =
+  if cell.align != "":
+    result = fmt"<{tag} style=""text-align: {cell.align}"">"
+  else:
+    result = fmt"<{tag}>"
+  for token in cell.dom:
+    result &= renderToken(ctx, token)
+  result &= fmt"</{tag}>"
+
 proc renderHTMLTable*(ctx: MarkdownContext, table: HTMLTable): string =
   result &= "<table>"
   result &= "<thead>"
   result &= "<tr>"
   for headCell in table.head.cells:
-    result &= "<th>"
-    for token in headCell.dom:
-      result &= renderToken(ctx, token)
-    result &= "</th>"
+    result &= renderHTMLTableCell(ctx, headCell, tag="th")
   result &= "</tr>"
   result &= "</thead>"
   result &= "<tbody>"
   for row in table.body:
     result &= "<tr>"
     for cell in row.cells:
-      result &= "<td>"
-      for token in cell.dom:
-        result &= renderToken(ctx, token)
-      result &= "</td>"
+      result &= renderHTMLTableCell(ctx, cell, tag="td")
     result &= "</tr>"
   result &= "</tbody>"
   result &= "</table>"

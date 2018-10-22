@@ -283,4 +283,4 @@ bar""") == "<p>Foo</p><hr /><p>bar</p>"
 
 test "gfm 29":
   # TODO: need to implement setext heading
-  skip # check markdown("Foo\n---\nbar") == "<h2>Foo</h2><p>bar</p>"
+  check markdown("Foo\n---\nbar") == "<h2>Foo</h2><p>bar</p>"

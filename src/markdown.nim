@@ -135,6 +135,7 @@ type
 
   MarkdownTokenType* {.pure.} = enum # All token types
     Header,
+    SetextHeading,
     ThematicBreak,
     IndentedBlockCode,
     FencingBlockCode,
@@ -170,6 +171,7 @@ type
     len: int
     case type*: MarkdownTokenType
     of MarkdownTokenType.Header: headerVal*: Header
+    of MarkdownTokenType.SetextHeading: setextHeadingVal*: Header
     of MarkdownTokenType.ThematicBreak: thematicBreakVal*: string
     of MarkdownTokenType.BlockQuote: blockQuoteVal*: string
     of MarkdownTokenType.IndentedBlockCode: codeVal*: string
@@ -210,6 +212,7 @@ let blockTag = r"(?!(?:" & fmt"{INLINE_TAGS.join(""|"")}" & r")\b)\w+(?!:/|[^\w\
 
 var blockRules = @{
   MarkdownTokenType.Header: re"^ *(#{1,6}) *([^\n]+?) *#* *(?:\n+|$)",
+  MarkdownTokenType.SetextHeading: re"^(([^\n]+)\n *(=|-)+ *(?:\n+|$))",
   MarkdownTokenType.ThematicBreak: re"^ {0,3}([-*_])(?: *\1){2,} *(?:\n+|$)",
   MarkdownTokenType.IndentedBlockCode: re"^(( {4}[^\n]+\n*)+)",
   MarkdownTokenType.FencingBlockCode: re"^( *`{3,} *([^`\s]+)? *\n([\s\S]+?)\s*`{3} *(\n+|$))",
@@ -305,6 +308,7 @@ var blockRules = @{
 
 let blockParsingOrder = @[
   MarkdownTokenType.Header,
+  MarkdownTokenType.SetextHeading,
   MarkdownTokenType.ThematicBreak,
   MarkdownTokenType.IndentedBlockCode,
   MarkdownTokenType.FencingBlockCode,
@@ -420,6 +424,18 @@ proc genHeaderToken(matches: openArray[string], ): MarkdownTokenRef =
   val.level = matches[0].len
   val.doc = matches[1]
   result = MarkdownTokenRef(type: MarkdownTokenType.Header, headerVal: val) 
+
+proc genSetextHeading(matches: openArray[string]): MarkdownTokenRef =
+  var val: Header
+  if matches[2] == "-":
+    val.level = 2
+  elif matches[2] == "=":
+    val.level = 1
+  else:
+    raise newException(MarkdownError, fmt"unknown setext heading mark: {matches[2]}")
+
+  val.doc = matches[1]
+  return MarkdownTokenRef(type: MarkdownTokenType.SetextHeading, setextHeadingVal: val) 
 
 proc genThematicBreakToken(matches: openArray[string]): MarkdownTokenRef =
   result = MarkdownTokenRef(type: MarkdownTokenType.ThematicBreak, thematicBreakVal: "")
@@ -616,6 +632,7 @@ proc findToken(doc: string, start: var int, ruleType: MarkdownTokenType): Markdo
   case ruleType
   of MarkdownTokenType.Newline: result = genNewlineToken(matches)
   of MarkdownTokenType.Header: result = genHeaderToken(matches)
+  of MarkdownTokenType.SetextHeading: result = genSetextHeading(matches)
   of MarkdownTokenType.ThematicBreak: result = genThematicBreakToken(matches)
   of MarkdownTokenType.BlockQuote: result = genBlockQuoteToken(matches)
   of MarkdownTokenType.IndentedBlockCode: result = genIndentedBlockCode(matches)
@@ -791,6 +808,7 @@ proc renderToken*(ctx: MarkdownContext, token: MarkdownTokenRef): string =
   ## This is a simple dispatcher function.
   case token.type
   of MarkdownTokenType.Header: result = renderHeader(token.headerVal)
+  of MarkdownTokenType.SetextHeading: result = renderHeader(token.setextHeadingVal)
   of MarkdownTokenType.ThematicBreak: result = renderThematicBreak()
   of MarkdownTokenType.Text: result = renderText(ctx, token.textVal)
   of MarkdownTokenType.IndentedBlockCode: result = renderIndentedBlockCode(token.codeVal)

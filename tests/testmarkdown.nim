@@ -222,3 +222,7 @@ test "gfm 4, 5, 6, 7, 8, 9, 10, 11":
 
 test "gfm 2.3 Insecure characters":
   check markdown("\u0000 insecure") == "<p>\ufffd insecure</p>"
+
+test "gfm 12":
+  discard """Indicators of block structure always take precedence over indicators of inline structure."""
+  check markdown("- `one\n- two`") == "<ul><li>`one</li><li>two`</li></ul>"

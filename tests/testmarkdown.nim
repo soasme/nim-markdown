@@ -166,3 +166,17 @@ test "inline footnote":
 test "escape \\":
   check markdown("1 < 2") == "<p>1 &lt; 2</p>"
   check markdown("1 < 2", "escape: false") == "<p>1 < 2</p>"
+
+test "table":
+  check markdown("""
+| Header 1 | Header 2 | Header 3 | Header 4 |
+| :------: | -------: | :------- | -------- |
+| Cell 1   | Cell 2   | Cell 3   | Cell 4   |
+| Cell 5   | Cell 6   | Cell 7   | Cell 8   |
+  """) == "<table>" &
+    "<thead><tr><th>Header 1</th><th>Header 2</th><th>Header 3</th><th>Header 4</th></tr></thead>" &
+    "<tbody>" &
+    "<tr><td>Cell 1</td><td>Cell 2</td><td>Cell 3</td><td>Cell 4</td></tr>" &
+    "<tr><td>Cell 5</td><td>Cell 6</td><td>Cell 7</td><td>Cell 8</td></tr><tr></tr><tr></tr>" &
+    "</tbody>" &
+    "</table>"

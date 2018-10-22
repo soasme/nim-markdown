@@ -146,6 +146,7 @@ type
     DefineLink,
     DefineFootnote,
     HTMLBlock,
+    HTMLTable,
     Newline,
     AutoLink,
     InlineEscape,
@@ -184,6 +185,7 @@ type
     of MarkdownTokenType.DefineLink: defineLinkVal*: DefineLink
     of MarkdownTokenType.DefineFootnote: defineFootnoteVal*: DefineFootnote
     of MarkdownTokenType.HTMLBlock: htmlBlockVal*: HTMLBlock
+    of MarkdownTokenType.HTMLTable: htmlTableVal*: HTMLTable
     of MarkdownTokenType.InlineHTML: inlineHTMLVal*: HTMLBlock
     of MarkdownTokenType.InlineLink: inlineLinkVal*: Link
     of MarkdownTokenType.InlineRefLink: inlineRefLinkVal*: RefLink
@@ -254,6 +256,9 @@ var blockRules = @{
     r" *(?:\n{2,}|\s*$)" &
     r")"
   ),
+  MarkdownTokenType.HTMLTable: re(
+    r"^( *\|(.+)\n *\|( *[-:]+[-| :]*)\n((?: *\|.*(?:\n|$))*)\n*)"
+  ),
   MarkdownTokenType.Text: re"^([^\n]+)",
   MarkdownTokenType.Newline: re"^(\n+)",
   MarkdownTokenType.AutoLink: re"^<([^ >]+(@|:)[^ >]+)>",
@@ -308,6 +313,7 @@ let blockParsingOrder = @[
   MarkdownTokenType.DefineLink,
   MarkdownTokenType.DefineFootnote,
   MarkdownTokenType.HTMLBlock,
+  MarkdownTokenType.HTMLTable,
   MarkdownTokenType.Paragraph,
   MarkdownTokenType.Newline,
 ]
@@ -481,6 +487,23 @@ proc genHTMLBlock(matches: openArray[string]): MarkdownTokenRef =
     val.text = matches[3]
   result = MarkdownTokenRef(type: MarkdownTokenType.HTMLBlock, htmlBlockVal: val)
 
+proc genHTMLTable*(matches: openArray[string]): MarkdownTokenRef =
+  var head: TableHead
+  var headTokens = matches[1].replace(re"^ *| *\| *$", "").split(re" *\| *")
+  head.cells = newSeq[TableCell](len(headTokens))
+  for index, headCell in headTokens:
+    head.cells[index].dom = toSeq(parseTokens(headCell, inlineParsingOrder))
+
+  var body = newSeq[TableRow](headTokens.len)
+  var bodyItems = matches[3].replace(re"\n$", "").split("\n")
+  for i, row in bodyItems:
+    var rowCells = row.replace(re"^ *\| *| *\| *$", "").split(re" *(?<!\\)\| *")
+    for j, rowItem in rowCells:
+      body[i].cells.add(TableCell(dom: toSeq(parseTokens(rowItem.replace(re"\\\\\|", "|"), inlineParsingOrder))))
+
+  var val = HTMLTable(head: head, body: body)
+  result = MarkdownTokenRef(type: MarkdownTokenType.HTMLTable, htmlTableVal: val)
+
 proc genAutoLink(matches: openArray[string]): MarkdownTokenRef =
   var link: Link
   link.url = matches[0]
@@ -584,6 +607,7 @@ proc findToken(doc: string, start: var int, ruleType: MarkdownTokenType): Markdo
   of MarkdownTokenType.DefineLink: result = genDefineLink(matches)
   of MarkdownTokenType.DefineFootnote: result = genDefineFootnote(matches)
   of MarkdownTokenType.HTMLBlock: result = genHTMLBlock(matches)
+  of MarkdownTokenType.HTMLTable: result = genHTMLTable(matches)
   of MarkdownTokenType.ListBlock: result = genListBlock(matches)
   of MarkdownTokenType.Paragraph: result = genParagraph(matches)
   of MarkdownTokenType.Text: result = genText(matches)
@@ -667,13 +691,16 @@ proc renderHTMLBlock(ctx: MarkdownContext, htmlBlock: HTMLBlock): string =
 
 proc renderHTMLTable*(ctx: MarkdownContext, table: HTMLTable): string =
   result &= "<table>"
-  result &= "<th>"
+  result &= "<thead>"
+  result &= "<tr>"
   for headCell in table.head.cells:
-    result &= "<td>"
+    result &= "<th>"
     for token in headCell.dom:
       result &= renderToken(ctx, token)
-    result &= "</td>"
-  result &= "</th>"
+    result &= "</th>"
+  result &= "</tr>"
+  result &= "</thead>"
+  result &= "<tbody>"
   for row in table.body:
     result &= "<tr>"
     for cell in row.cells:
@@ -682,6 +709,7 @@ proc renderHTMLTable*(ctx: MarkdownContext, table: HTMLTable): string =
         result &= renderToken(ctx, token)
       result &= "</td>"
     result &= "</tr>"
+  result &= "</tbody>"
   result &= "</table>"
 
 proc renderInlineEscape(ctx: MarkdownContext, inlineEscape: string): string =
@@ -753,6 +781,7 @@ proc renderToken*(ctx: MarkdownContext, token: MarkdownTokenRef): string =
   of MarkdownTokenType.ListBlock: result = renderListBlock(ctx, token.listBlockVal)
   of MarkdownTokenType.ListItem: result = renderListItem(ctx, token.listItemVal)
   of MarkdownTokenType.HTMLBlock: result = renderHTMLBlock(ctx, token.htmlBlockVal)
+  of MarkdownTokenType.HTMLTable: result = renderHTMLTable(ctx, token.htmlTableVal)
   of MarkdownTokenType.InlineText: result = renderInlineText(ctx, token.inlineTextVal)
   of MarkdownTokenType.InlineEscape: result = renderInlineEscape(ctx, token.inlineEscapeVal)
   of MarkdownTokenType.AutoLink: result = renderAutoLink(ctx, token.autoLinkVal)

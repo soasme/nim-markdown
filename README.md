@@ -87,7 +87,7 @@ Priorities:
 Features:
 
 - [x] Header
-- [x] Hrule
+- [x] GFM 4.1 Thematic Break
 - [x] Indented code block
 - [x] Fence code block
 - [x] Blockquote

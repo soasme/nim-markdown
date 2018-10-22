@@ -135,7 +135,7 @@ type
 
   MarkdownTokenType* {.pure.} = enum # All token types
     Header,
-    Hrule,
+    ThematicBreak,
     IndentedBlockCode,
     FencingBlockCode,
     Paragraph,
@@ -170,7 +170,7 @@ type
     len: int
     case type*: MarkdownTokenType
     of MarkdownTokenType.Header: headerVal*: Header
-    of MarkdownTokenType.Hrule: hruleVal*: string
+    of MarkdownTokenType.ThematicBreak: thematicBreakVal*: string
     of MarkdownTokenType.BlockQuote: blockQuoteVal*: string
     of MarkdownTokenType.IndentedBlockCode: codeVal*: string
     of MarkdownTokenType.FencingBlockCode: fencingBlockCodeVal*: Fence
@@ -210,7 +210,7 @@ let blockTag = r"(?!(?:" & fmt"{INLINE_TAGS.join(""|"")}" & r")\b)\w+(?!:/|[^\w\
 
 var blockRules = @{
   MarkdownTokenType.Header: re"^ *(#{1,6}) *([^\n]+?) *#* *(?:\n+|$)",
-  MarkdownTokenType.Hrule: re"^ {0,3}[-*_](?: *[-*_]){2,} *(?:\n+|$)",
+  MarkdownTokenType.ThematicBreak: re"^ {0,3}[-*_](?: *[-*_]){2,} *(?:\n+|$)",
   MarkdownTokenType.IndentedBlockCode: re"^(( {4}[^\n]+\n*)+)",
   MarkdownTokenType.FencingBlockCode: re"^( *`{3,} *([^`\s]+)? *\n([\s\S]+?)\s*`{3} *(\n+|$))",
   MarkdownTokenType.BlockQuote: re"^(( *>[^\n]+(\n[^\n]+)*\n*)+)",
@@ -218,7 +218,7 @@ var blockRules = @{
     r"^(((?:[^\n]+\n?" &
     r"(?!" &
     r" *(#{1,6}) *([^\n]+?) *#* *(?:\n+|$)|" & # header
-    r" {0,3}[-*_](?: *[-*_]){2,} *(?:\n+|$)|" & # hrule
+    r" {0,3}[-*_](?: *[-*_]){2,} *(?:\n+|$)|" & # ThematicBreak
     r"(( *>[^\n]+(\n[^\n]+)*\n*)+)" & # blockQuote
     r"))+)\n*)"
   ),
@@ -228,7 +228,7 @@ var blockRules = @{
     r"(([*+-])?(?:\d+\.)?) " & # The leading of the indent is list mark `* `, `- `, `+ `, and `1. `.
     r"[\s\S]+?" & # first list item content (optional).
     r"(?:" & # support below block prepending the list block (non-capturing).
-    r"\n+(?=\1?(?:[-*_] *){3,}(?:\n+|$))" & # hrule
+    r"\n+(?=\1?(?:[-*_] *){3,}(?:\n+|$))" & # ThematicBreak
     r"|\n+(?=\1(?(3)\d+\.|[*+-]) )" & # mix using 1. and */+/-.
     r"|\n{2,}(?! )(?!\1(?:[*+-]|\d+\.) )\n*" &
     r"|\s*$" &
@@ -305,7 +305,7 @@ var blockRules = @{
 
 let blockParsingOrder = @[
   MarkdownTokenType.Header,
-  MarkdownTokenType.Hrule,
+  MarkdownTokenType.ThematicBreak,
   MarkdownTokenType.IndentedBlockCode,
   MarkdownTokenType.FencingBlockCode,
   MarkdownTokenType.BlockQuote,
@@ -323,7 +323,7 @@ let listParsingOrder = @[
   MarkdownTokenType.IndentedBlockCode,
   MarkdownTokenType.FencingBlockCode,
   MarkdownTokenType.Header,
-  MarkdownTokenType.Hrule,
+  MarkdownTokenType.ThematicBreak,
   MarkdownTokenType.BlockQuote,
   MarkdownTokenType.ListBlock,
   MarkdownTokenType.HTMLBlock,
@@ -421,8 +421,8 @@ proc genHeaderToken(matches: openArray[string], ): MarkdownTokenRef =
   val.doc = matches[1]
   result = MarkdownTokenRef(type: MarkdownTokenType.Header, headerVal: val) 
 
-proc genHruleToken(matches: openArray[string]): MarkdownTokenRef =
-  result = MarkdownTokenRef(type: MarkdownTokenType.Hrule, hruleVal: "")
+proc genThematicBreakToken(matches: openArray[string]): MarkdownTokenRef =
+  result = MarkdownTokenRef(type: MarkdownTokenType.ThematicBreak, thematicBreakVal: "")
 
 proc genBlockQuoteToken(matches: openArray[string]): MarkdownTokenRef =
   var quote = matches[0].replace(re(r"^ *> ?", {RegexFlag.reMultiLine}), "").strip(chars={'\n', ' '})
@@ -616,7 +616,7 @@ proc findToken(doc: string, start: var int, ruleType: MarkdownTokenType): Markdo
   case ruleType
   of MarkdownTokenType.Newline: result = genNewlineToken(matches)
   of MarkdownTokenType.Header: result = genHeaderToken(matches)
-  of MarkdownTokenType.Hrule: result = genHruleToken(matches)
+  of MarkdownTokenType.ThematicBreak: result = genThematicBreakToken(matches)
   of MarkdownTokenType.BlockQuote: result = genBlockQuoteToken(matches)
   of MarkdownTokenType.IndentedBlockCode: result = genIndentedBlockCode(matches)
   of MarkdownTokenType.FencingBlockCode: result = genFencingBlockCode(matches)
@@ -672,8 +672,8 @@ proc renderParagraph(ctx: MarkdownContext, paragraph: Paragraph): string =
     result &= renderToken(ctx, token)
   result = fmt"<p>{result}</p>"
 
-proc renderHrule(hrule: string): string =
-  result = "<hr>"
+proc renderThematicBreak(): string =
+  result = "<hr />"
 
 proc renderBlockQuote(blockQuote: string): string =
   result = fmt"<blockquote>{blockQuote}</blockquote>"
@@ -776,7 +776,7 @@ proc renderInlineCode(ctx: MarkdownContext, code: string): string =
   result = fmt"""<code>{formattedCode}</code>"""
 
 proc renderInlineBreak(ctx: MarkdownContext, code: string): string =
-  result = fmt"<br>"
+  result = "\n"
 
 proc renderInlineStrikethrough(ctx: MarkdownContext, text: string): string =
   result = fmt"<del>{text}</del>"
@@ -791,7 +791,7 @@ proc renderToken*(ctx: MarkdownContext, token: MarkdownTokenRef): string =
   ## This is a simple dispatcher function.
   case token.type
   of MarkdownTokenType.Header: result = renderHeader(token.headerVal)
-  of MarkdownTokenType.Hrule: result = renderHrule(token.hruleVal)
+  of MarkdownTokenType.ThematicBreak: result = renderThematicBreak()
   of MarkdownTokenType.Text: result = renderText(ctx, token.textVal)
   of MarkdownTokenType.IndentedBlockCode: result = renderIndentedBlockCode(token.codeVal)
   of MarkdownTokenType.FencingBlockCode: result = renderFencingBlockCode(token.fencingBlockCodeVal)

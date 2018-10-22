@@ -51,15 +51,9 @@ test "fencing block code":
 
 test "paragraph":
   check markdown("hello world") == "<p>hello world</p>"
-  check markdown("p1\np2\n") == "<p>p1<br>p2</p>"
+  check markdown("p1\np2\n") == "<p>p1\np2</p>"
   check markdown("p1\n") == "<p>p1</p>"
   check markdown("p1\n\np2\n") == "<p>p1</p><p>p2</p>"
-
-test "hrule":
-  check markdown("---\n") == "<hr>"
-  check markdown("___\n") == "<hr>"
-  check markdown("***\n") == "<hr>"
-  check markdown("   ---\n") == "<hr>"
 
 test "quote":
   check markdown("> blockquote") == "<blockquote>blockquote</blockquote>"
@@ -154,7 +148,7 @@ test "inline code":
   check markdown("```code```") == """<p><code>code</code></p>"""
 
 test "inline break":
-  check markdown("hello\nworld") == """<p>hello<br>world</p>"""
+  check markdown("hello\nworld") == "<p>hello\nworld</p>"
 
 test "inline strikethrough":
   check markdown("~~hello~~") == "<p><del>hello</del></p>"
@@ -226,3 +220,31 @@ test "gfm 2.3 Insecure characters":
 test "gfm 12":
   discard """Indicators of block structure always take precedence over indicators of inline structure."""
   check markdown("- `one\n- two`") == "<ul><li>`one</li><li>two`</li></ul>"
+
+test "gfm 13":
+  discard """A line consisting of 0-3 spaces of indentation, 
+  followed by a sequence of three or more matching -, _, or * characters, 
+  each followed optionally by any number of spaces or tabs, forms a thematic break."""
+  check markdown("---\n___\n***") == "<hr /><hr /><hr />"
+  check markdown("   ---\n") == "<hr />"
+
+test "gfm 14":
+  check markdown("+++") == "<p>+++</p>"
+
+test "gfm 15":
+  check markdown("===") == "<p>===</p>"
+
+test "gfm 16":
+  check markdown("--\n**\n__") == "<p>--\n**\n__</p>"
+
+test "gfm 17":
+  check markdown(" ***\n  ***\n   ***") == "<hr /><hr /><hr />"
+
+test "gfm 18":
+  check markdown("    ***\n") == "<pre><code>***</code></pre>"
+
+test "gfm 19":
+  skip # check markdown("Foo\n    ***") == "<p>Foo\n    ***</p>"
+
+test "gfm 20":
+  check markdown("_____________________________________") == "<hr />"

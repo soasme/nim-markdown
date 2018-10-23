@@ -10,18 +10,18 @@ const
   configKeepHtml = initMarkdownConfig(keepHtml = true)
   configNoEscape = initMarkdownConfig(escape = false)
 
-test "escape <tag>":
-  check escapeTag("hello <script>") == "hello &lt;script&gt;"
+# test "escape <tag>":
+#   check escapeTag("hello <script>") == "hello &lt;script&gt;"
 
-test "escape quote":
-  check escapeQuote("hello 'world\"") == "hello &quote;world&quote;"
+# test "escape quote":
+#   check escapeQuote("hello 'world\"") == "hello &quote;world&quote;"
 
-test "escape & character":
-  check escapeAmpersandChar("hello & world") == "hello &amp; world"
+# test "escape & character":
+#   check escapeAmpersandChar("hello & world") == "hello &amp; world"
 
-test "escape & sequence":
-  check escapeAmpersandSeq("hello & world") == "hello &amp; world"
-  check escapeAmpersandSeq("hello &amp; world") == "hello &amp; world"
+# test "escape & sequence":
+#   check escapeAmpersandSeq("hello & world") == "hello &amp; world"
+#   check escapeAmpersandSeq("hello &amp; world") == "hello &amp; world"
 
 test "preprocessing":
   check preprocessing("a\n   \nb\n") == "a\n\nb\n"
@@ -366,3 +366,77 @@ test "gfm 48":
 
 test "gfm 49":
   check markdown("## \n#\n### ###") == "<h2></h2><h1></h1><h3></h3>"
+
+test "gfm 50":
+  check markdown("""
+Foo *bar*
+=========
+
+Foo *bar*
+---------""") == """
+<h1>Foo <em>bar</em></h1>
+<h2>Foo <em>bar</em></h2>""".replace(re"\n *", "")
+
+test "gfm 51":
+  skip
+#   check markdown("""
+# Foo *bar
+# baz*
+# ====""") == "<h1>Foo <em>bar\nbaz</em></h1>"
+
+test "gfm 52":
+  check markdown("""Foo
+---------------------
+
+Foo
+=""") == "<h2>Foo</h2><h1>Foo</h1>"
+
+test "gfm 53":
+  check markdown("""
+   Foo
+---
+
+  Foo
+-----
+
+  Foo
+  ===""") == "<h2>Foo</h2><h2>Foo</h2><h1>Foo</h1>"
+
+test "gfm 54":
+  check markdown("    Foo\n    ---\n\n    Foo\n---"
+    ) == "<pre><code>Foo\n---\n\nFoo</code></pre><hr />"
+
+test "gfm 55":
+  check markdown("Foo\n   ----      ") == "<h2>Foo</h2>"
+
+test "gfm 56":
+  check markdown("Foo\n    ----") == "<p>Foo\n----</p>"
+
+test "gfm 57":
+  check markdown("Foo\n= =\n\nFoo\n--- -") == "<p>Foo\n= =</p><p>Foo</p><hr />"
+
+test "gfm 58":
+  check markdown("Foo  \n-----") == "<h2>Foo</h2>"
+
+test "gfm 59":
+  check markdown("Foo\\\n----") == r"<h2>Foo\</h2>"
+
+test "gfm 60":
+  check markdown("""
+`Foo
+----
+`
+
+<a title="a lot
+---
+of dashes"/>
+""") == "<h2>`Foo</h2><p>`</p><h2>&lt;a title=&quot;a lot</h2><p>of dashes&quot;/&gt;</p>"
+
+test "gfm 61":
+  skip # check markdown("> Foo\n---") == "<blockquote><p>Foo</p></blockquote><hr />"
+
+test "gfm 62":
+  skip # check markdown("> foo\nbar\n===") == "<blockquote><p>foo\nbar\n===</p></blockquote>"
+
+test "gfm 63":
+  skip # check markdown("- Foo\n---") == "<ul><li>Foo</li></ul><hr />"

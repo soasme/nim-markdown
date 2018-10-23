@@ -228,9 +228,8 @@ let blockTagAttribute = """\s*[a-zA-Z\-](?:\s*\=\s*(?:"[^"]*"|'[^']*'|[^\s'">]+)
 let blockTag = r"(?!(?:" & fmt"{INLINE_TAGS.join(""|"")}" & r")\b)\w+(?!:/|[^\w\s@]*@)\b"
 
 var blockRules = @{
-  #MarkdownTokenType.Heading: re"^ *(#{1,6}) +([^\n]*?)( +)?(?(3)#*) *(?:\n+|$)",
   MarkdownTokenType.Heading: re"^ *(#{1,6})( +)?(?(2)([^\n]*?))( +)?(?(4)#*) *(?:\n+|$)",
-  MarkdownTokenType.SetextHeading: re"^(([^\n]+)\n *(=|-)+ *(?:\n+|$))",
+  MarkdownTokenType.SetextHeading: re"^(((?:(?:[^\n]+)\n)+) {0,3}(=|-)+ *(?:\n+|$))",
   MarkdownTokenType.ThematicBreak: re"^ {0,3}([-*_])(?: *\1){2,} *(?:\n+|$)",
   MarkdownTokenType.IndentedBlockCode: re"^(( {4}[^\n]+\n*)+)",
   MarkdownTokenType.FencingBlockCode: re"^( *`{3,} *([^`\s]+)? *\n([\s\S]+?)\s*`{3} *(\n+|$))",
@@ -326,10 +325,10 @@ var blockRules = @{
 let blockParsingOrder = @[
   MarkdownTokenType.IndentedBlockCode,
   MarkdownTokenType.FencingBlockCode,
+  MarkdownTokenType.BlockQuote,
   MarkdownTokenType.Heading,
   MarkdownTokenType.SetextHeading,
   MarkdownTokenType.ThematicBreak,
-  MarkdownTokenType.BlockQuote,
   MarkdownTokenType.ListBlock,
   MarkdownTokenType.DefineLink,
   MarkdownTokenType.DefineFootnote,
@@ -391,8 +390,8 @@ proc escapeQuote*(doc: string): string =
   ## Replace `'` and `"` to HTML-safe characters.
   ## Example::
   ##     check escapeTag("'tag'") == "&quote;tag&quote;"
-  result = doc.replace("'", "&quote;")
-  result = result.replace("\"", "&quote;")
+  result = doc.replace("'", "&quot;")
+  result = result.replace("\"", "&quot;")
 
 proc escapeAmpersandChar*(doc: string): string =
   ## Replace character `&` to HTML-safe characters.
@@ -454,7 +453,7 @@ proc genSetextHeading(matches: openArray[string]): MarkdownTokenRef =
   else:
     raise newException(MarkdownError, fmt"unknown setext heading mark: {matches[2]}")
 
-  val.dom = toSeq(parseTokens(matches[1], inlineParsingOrder))
+  val.dom = toSeq(parseTokens(matches[1].strip, inlineParsingOrder))
   return MarkdownTokenRef(type: MarkdownTokenType.SetextHeading, setextHeadingVal: val) 
 
 proc genThematicBreakToken(matches: openArray[string]): MarkdownTokenRef =
@@ -694,7 +693,7 @@ proc renderHeading(ctx: MarkdownContext, heading: Heading): string =
 proc renderText(ctx: MarkdownContext, text: string): string =
   # Render text by escaping itself.
   if ctx.config.escape:
-    result = text.escapeAmpersandSeq.escapeTag
+    result = text.escapeAmpersandSeq.escapeTag.escapeQuote
   else:
     result = text
 
@@ -773,7 +772,7 @@ proc renderHTMLTable*(ctx: MarkdownContext, table: HTMLTable): string =
   result &= "</table>"
 
 proc renderInlineEscape(ctx: MarkdownContext, inlineEscape: string): string =
-  result = inlineEscape.escapeAmpersandSeq.escapeTag
+  result = inlineEscape.escapeAmpersandSeq.escapeTag.escapeQuote
 
 proc renderInlineText(ctx: MarkdownContext, inlineText: string): string =
   if ctx.config.escape:

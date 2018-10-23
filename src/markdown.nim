@@ -55,7 +55,7 @@
 
 import re, strutils, strformat, tables, sequtils, math
 
-const MARKDOWN_VERSION = "0.3.2"
+const MARKDOWN_VERSION = "0.3.3"
 
 type
   MarkdownError* = object of Exception ## The error object for markdown parsing and rendering.

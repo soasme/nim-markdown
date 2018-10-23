@@ -14,7 +14,7 @@ Install via `nimble` in your project root.
 $ nimble install markdown
 
 # or with current stable version
-$ nimble install markdown@">= 0.3.2"
+$ nimble install markdown@">= 0.3.3"
 
 # or with the latest version
 $ nimble install markdown@#head
@@ -120,6 +120,7 @@ Features:
 
 Released:
 
+* v0.3.3, 23 Oct 2018, strict-typed config (#5), add cli options.
 * v0.3.2, 23 Oct 2018, support setext heading.
 * v0.3.1, 22 Oct 2018, bugfix: soft line breaks (gfm 6.13).
 * v0.3.0, 22 Oct 2018, support html table block (#3).

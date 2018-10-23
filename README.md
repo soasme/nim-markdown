@@ -90,6 +90,10 @@ Priorities:
 * Support converting from HTML to Markdown. (#1)
 * Benchmark.
 
+Notes:
+
+- [ ] The library `nim-markdown` was originally developed based on a loose set of markdown features. As proposed in [#5](https://github.com/soasme/nim-markdown/issues/4), the [GFM](https://github.github.com/gfm/) will be the cornerstone. As of now, the library implements a mixture of the old style and the new style. The goal of v1.0.0 is to fully support GFM.
+
 Features:
 
 - [x] GFM 4.1 Thematic Break

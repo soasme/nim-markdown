@@ -23,16 +23,6 @@ test "escape & sequence":
   check escapeAmpersandSeq("hello & world") == "hello &amp; world"
   check escapeAmpersandSeq("hello &amp; world") == "hello &amp; world"
 
-test "headers":
-  check markdown("#h1") == "<h1>h1</h1>"
-  check markdown("# h1") == "<h1>h1</h1>"
-  check markdown(" #h1") == "<h1>h1</h1>"
-  check markdown("## h2") == "<h2>h2</h2>"
-  check markdown("### h3") == "<h3>h3</h3>"
-  check markdown("#### h4") == "<h4>h4</h4>"
-  check markdown("##### h5") == "<h5>h5</h5>"
-  check markdown("###### h6") == "<h6>h6</h6>"
-
 test "preprocessing":
   check preprocessing("a\n   \nb\n") == "a\n\nb\n"
   check preprocessing("a\n   \n   \nb\n") == "a\n\n\nb\n"
@@ -306,3 +296,73 @@ test "gfm 31":
   # <hr />
   # </li>
   # </ul>""".replace(re"\n *", "")
+
+test "gfm 32":
+  check markdown("""# foo
+## foo
+### foo
+#### foo
+##### foo
+###### foo"""
+  ) == """<h1>foo</h1>
+<h2>foo</h2>
+<h3>foo</h3>
+<h4>foo</h4>
+<h5>foo</h5>
+<h6>foo</h6>""".replace(re"\n *", "")
+
+test "gfm 33":
+  check markdown("####### foo") == "<p>####### foo</p>"
+
+test "gfm 34":
+  check markdown("#5 bolt\n\n#hashtag") == "<p>#5 bolt</p><p>#hashtag</p>"
+
+test "gfm 35":
+  check markdown("\\## foo") == "<p>## foo</p>"
+
+test "gfm 36":
+  check markdown("# foo *bar* \\*baz\\*") == "<h1>foo <em>bar</em> *baz*</h1>"
+
+test "gfm 37":
+  check markdown("#                  foo                     ") == "<h1>foo</h1>"
+
+test "gfm 38":
+  check markdown("""
+ ### foo
+  ## foo
+   # foo""") == "<h3>foo</h3><h2>foo</h2><h1>foo</h1>"
+
+test "gfm 39":
+  check markdown("    # foo") == "<pre><code># foo</code></pre>"
+
+test "gfm 40":
+  check markdown("foo\n    # bar") == "<p>foo\n# bar</p>"
+
+test "gfm 41":
+  check markdown("## foo ##\n###   bar    ###") == "<h2>foo</h2><h3>bar</h3>"
+
+test "gfm 42":
+  check markdown("# foo ##################################\n##### foo ##") == "<h1>foo</h1><h5>foo</h5>"
+
+test "gfm 43":
+  check markdown("### foo ###     ") == "<h3>foo</h3>"
+
+test "gfm 44":
+  check markdown("### foo ### b") == "<h3>foo ### b</h3>"
+
+test "gfm 45":
+  check markdown("# foo#") == "<h1>foo#</h1>"
+
+test "gfm 46":
+  check markdown(r"### foo \###") == "<h3>foo ###</h3>"
+  check markdown(r"## foo #\##") == "<h2>foo ###</h2>"
+  check markdown(r"# foo \#") == "<h1>foo #</h1>"
+
+test "gfm 47":
+  check markdown("****\n## foo\n****") == "<hr /><h2>foo</h2><hr />"
+
+test "gfm 48":
+  skip # check markdown("Foo bar\n# baz\nBar foo") == "<p>Foo bar</p><h1>baz</h1><p>Bar foo</p>"
+
+test "gfm 49":
+  check markdown("## \n#\n### ###") == "<h2></h2><h1></h1><h3></h3>"

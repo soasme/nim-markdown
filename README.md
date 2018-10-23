@@ -92,8 +92,8 @@ Priorities:
 
 Features:
 
-- [x] Header
 - [x] GFM 4.1 Thematic Break
+- [x] GFM 4.2 Heading
 - [x] Indented code block
 - [x] Fence code block
 - [x] Blockquote

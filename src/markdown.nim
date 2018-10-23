@@ -11,17 +11,16 @@
 ##     let s = markdown("# hello world")
 ##     echo(s)
 ##
-## Options are passed as config string. Choices of options are listed below:
+## Options can be created with `initMarkdownConfig <#initMarkdownConfig%2C>`_.
+## Choices of options are listed below:
 ##
-## * `KeepHTML`, default `false`.
-## * `Escape`, default `true`.
+## * `keepHtml`, default `false`.
+## * `escape`, default `true`.
 ##
 ## With the default option, `Nim & Markdown` will be translated into `Nim &amp; Markdown`.
 ## If you want to escape no characters in the document, turn off `Escape`::
 ##
-##     let config = """
-##     Escape: false
-##     """
+##     let config = initMarkdownConfig(escape = false)
 ##
 ##     let doc = """
 ##     # Hello World
@@ -37,9 +36,7 @@
 ##
 ## If you want to keep the raw html in the document, turn on `KeepHTML`::
 ##
-##     let config = """
-##     Escape: true
-##     """
+##     let config = initMarkdownConfig(keepHtml = true)
 ##
 ##     let doc = """
 ##     # Hello World
@@ -126,12 +123,15 @@ type
     head: TableHead
     body: seq[TableRow]
 
+  MarkdownConfig* = object ## Options for configuring parsing or rendering behavior.
+    escape: bool ## escape ``<``, ``>``, and ``&`` characters to be HTML-safe
+    keepHtml: bool ## preserve HTML tags rather than escape it
+
   MarkdownContext* = object ## The type for saving parsing context.
     links: Table[string, Link]
     footnotes: Table[string, string]
-    escape: bool
-    keepHTML: bool
     listDepth: int
+    config: MarkdownConfig
 
   MarkdownTokenType* {.pure.} = enum # All token types
     Header,
@@ -207,6 +207,15 @@ const INLINE_TAGS* = [
     "img", "font",
 ]
 
+proc initMarkdownConfig*(
+  escape = true,
+  keepHtml = false
+): MarkdownConfig =
+  MarkdownConfig(
+    escape: escape,
+    keepHtml: keepHtml
+  )
+
 let blockTagAttribute = """\s*[a-zA-Z\-](?:\s*\=\s*(?:"[^"]*"|'[^']*'|[^\s'">]+))?"""
 let blockTag = r"(?!(?:" & fmt"{INLINE_TAGS.join(""|"")}" & r")\b)\w+(?!:/|[^\w\s@]*@)\b"
 
@@ -227,7 +236,7 @@ var blockRules = @{
   ),
   MarkdownTokenType.ListBlock: re(
     r"^(" & # group 0 is itself.
-    r"( *)(?=[*+-]|\d+\.)" & # set group 1 to indent. 
+    r"( *)(?=[*+-]|\d+\.)" & # set group 1 to indent.
     r"(([*+-])?(?:\d+\.)?) " & # The leading of the indent is list mark `* `, `- `, `+ `, and `1. `.
     r"[\s\S]+?" & # first list item content (optional).
     r"(?:" & # support below block prepending the list block (non-capturing).
@@ -423,7 +432,7 @@ proc genHeaderToken(matches: openArray[string], ): MarkdownTokenRef =
   var val: Header
   val.level = matches[0].len
   val.doc = matches[1]
-  result = MarkdownTokenRef(type: MarkdownTokenType.Header, headerVal: val) 
+  result = MarkdownTokenRef(type: MarkdownTokenType.Header, headerVal: val)
 
 proc genSetextHeading(matches: openArray[string]): MarkdownTokenRef =
   var val: Header
@@ -435,7 +444,7 @@ proc genSetextHeading(matches: openArray[string]): MarkdownTokenRef =
     raise newException(MarkdownError, fmt"unknown setext heading mark: {matches[2]}")
 
   val.doc = matches[1]
-  return MarkdownTokenRef(type: MarkdownTokenType.SetextHeading, setextHeadingVal: val) 
+  return MarkdownTokenRef(type: MarkdownTokenType.SetextHeading, setextHeadingVal: val)
 
 proc genThematicBreakToken(matches: openArray[string]): MarkdownTokenRef =
   result = MarkdownTokenRef(type: MarkdownTokenType.ThematicBreak, thematicBreakVal: "")
@@ -485,7 +494,7 @@ iterator parseListTokens(doc: string): MarkdownTokenRef =
     var text = item.replace(re"^ *(?:[*+-]|\d+\.) +", "").strip
     val.dom = toSeq(parseTokens(text, listParsingOrder))
     yield MarkdownTokenRef(len: 1, type: MarkdownTokenType.ListItem, listItemVal: val)
-    
+
 proc genListBlock(matches: openArray[string]): MarkdownTokenRef =
   var val: ListBlock
   let doc = matches[0]
@@ -669,7 +678,7 @@ proc renderHeader(header: Header): string =
 
 proc renderText(ctx: MarkdownContext, text: string): string =
   # Render text by escaping itself.
-  if ctx.escape:
+  if ctx.config.escape:
     result = text.escapeAmpersandSeq.escapeTag
   else:
     result = text
@@ -719,7 +728,7 @@ proc renderHTMLBlock(ctx: MarkdownContext, htmlBlock: HTMLBlock): string =
     else:
       space = " "
     result = fmt"<{htmlBlock.tag}{space}{htmlBlock.attributes}>{htmlBlock.text}</{htmlBlock.tag}>"
-  if not ctx.keepHTML:
+  if not ctx.config.keepHTML:
     result = result.escapeAmpersandSeq.escapeTag
 
 proc renderHTMLTableCell(ctx: MarkdownContext, cell: TableCell, tag: string): string =
@@ -752,7 +761,7 @@ proc renderInlineEscape(ctx: MarkdownContext, inlineEscape: string): string =
   result = inlineEscape.escapeAmpersandSeq.escapeTag
 
 proc renderInlineText(ctx: MarkdownContext, inlineText: string): string =
-  if ctx.escape:
+  if ctx.config.escape:
     result = renderInlineEscape(ctx, inlineText)
   else:
     result = inlineText
@@ -836,37 +845,12 @@ proc renderToken*(ctx: MarkdownContext, token: MarkdownTokenRef): string =
   else:
     result = ""
 
-proc needEscape(config: string): bool =
-  var matches: array[1, string]
-  let pos = config.find(
-    re(r"(?:^|\n+)escape:\s*(true|false)(?:\n|$)", {RegexFlag.reIgnoreCase}),
-    matches)
-  if pos == -1:
-    result = false
-  elif matches[0] != "true":
-    result = false
-  else:
-    result = true
-
-proc needKeepHTML(config: string): bool =
-  var matches: array[1, string]
-  let pos = config.find(
-    re(r"(?:^|\n+)keephtml:\s*(true|false)(?:\n|$)", {RegexFlag.reIgnoreCase}),
-    matches)
-  if pos == -1:
-    result = false
-  elif matches[0] == "true":
-    result = true
-  else:
-    result = false
-
-proc buildContext(tokens: seq[MarkdownTokenRef], config: string): MarkdownContext =
+proc buildContext(tokens: seq[MarkdownTokenRef], config: MarkdownConfig): MarkdownContext =
   # add building context
   result = MarkdownContext(
     links: initTable[string, Link](),
     footnotes: initTable[string, string](),
-    escape: needEscape(config),
-    keepHTML: needKeepHTML(config),
+    config: config
   )
   for token in tokens:
     case token.type
@@ -880,11 +864,10 @@ proc buildContext(tokens: seq[MarkdownTokenRef], config: string): MarkdownContex
     else:
       discard
 
-proc markdown*(doc: string, config: string = """
-Escape: true
-KeepHTML: false
-"""): string =
-  ## Convert markdown string `doc` into an HTML string.
+proc markdown*(doc: string, config: MarkdownConfig = initMarkdownConfig()): string =
+  ## Convert markdown string `doc` into an HTML string. Parsing & rendering
+  ## behavior can be customized using ``config`` - see `MarkdownConfig <#MarkdownConfig>`_
+  ## for the available options.
   let tokens = toSeq(parseTokens(preprocessing(doc), blockParsingOrder))
   let ctx = buildContext(tokens, config)
   for token in tokens:

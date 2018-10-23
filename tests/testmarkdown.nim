@@ -1,10 +1,14 @@
 # To run these tests, simply execute `nimble test`.
-# If you have `watchdog`(pip install watchdog), you can run `make test` to watch testing while 
+# If you have `watchdog`(pip install watchdog), you can run `make test` to watch testing while
 
 import unittest
 
 import re, strutils
 import markdown
+
+const
+  configKeepHtml = initMarkdownConfig(keepHtml = true)
+  configNoEscape = initMarkdownConfig(escape = false)
 
 test "escape <tag>":
   check escapeTag("hello <script>") == "hello &lt;script&gt;"
@@ -14,7 +18,7 @@ test "escape quote":
 
 test "escape & character":
   check escapeAmpersandChar("hello & world") == "hello &amp; world"
-  
+
 test "escape & sequence":
   check escapeAmpersandSeq("hello & world") == "hello &amp; world"
   check escapeAmpersandSeq("hello &amp; world") == "hello &amp; world"
@@ -72,11 +76,11 @@ test "define link":
   check markdown("[1]: https://example.com") == ""
 
 test "html block":
-  check markdown("<hr>\n\n", "keephtml: true") == "<hr>"
-  check markdown("<!-- comment -->\n\n", "keephtml: true") == "<!-- comment -->"
-  check markdown("<strong>hello world</strong>\n\n", "keephtml: true") == "<p><strong>hello world</strong></p>"
-  check markdown("<strong class='special'>hello world</strong>\n\n", "keephtml: true") == "<p><strong class='special'>hello world</strong></p>"
-  check markdown("<strong class=\"special\">hello world</strong>\n\n", "keephtml: true") == "<p><strong class=\"special\">hello world</strong></p>"
+  check markdown("<hr>\n\n", configKeepHtml) == "<hr>"
+  check markdown("<!-- comment -->\n\n", configKeepHtml) == "<!-- comment -->"
+  check markdown("<strong>hello world</strong>\n\n", configKeepHtml) == "<p><strong>hello world</strong></p>"
+  check markdown("<strong class='special'>hello world</strong>\n\n", configKeepHtml) == "<p><strong class='special'>hello world</strong></p>"
+  check markdown("<strong class=\"special\">hello world</strong>\n\n", configKeepHtml) == "<p><strong class=\"special\">hello world</strong></p>"
 
 test "html block: default not keeping":
   check markdown("<hr>\n\n") == "&lt;hr&gt;"
@@ -88,12 +92,13 @@ test "html block: default not keeping":
     ) == "<p>&lt;strong class=\"special\"&gt;hello world&lt;/strong&gt;</p>"
 
 test "html block: force not keeping":
-  check markdown("<hr>\n\n", "keephtml: false") == "&lt;hr&gt;"
-  check markdown("<!-- comment -->\n\n", "keephtml: false") == "&lt;!-- comment --&gt;"
-  check markdown("<strong>hello world</strong>\n\n", "keephtml: false") == "<p>&lt;strong&gt;hello world&lt;/strong&gt;</p>"
-  check markdown("<strong class='special'>hello world</strong>\n\n", "keephtml: false"
+  let config = initMarkdownConfig(keepHtml = false)
+  check markdown("<hr>\n\n", config) == "&lt;hr&gt;"
+  check markdown("<!-- comment -->\n\n", config) == "&lt;!-- comment --&gt;"
+  check markdown("<strong>hello world</strong>\n\n", config) == "<p>&lt;strong&gt;hello world&lt;/strong&gt;</p>"
+  check markdown("<strong class='special'>hello world</strong>\n\n", config
     ) == "<p>&lt;strong class='special'&gt;hello world&lt;/strong&gt;</p>"
-  check markdown("<strong class=\"special\">hello world</strong>\n\n", "keephtml: false"
+  check markdown("<strong class=\"special\">hello world</strong>\n\n", config
     ) == "<p>&lt;strong class=\"special\"&gt;hello world&lt;/strong&gt;</p>"
 
 test "inline autolink":
@@ -105,7 +110,7 @@ test "inline escape":
   check markdown("""\<p\>""") == "<p>&lt;p&gt;</p>"
 
 test "inline html":
-  check markdown("hello <em>world</em>", "keephtml: true") == "<p>hello <em>world</em></p>"
+  check markdown("hello <em>world</em>", configKeepHtml) == "<p>hello <em>world</em></p>"
   check markdown("hello <em>world</em>") == "<p>hello &lt;em&gt;world&lt;/em&gt;</p>"
 
 test "inline link":
@@ -159,7 +164,7 @@ test "inline footnote":
 
 test "escape \\":
   check markdown("1 < 2") == "<p>1 &lt; 2</p>"
-  check markdown("1 < 2", "escape: false") == "<p>1 < 2</p>"
+  check markdown("1 < 2", configNoEscape) == "<p>1 < 2</p>"
 
 test "table":
   check markdown("""
@@ -222,8 +227,8 @@ test "gfm 12":
   check markdown("- `one\n- two`") == "<ul><li>`one</li><li>two`</li></ul>"
 
 test "gfm 13":
-  discard """A line consisting of 0-3 spaces of indentation, 
-  followed by a sequence of three or more matching -, _, or * characters, 
+  discard """A line consisting of 0-3 spaces of indentation,
+  followed by a sequence of three or more matching -, _, or * characters,
   each followed optionally by any number of spaces or tabs, forms a thematic break."""
   check markdown("---\n___\n***") == "<hr /><hr /><hr />"
   check markdown("   ---\n") == "<hr />"

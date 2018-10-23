@@ -1,57 +1,57 @@
 [
     {
         "id": 1,
-        "md": "\u2192foo\u2192baz\u2192\u2192bim\n",
-        "html": "<pre><code>foo\u2192baz\u2192\u2192bim\n</code></pre>\n"
+        "md": "	foo	baz		bim\n",
+        "html": "<pre><code>foo	baz		bim\n</code></pre>\n"
     },
     {
         "id": 2,
-        "md": "  \u2192foo\u2192baz\u2192\u2192bim\n",
-        "html": "<pre><code>foo\u2192baz\u2192\u2192bim\n</code></pre>\n"
+        "md": "  	foo	baz		bim\n",
+        "html": "<pre><code>foo	baz		bim\n</code></pre>\n"
     },
     {
         "id": 3,
-        "md": "    a\u2192a\n    \u1f50\u2192a\n",
-        "html": "<pre><code>a\u2192a\n\u1f50\u2192a\n</code></pre>\n"
+        "md": "    a	a\n    \u1f50	a\n",
+        "html": "<pre><code>a	a\n\u1f50	a\n</code></pre>\n"
     },
     {
         "id": 4,
-        "md": "  - foo\n\n\u2192bar\n",
+        "md": "  - foo\n\n	bar\n",
         "html": "<ul>\n<li>\n<p>foo</p>\n<p>bar</p>\n</li>\n</ul>\n"
     },
     {
         "id": 5,
-        "md": "- foo\n\n\u2192\u2192bar\n",
+        "md": "- foo\n\n		bar\n",
         "html": "<ul>\n<li>\n<p>foo</p>\n<pre><code>  bar\n</code></pre>\n</li>\n</ul>\n"
     },
     {
         "id": 6,
-        "md": ">\u2192\u2192foo\n",
+        "md": ">		foo\n",
         "html": "<blockquote>\n<pre><code>  foo\n</code></pre>\n</blockquote>\n"
     },
     {
         "id": 7,
-        "md": "-\u2192\u2192foo\n",
+        "md": "-		foo\n",
         "html": "<ul>\n<li>\n<pre><code>  foo\n</code></pre>\n</li>\n</ul>\n"
     },
     {
         "id": 8,
-        "md": "    foo\n\u2192bar\n",
+        "md": "    foo\n	bar\n",
         "html": "<pre><code>foo\nbar\n</code></pre>\n"
     },
     {
         "id": 9,
-        "md": " - foo\n   - bar\n\u2192 - baz\n",
+        "md": " - foo\n   - bar\n	 - baz\n",
         "html": "<ul>\n<li>foo\n<ul>\n<li>bar\n<ul>\n<li>baz</li>\n</ul>\n</li>\n</ul>\n</li>\n</ul>\n"
     },
     {
         "id": 10,
-        "md": "#\u2192Foo\n",
+        "md": "#	Foo\n",
         "html": "<h1>Foo</h1>\n"
     },
     {
         "id": 11,
-        "md": "*\u2192*\u2192*\u2192\n",
+        "md": "*	*	*	\n",
         "html": "<hr />\n"
     },
     {
@@ -1506,8 +1506,8 @@
     },
     {
         "id": 302,
-        "md": "\\\u2192\\A\\a\\ \\3\\\u03c6\\\u00ab\n",
-        "html": "<p>\\\u2192\\A\\a\\ \\3\\\u03c6\\\u00ab</p>\n"
+        "md": "\\	\\A\\a\\ \\3\\\u03c6\\\u00ab\n",
+        "html": "<p>\\	\\A\\a\\ \\3\\\u03c6\\\u00ab</p>\n"
     },
     {
         "id": 303,

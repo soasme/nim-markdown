@@ -45,11 +45,17 @@ Below are some useful links:
 
 ## Binary Usage
 
-The usage of binary `markdown is like below:
+The usage of binary `markdown` is like below:
 
 ```
 # Read from stdin and write to stdout.
 $ markdown < hello-world.md > hello-world.html
+
+# Turn on `keepHTML`.
+$ markdown --keep-html < hello-world.md > hello-world.html
+
+# Turn off `escape`.
+$ markdown --no-escape < hello-world.md > hello-world.html
 ```
 
 ## Development

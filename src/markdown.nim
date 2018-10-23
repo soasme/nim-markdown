@@ -873,5 +873,27 @@ proc markdown*(doc: string, config: MarkdownConfig = initMarkdownConfig()): stri
   for token in tokens:
       result &= renderToken(ctx, token)
 
+proc readCLIOptions*(): MarkdownConfig =
+  ## Read options from command line.
+  ## If no option passed, the corresponding option will be the default.
+  ##
+  ## Available options:
+  ## * `-e` / `--escape`
+  ## * `--no-escape`
+  ## * `-k` / `--keep-html`
+  ## * '--no-keep-html`
+  ##
+  result = initMarkdownConfig()
+  when declared(commandLineParams):
+    for opt in commandLineParams():
+      case opt
+      of "--escape": result.escape = true
+      of "-e": result.escape = true
+      of "--no-escape": result.escape = false
+      of "--keep-html": result.keepHTML = true
+      of "-k": result.keepHTML = true
+      of "--no-keep-html": result.keepHTML = false
+      else: discard
+
 when isMainModule:
-  stdout.write(markdown(stdin.readAll))
+  stdout.write(markdown(stdin.readAll, config=readCLIOptions()))

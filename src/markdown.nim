@@ -6,6 +6,14 @@
 ##
 ##    $ markdown < file.md > file.html
 ##
+## Disable escaping characters via `--no-escape`::
+##
+##    $ markdown --no-escape < file.md
+##
+## Keep raw HTML content via `--keep-html`::
+##
+##    $ markdown --keep-html < file.md
+##
 ## Usage of the library: import this file by writing `import markdown`.::
 ##
 ##     let s = markdown("# hello world")

@@ -77,7 +77,7 @@ type
     lang: string
 
   ListItem* = object ## The type for the list item
-    dom: seq[MarkdownTokenRef]
+    blocks: seq[MarkdownTokenRef]
 
   ListBlock* = object ## The type for the list block
     elems: seq[MarkdownTokenRef]
@@ -502,7 +502,7 @@ iterator parseListTokens(doc: string): MarkdownTokenRef =
   for index, item in items:
     var val: ListItem
     var text = item.replace(re"^ *(?:[*+-]|\d+\.) +", "").strip
-    val.dom = toSeq(parseTokens(text, listParsingOrder))
+    val.blocks = toSeq(parseTokens(text, listParsingOrder))
     yield MarkdownTokenRef(len: 1, type: MarkdownTokenType.ListItem, listItemVal: val)
 
 proc genListBlock(matches: openArray[string]): MarkdownTokenRef =
@@ -719,7 +719,7 @@ proc renderBlockQuote(blockQuote: string): string =
   result = fmt"<blockquote>{blockQuote}</blockquote>"
 
 proc renderListItem(ctx: MarkdownContext, listItem: ListItem): string =
-  for el in listItem.dom:
+  for el in listItem.blocks:
     result &= renderToken(ctx, el)
   result = fmt"<li>{result}</li>"
 

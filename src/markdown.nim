@@ -69,7 +69,7 @@ type
   MarkdownError* = object of Exception ## The error object for markdown parsing and rendering.
 
   Heading* = object ## The type for heading element.
-    dom: seq[MarkdownTokenRef]
+    inlines: seq[MarkdownTokenRef]
     level: int
 
   Fence* = object ## The type for fencing block code
@@ -439,9 +439,9 @@ proc genHeading(matches: openArray[string], ): MarkdownTokenRef =
   var val: Heading
   val.level = matches[0].len
   if matches[2] =~ re"#+": # ATX headings can be empty. Ignore closing sequence if captured.
-    val.dom = @[]
+    val.inlines = @[]
   else:
-    val.dom = toSeq(parseTokens(matches[2], inlineParsingOrder))
+    val.inlines = toSeq(parseTokens(matches[2], inlineParsingOrder))
   result = MarkdownTokenRef(type: MarkdownTokenType.Heading, headingVal: val) 
 
 proc genSetextHeading(matches: openArray[string]): MarkdownTokenRef =
@@ -453,7 +453,7 @@ proc genSetextHeading(matches: openArray[string]): MarkdownTokenRef =
   else:
     raise newException(MarkdownError, fmt"unknown setext heading mark: {matches[2]}")
 
-  val.dom = toSeq(parseTokens(matches[1].strip, inlineParsingOrder))
+  val.inlines = toSeq(parseTokens(matches[1].strip, inlineParsingOrder))
   return MarkdownTokenRef(type: MarkdownTokenType.SetextHeading, setextHeadingVal: val) 
 
 proc genThematicBreakToken(matches: openArray[string]): MarkdownTokenRef =
@@ -686,7 +686,7 @@ proc findToken(doc: string, start: var int, ruleType: MarkdownTokenType): Markdo
 proc renderHeading(ctx: MarkdownContext, heading: Heading): string =
   # Render heading tag, for example, `<h1>`, `<h2>`, etc.
   result = fmt"<h{heading.level}>"
-  for token in heading.dom:
+  for token in heading.inlines:
     result &= renderToken(ctx, token)
   result &= fmt"</h{heading.level}>"
 

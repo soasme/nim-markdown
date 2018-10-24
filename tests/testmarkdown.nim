@@ -3,7 +3,7 @@
 
 import unittest
 
-import re, strutils
+import re, strutils, os, json, strformat
 import markdown
 
 const

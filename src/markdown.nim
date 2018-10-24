@@ -72,7 +72,7 @@ type
     inlines: seq[MarkdownTokenRef]
     level: int
 
-  Fence* = object ## The type for fencing block code
+  Fence* = object ## The type for fences.
     code: string
     lang: string
 
@@ -131,6 +131,9 @@ type
     head: TableHead
     body: seq[TableRow]
 
+  BlockQuote* = object
+    blocks: seq[MarkdownTokenRef]
+
   MarkdownConfig* = object ## Options for configuring parsing or rendering behavior.
     escape: bool ## escape ``<``, ``>``, and ``&`` characters to be HTML-safe
     keepHtml: bool ## preserve HTML tags rather than escape it
@@ -181,7 +184,7 @@ type
     of MarkdownTokenType.Heading: headingVal*: Heading
     of MarkdownTokenType.SetextHeading: setextHeadingVal*: Heading
     of MarkdownTokenType.ThematicBreak: thematicBreakVal*: string
-    of MarkdownTokenType.BlockQuote: blockQuoteVal*: string
+    of MarkdownTokenType.BlockQuote: blockQuoteVal*: BlockQuote
     of MarkdownTokenType.IndentedBlockCode: codeVal*: string
     of MarkdownTokenType.FencingBlockCode: fencingBlockCodeVal*: Fence
     of MarkdownTokenType.Paragraph: paragraphVal*: Paragraph
@@ -233,12 +236,12 @@ var blockRules = @{
   MarkdownTokenType.ThematicBreak: re"^ {0,3}([-*_])(?: *\1){2,} *(?:\n+|$)",
   MarkdownTokenType.IndentedBlockCode: re"^(( {4}[^\n]+\n*)+)",
   MarkdownTokenType.FencingBlockCode: re"^( *`{3,} *([^`\s]+)? *\n([\s\S]+?)\s*`{3} *(\n+|$))",
-  MarkdownTokenType.BlockQuote: re"^(( *>[^\n]+(\n[^\n]+)*\n*)+)",
+  MarkdownTokenType.BlockQuote: re"^(( *>[^\n]*(\n[^\n]+)*\n*)+)",
   MarkdownTokenType.Paragraph: re(
     r"^(((?:[^\n]+\n?" &
     r"(?!" &
     r" {0,3}[-*_](?: *[-*_]){2,} *(?:\n+|$)|" & # ThematicBreak
-    r"(( *>[^\n]+(\n[^\n]+)*\n*)+)" & # blockQuote
+    r"( *>[^\n]+(\n[^\n]+)*\n*)+" & # blockquote
     r"))+)\n*)"
   ),
   MarkdownTokenType.ListBlock: re(
@@ -412,7 +415,7 @@ proc escapeAmpersandSeq*(doc: string): string =
 
 proc escapeCode*(doc: string): string =
   ## Make code block in markdown document HTML-safe.
-  result = doc.strip(leading=false, trailing=true).escapeTag.escapeAmpersandChar
+  result = doc.strip(leading=false, trailing=true).escapeTag.escapeAmpersandSeq
 
 proc slugify*(doc: string): string =
   ## Convert the footnote key to a url-friendly key.
@@ -461,7 +464,9 @@ proc genThematicBreakToken(matches: openArray[string]): MarkdownTokenRef =
 
 proc genBlockQuoteToken(matches: openArray[string]): MarkdownTokenRef =
   var quote = matches[0].replace(re(r"^ *> ?", {RegexFlag.reMultiLine}), "").strip(chars={'\n', ' '})
-  result = MarkdownTokenRef(type: MarkdownTokenType.BlockQuote, blockQuoteVal: quote)
+  var tokens = toSeq(parseTokens(quote, blockParsingOrder))
+  var blockquote = BlockQuote(blocks: tokens)
+  result = MarkdownTokenRef(type: MarkdownTokenType.BlockQuote, blockQuoteVal: blockquote)
 
 proc genIndentedBlockCode(matches: openArray[string]): MarkdownTokenRef =
   var code = matches[0].replace(re(r"^ {4}", {RegexFlag.reMultiLine}), "")
@@ -713,8 +718,11 @@ proc renderParagraph(ctx: MarkdownContext, paragraph: Paragraph): string =
 proc renderThematicBreak(): string =
   result = "<hr />"
 
-proc renderBlockQuote(blockQuote: string): string =
-  result = fmt"<blockquote>{blockQuote}</blockquote>"
+proc renderBlockQuote(ctx: MarkdownContext, blockQuote: BlockQuote): string =
+  result = "<blockquote>"
+  for token in blockQuote.blocks:
+    result &= renderToken(ctx, token)
+  result &= "</blockquote>"
 
 proc renderListItem(ctx: MarkdownContext, listItem: ListItem): string =
   for el in listItem.blocks:
@@ -835,7 +843,7 @@ proc renderToken*(ctx: MarkdownContext, token: MarkdownTokenRef): string =
   of MarkdownTokenType.IndentedBlockCode: result = renderIndentedBlockCode(token.codeVal)
   of MarkdownTokenType.FencingBlockCode: result = renderFencingBlockCode(token.fencingBlockCodeVal)
   of MarkdownTokenType.Paragraph: result = renderParagraph(ctx, token.paragraphVal)
-  of MarkdownTokenType.BlockQuote: result = renderBlockQuote(token.blockQuoteVal)
+  of MarkdownTokenType.BlockQuote: result = renderBlockQuote(ctx, token.blockQuoteVal)
   of MarkdownTokenType.ListBlock: result = renderListBlock(ctx, token.listBlockVal)
   of MarkdownTokenType.ListItem: result = renderListItem(ctx, token.listItemVal)
   of MarkdownTokenType.HTMLBlock: result = renderHTMLBlock(ctx, token.htmlBlockVal)

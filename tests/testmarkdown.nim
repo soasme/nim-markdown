@@ -49,10 +49,6 @@ test "paragraph":
   check markdown("p1\n") == "<p>p1</p>"
   check markdown("p1\n\np2\n") == "<p>p1</p><p>p2</p>"
 
-test "quote":
-  check markdown("> blockquote") == "<blockquote>blockquote</blockquote>"
-  check markdown("> block\n> quote\n") == "<blockquote>block\nquote</blockquote>"
-
 test "bulleted item list":
   check markdown("* a\n* b\n") == "<ul><li>a</li><li>b</li></ul>"
   check markdown("* a\n  * b\n") == "<ul><li>a<ul><li>b</li></ul></li></ul>"
@@ -440,3 +436,146 @@ test "gfm 62":
 
 test "gfm 63":
   skip # check markdown("- Foo\n---") == "<ul><li>Foo</li></ul><hr />"
+
+test "gfm 199":
+  check markdown("""> # Foo
+> bar
+> baz""") == """<blockquote><h1>Foo</h1><p>bar
+baz</p></blockquote>"""
+
+test "gfm 200":
+  check markdown("""># Foo
+>bar
+> baz""") == """<blockquote><h1>Foo</h1><p>bar
+baz</p></blockquote>"""
+
+test "gfm 201":
+  check markdown("""   > # Foo
+   > bar
+ > baz""") == """<blockquote><h1>Foo</h1><p>bar
+baz</p></blockquote>"""
+
+test "gfm 202":
+  check markdown("""    > # Foo
+    > bar
+    > baz""") == """<pre><code>&gt; # Foo
+&gt; bar
+&gt; baz</code></pre>"""
+
+test "gfm 203":
+  check markdown("""> # Foo
+> bar
+baz""") == """<blockquote><h1>Foo</h1><p>bar
+baz</p></blockquote>"""
+
+test "gfm 204":
+  check markdown("""> bar
+baz
+> foo""") == """<blockquote><p>bar
+baz
+foo</p></blockquote>"""
+
+test "gfm 205":
+  skip #check markdown("""> foo
+#---""") == """<blockquote><p>foo</p></blockquote><hr />"""
+
+test "gfm 206":
+  skip
+  #check markdown("""> - foo
+#- bar""") == """<blockquote>
+#<ul>
+#<li>foo</li>
+#</ul>
+#</blockquote>
+#<ul>
+#<li>bar</li>
+#</ul>"""
+
+test "gfm 207":
+  skip
+  #check markdown(""">     foo
+    #bar""") == """<blockquote>
+#<pre><code>foo
+#</code></pre>
+#</blockquote>
+#<pre><code>bar
+#</code></pre>"""
+
+test "gfm 208":
+  skip
+  #check markdown("""> ```
+#foo
+#```""") == """<blockquote>
+#<pre><code></code></pre>
+#</blockquote>
+#<p>foo</p>
+#<pre><code></code></pre>"""
+
+test "gfm 209":
+  check markdown("""> foo
+    - bar""") == """<blockquote><p>foo
+- bar</p></blockquote>"""
+
+test "gfm 210":
+  check markdown(">") == "<blockquote></blockquote>"
+
+test "gfm 211":
+  check markdown(">\n>  \n> ") == "<blockquote></blockquote>"
+
+test "gfm 212":
+  check markdown(">\n> foo\n>  ") == "<blockquote><p>foo</p></blockquote>"
+
+test "gfm 213":
+  skip # check markdown("> foo\n\n> bar") == "<blockquote><p>foo</p></blockquote><blockquote><p>bar</p></blockquote>"
+
+test "gfm 214":
+  check markdown("> foo\n> bar") == """<blockquote><p>foo
+bar</p></blockquote>"""
+
+test "gfm 215":
+  check markdown("> foo\n>\n> bar") == "<blockquote><p>foo</p><p>bar</p></blockquote>"
+
+test "gfm 216":
+  check markdown("""foo
+> bar""") == """<p>foo</p><blockquote><p>bar</p></blockquote>"""
+
+test "gfm 217":
+  skip
+  #check markdown("""> aaa
+#***
+#> bbb""") == """<blockquote><p>aaa</p></blockquote><hr /><blockquote><p>bbb</p></blockquote>"""
+
+test "gfm 218":
+  check markdown("""> bar
+baz""") == """<blockquote><p>bar
+baz</p></blockquote>"""
+
+test "gfm 219":
+  check markdown("""> bar
+
+baz""") == "<blockquote><p>bar</p></blockquote><p>baz</p>"
+
+test "gfm 220":
+  skip
+  #check markdown("""> bar
+#>
+#baz""") == """<blockquote><p>bar</p></blockquote><p>baz</p>"""
+
+test "gfm 221":
+  check markdown("""> > > foo
+bar""") == """<blockquote><blockquote><blockquote><p>foo
+bar</p></blockquote></blockquote></blockquote>"""
+
+test "gfm 222":
+  check markdown(""">>> foo
+> bar
+>>baz""") == """<blockquote><blockquote><blockquote><p>foo
+bar
+baz</p></blockquote></blockquote></blockquote>"""
+
+test "gfm 223":
+  skip
+  #check markdown(""">     code
+
+#>    not code""") == """<blockquote><pre><code>code
+#</code></pre></blockquote><blockquote><p>not code</p></blockquote>"""

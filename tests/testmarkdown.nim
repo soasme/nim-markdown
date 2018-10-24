@@ -140,6 +140,8 @@ test "inline code":
 
 test "inline break":
   check markdown("hello\nworld") == "<p>hello\nworld</p>"
+  check markdown("hello\\\nworld") == "<p>hello<br />\nworld</p>"
+  check markdown("hello  \nworld") == "<p>hello<br />\nworld</p>"
 
 test "inline strikethrough":
   check markdown("~~hello~~") == "<p><del>hello</del></p>"

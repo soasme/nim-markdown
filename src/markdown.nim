@@ -316,11 +316,11 @@ var blockRules = @{
     r"|\*{2}([\S]+?)\*{2}(?!\*))"
   ),
   MarkdownTokenType.InlineEmphasis: re(
-    r"^(_([\S]+?)_(?!_)" &
-    r"|\*([\S]+?)\*(?!\*))"
+    r"^(_([\s\S]+?)_(?!_)" &
+    r"|\*([\s\S]+?)\*(?!\*))"
   ),
   MarkdownTokenType.InlineCode: re"^((`+)\s*([\s\S]*?[^`])\s*\2(?!`))",
-  MarkdownTokenType.InlineBreak: re"^( *\n(?!\s*$))",
+  MarkdownTokenType.InlineBreak: re"^((?: {2,}\n|\\\n)(?!\s*$))",
   MarkdownTokenType.InlineStrikethrough: re"^(~~(?=\S)([\s\S]*?\S)~~)",
   MarkdownTokenType.InlineFootnote: re"^(\[\^([^\]]+)\])",
 }.newTable
@@ -815,14 +815,18 @@ proc renderInlineDoubleEmphasis(ctx: MarkdownContext, text: string): string =
   result = fmt"""<strong>{text}</strong>"""
 
 proc renderInlineEmphasis(ctx: MarkdownContext, text: string): string =
-  result = fmt"""<em>{text}</em>"""
+  # TODO: move to phase 2
+  var em = ""
+  for token in parseTokens(text, inlineParsingOrder):
+    em &= renderToken(ctx, token)
+  result = fmt"""<em>{em}</em>"""
 
 proc renderInlineCode(ctx: MarkdownContext, code: string): string =
-  let formattedCode = code.strip.escapeAmpersandChar.escapeTag
+  let formattedCode = code.strip.escapeAmpersandChar.escapeTag.replace(re" *\n", " ")
   result = fmt"""<code>{formattedCode}</code>"""
 
 proc renderInlineBreak(ctx: MarkdownContext, code: string): string =
-  result = "\n"
+  result = "<br />\n"
 
 proc renderInlineStrikethrough(ctx: MarkdownContext, text: string): string =
   result = fmt"<del>{text}</del>"

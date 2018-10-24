@@ -284,7 +284,7 @@ var blockRules = @{
   MarkdownTokenType.Text: re"^([^\n]+)",
   MarkdownTokenType.Newline: re"^(\n+)",
   MarkdownTokenType.AutoLink: re"^<([^ >]+(@|:)[^ >]+)>",
-  MarkdownTokenType.InlineText: re"^([\s\S]+?(?=[\\<!\[_*`~]|https?://| *\n|$))",
+  MarkdownTokenType.InlineText: re"^([\s\S]+?(?=[\\<!\[_*`~]|https?://| {2,}\n|$))",
   MarkdownTokenType.InlineEscape: re(
     r"^\\([\\`*{}\[\]()#+\-.!_<>~|])"
   ),
@@ -567,7 +567,7 @@ proc genAutoLink(matches: openArray[string]): MarkdownTokenRef =
   result = MarkdownTokenRef(type: MarkdownTokenType.AutoLink, autoLinkVal: link)
 
 proc genInlineText(matches: openArray[string]): MarkdownTokenRef =
-  var text = matches[0]
+  var text = matches[0].replace(re" *\n", "\n")
   result = MarkdownTokenRef(type: MarkdownTokenType.InlineText, inlineTextVal: text)
 
 proc genInlineEscape(matches: openArray[string]): MarkdownTokenRef =

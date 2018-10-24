@@ -80,7 +80,7 @@ type
     blocks: seq[MarkdownTokenRef]
 
   ListBlock* = object ## The type for the list block
-    elems: seq[MarkdownTokenRef]
+    blocks: seq[MarkdownTokenRef]
     depth: int
     ordered: bool
 
@@ -509,7 +509,7 @@ proc genListBlock(matches: openArray[string]): MarkdownTokenRef =
   var val: ListBlock
   let doc = matches[0]
   val.ordered = matches[2] =~ re"\d+."
-  val.elems = toSeq(parseListTokens(doc))
+  val.blocks = toSeq(parseListTokens(doc))
   result = MarkdownTokenRef(type: MarkdownTokenType.ListBlock, listBlockVal: val)
 
 proc genHTMLBlock(matches: openArray[string]): MarkdownTokenRef =
@@ -725,7 +725,7 @@ proc renderListItem(ctx: MarkdownContext, listItem: ListItem): string =
 
 proc renderListBlock(ctx: MarkdownContext, listBlock: ListBlock): string =
   result = ""
-  for el in listBlock.elems:
+  for el in listBlock.blocks:
     result &= renderListItem(ctx, el.listItemVal)
   if listBlock.ordered:
     result = fmt"<ol>{result}</ol>"

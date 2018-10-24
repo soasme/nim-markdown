@@ -99,7 +99,7 @@ type
     text: string
 
   Paragraph* = object ## The type for a paragraph
-    dom: iterator(): MarkdownTokenRef
+    inlines: seq[MarkdownTokenRef]
 
   Link* = object ## The type for a link in full format.
     url: string
@@ -475,10 +475,8 @@ proc genFencingBlockCode(matches: openArray[string]): MarkdownTokenRef =
 
 proc genParagraph(matches: openArray[string]): MarkdownTokenRef =
   var doc = matches[0].strip(chars={'\n', ' '}).replace(re"\n *", "\n")
-  var tokens = iterator(): MarkdownTokenRef =
-    for token in parseTokens(doc, inlineParsingOrder):
-      yield token
-  var val = Paragraph(dom: tokens)
+  var tokens = toSeq(parseTokens(doc, inlineParsingOrder))
+  var val = Paragraph(inlines: tokens)
   result = MarkdownTokenRef(type: MarkdownTokenType.Paragraph, paragraphVal: val)
 
 proc genText(matches: openArray[string]): MarkdownTokenRef =
@@ -708,7 +706,7 @@ proc renderIndentedBlockCode(code: string): string =
   result = fmt"<pre><code>{escapeCode(code)}</code></pre>"
 
 proc renderParagraph(ctx: MarkdownContext, paragraph: Paragraph): string =
-  for token in paragraph.dom():
+  for token in paragraph.inlines:
     result &= renderToken(ctx, token)
   result = fmt"<p>{result}</p>"
 

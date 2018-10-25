@@ -416,7 +416,7 @@ proc escapeCode*(doc: string): string =
   ## Make code block in markdown document HTML-safe.
   result = doc.escapeTag.escapeAmpersandSeq
 
-proc escapeLink*(doc: string): string =
+proc escapeBackslash*(doc: string): string =
   doc.replacef(re"\\([\\`*{}\[\]()#+\-.!_<>~|""$%&',/:;=?@^])", "$1")
 
 proc slugify*(doc: string): string =
@@ -709,7 +709,7 @@ proc renderFencingBlockCode(fence: Fence): string =
   if fence.lang == "":
     lang = ""
   else:
-    lang = fmt(" lang=\"{fence.lang}\"")
+    lang = fmt(" class=\"language-{escapeBackslash(fence.lang)}\"")
   result = fmt("""<pre><code{lang}>{escapeCode(fence.code)}
 </code></pre>""")
 
@@ -809,11 +809,11 @@ proc renderAutoLink(ctx: MarkdownContext, link: Link): string =
     result = fmt"""<a href="{link.url}">{link.text}</a>"""
 
 proc renderInlineLink(ctx: MarkdownContext, link: Link): string =
-  let url = escapeLink(link.url)
+  let url = escapeBackslash(link.url)
   if link.isImage:
-    result = fmt"""<img src="{url}" alt="{escapeLink(link.text)}">"""
+    result = fmt"""<img src="{url}" alt="{escapeBackslash(link.text)}">"""
   else:
-    result = fmt"""<a href="{url}" title="{escapeLink(link.title)}">{link.text}</a>"""
+    result = fmt"""<a href="{url}" title="{escapeBackslash(link.title)}">{link.text}</a>"""
 
 proc renderInlineRefLink(ctx: MarkdownContext, link: RefLink): string =
   if ctx.links.hasKey(link.id):
@@ -821,12 +821,12 @@ proc renderInlineRefLink(ctx: MarkdownContext, link: RefLink): string =
     if definedLink.isImage:
       result = fmt"""<img src="{definedLink.url}" alt="{link.text}">"""
     else:
-      result = fmt"""<a href="{escapeLink(definedLink.url)}" title="{escapeLink(definedLink.title)}">{link.text}</a>"""
+      result = fmt"""<a href="{escapeBackslash(definedLink.url)}" title="{escapeBackslash(definedLink.title)}">{link.text}</a>"""
   else:
     result = fmt"[{link.id}][{link.text}]"
 
 proc renderInlineURL(ctx: MarkdownContext, url: string): string =
-  result = fmt"""<a href="{escapeLink(url)}">{url}</a>"""
+  result = fmt"""<a href="{escapeBackslash(url)}">{url}</a>"""
 
 proc renderInlineDoubleEmphasis(ctx: MarkdownContext, text: string): string =
   result = fmt"""<strong>{text}</strong>"""

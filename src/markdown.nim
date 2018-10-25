@@ -414,7 +414,7 @@ proc escapeAmpersandSeq*(doc: string): string =
 
 proc escapeCode*(doc: string): string =
   ## Make code block in markdown document HTML-safe.
-  result = doc.strip(leading=false, trailing=true).escapeTag.escapeAmpersandSeq
+  result = doc.escapeTag.escapeAmpersandSeq
 
 proc slugify*(doc: string): string =
   ## Convert the footnote key to a url-friendly key.

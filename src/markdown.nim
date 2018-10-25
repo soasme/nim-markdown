@@ -235,7 +235,7 @@ var blockRules = @{
   MarkdownTokenType.SetextHeading: re"^(((?:(?:[^\n]+)\n)+) {0,3}(=|-)+ *(?:\n+|$))",
   MarkdownTokenType.ThematicBreak: re"^ {0,3}([-*_])(?: *\1){2,} *(?:\n+|$)",
   MarkdownTokenType.IndentedBlockCode: re"^(( {4}[^\n]+\n*)+)",
-  MarkdownTokenType.FencingBlockCode: re"^( *`{3,} *([^`\s]+)? *\n([\s\S]+?)\s*`{3} *(\n+|$))",
+  MarkdownTokenType.FencingBlockCode: re"^( *(`{3,}|~{3}) *([^`\s]+)? *\n([\s\S]+?)\s*\2 *(\n+|$))",
   MarkdownTokenType.BlockQuote: re"^(( *>[^\n]*(\n[^\n]+)*\n*)+)",
   MarkdownTokenType.Paragraph: re(
     r"^(((?:[^\n]+\n?" &
@@ -473,8 +473,8 @@ proc genIndentedBlockCode(matches: openArray[string]): MarkdownTokenRef =
 
 proc genFencingBlockCode(matches: openArray[string]): MarkdownTokenRef =
   var val: Fence
-  val.lang = matches[1]
-  val.code = matches[2]
+  val.lang = matches[2]
+  val.code = matches[3]
   result = MarkdownTokenRef(type: MarkdownTokenType.FencingBlockCode, fencingBlockCodeVal: val)
 
 proc genParagraph(matches: openArray[string]): MarkdownTokenRef =
@@ -701,7 +701,13 @@ proc renderText(ctx: MarkdownContext, text: string): string =
 
 proc renderFencingBlockCode(fence: Fence): string =
   # Render fencing block code
-  result = fmt("<pre><code lang=\"{fence.lang}\">{escapeCode(fence.code)}</code></pre>")
+  var lang: string
+  if fence.lang == "":
+    lang = ""
+  else:
+    lang = fmt(" lang=\"{fence.lang}\"")
+  result = fmt("""<pre><code{lang}>{escapeCode(fence.code)}
+</code></pre>""")
 
 proc renderIndentedBlockCode(code: string): string =
   # Render indented block code.

@@ -416,6 +416,9 @@ proc escapeCode*(doc: string): string =
   ## Make code block in markdown document HTML-safe.
   result = doc.escapeTag.escapeAmpersandSeq
 
+proc escapeLink*(doc: string): string =
+  doc.replacef(re"\\([\\`*{}\[\]()#+\-.!_<>~|""$%&',/:;=?@^])", "$1")
+
 proc slugify*(doc: string): string =
   ## Convert the footnote key to a url-friendly key.
   result = doc.toLower.escapeAmpersandSeq.escapeTag.escapeQuote.replace(re"\s+", "-")
@@ -685,6 +688,7 @@ proc findToken(doc: string, start: var int, ruleType: MarkdownTokenType): Markdo
 
   start += size
 
+  
 proc renderHeading(ctx: MarkdownContext, heading: Heading): string =
   # Render heading tag, for example, `<h1>`, `<h2>`, etc.
   result = fmt"<h{heading.level}>"
@@ -805,10 +809,11 @@ proc renderAutoLink(ctx: MarkdownContext, link: Link): string =
     result = fmt"""<a href="{link.url}">{link.text}</a>"""
 
 proc renderInlineLink(ctx: MarkdownContext, link: Link): string =
+  let url = escapeLink(link.url)
   if link.isImage:
-    result = fmt"""<img src="{link.url}" alt="{link.text}">"""
+    result = fmt"""<img src="{url}" alt="{escapeLink(link.text)}">"""
   else:
-    result = fmt"""<a href="{link.url}" title="{link.title}">{link.text}</a>"""
+    result = fmt"""<a href="{url}" title="{escapeLink(link.title)}">{link.text}</a>"""
 
 proc renderInlineRefLink(ctx: MarkdownContext, link: RefLink): string =
   if ctx.links.hasKey(link.id):
@@ -816,12 +821,12 @@ proc renderInlineRefLink(ctx: MarkdownContext, link: RefLink): string =
     if definedLink.isImage:
       result = fmt"""<img src="{definedLink.url}" alt="{link.text}">"""
     else:
-      result = fmt"""<a href="{definedLink.url}" title="{definedLink.title}">{link.text}</a>"""
+      result = fmt"""<a href="{escapeLink(definedLink.url)}" title="{escapeLink(definedLink.title)}">{link.text}</a>"""
   else:
     result = fmt"[{link.id}][{link.text}]"
 
 proc renderInlineURL(ctx: MarkdownContext, url: string): string =
-  result = fmt"""<a href="{url}">{url}</a>"""
+  result = fmt"""<a href="{escapeLink(url)}">{url}</a>"""
 
 proc renderInlineDoubleEmphasis(ctx: MarkdownContext, text: string): string =
   result = fmt"""<strong>{text}</strong>"""
@@ -906,10 +911,11 @@ proc markdown*(doc: string, config: MarkdownConfig = initMarkdownConfig()): stri
   ## for the available options.
   let tokens = toSeq(parseTokens(preprocessing(doc), blockParsingOrder))
   let ctx = buildContext(tokens, config)
-  var html: seq[string]
   for token in tokens:
-    html.add(renderToken(ctx, token))
-  html.join("\n")
+    var html = renderToken(ctx, token)
+    if html != "":
+      result &= html
+      result &= "\n"
 
 proc readCLIOptions*(): MarkdownConfig =
   ## Read options from command line.

@@ -738,10 +738,10 @@ proc renderListBlock(ctx: MarkdownContext, listBlock: ListBlock): string =
     result = fmt"<ul>{result}</ul>"
 
 proc escapeInvalidHTMLTag(doc: string): string =
-  doc.replace(
+  doc.replacef(
     re(r"<(title|textarea|style|xmp|iframe|noembed|noframes|script|plaintext)>",
       {RegexFlag.reIgnoreCase}),
-    "&lt;\1>")
+    "&lt;$1>")
 
 proc renderHTMLBlock(ctx: MarkdownContext, htmlBlock: HTMLBlock): string =
   var text = htmlBlock.text.escapeInvalidHTMLTag
@@ -900,8 +900,10 @@ proc markdown*(doc: string, config: MarkdownConfig = initMarkdownConfig()): stri
   ## for the available options.
   let tokens = toSeq(parseTokens(preprocessing(doc), blockParsingOrder))
   let ctx = buildContext(tokens, config)
+  var html: seq[string]
   for token in tokens:
-      result &= renderToken(ctx, token)
+    html.add(renderToken(ctx, token))
+  html.join("\n")
 
 proc readCLIOptions*(): MarkdownConfig =
   ## Read options from command line.

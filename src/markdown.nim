@@ -748,8 +748,8 @@ proc renderHTMLBlock(ctx: MarkdownContext, htmlBlock: HTMLBlock): string =
     else:
       space = " "
     result = fmt"<{htmlBlock.tag}{space}{htmlBlock.attributes}>{htmlBlock.text}</{htmlBlock.tag}>"
-  if not ctx.config.keepHTML:
-    result = result.escapeAmpersandSeq.escapeTag
+  #if not ctx.config.keepHTML:
+  #  result = result.escapeAmpersandSeq.escapeTag
 
 proc renderHTMLTableCell(ctx: MarkdownContext, cell: TableCell, tag: string): string =
   if cell.align != "":

@@ -68,14 +68,13 @@ test "html block":
   check markdown("<strong class='special'>hello world</strong>\n\n", configKeepHtml) == "<p><strong class='special'>hello world</strong></p>"
   check markdown("<strong class=\"special\">hello world</strong>\n\n", configKeepHtml) == "<p><strong class=\"special\">hello world</strong></p>"
 
-test "html block: default not keeping":
-  check markdown("<hr>\n\n") == "&lt;hr&gt;"
-  check markdown("<!-- comment -->\n\n") == "&lt;!-- comment --&gt;"
-  check markdown("<strong>hello world</strong>\n\n") == "<p>&lt;strong&gt;hello world&lt;/strong&gt;</p>"
-  check markdown("<strong class='special'>hello world</strong>\n\n"
-    ) == "<p>&lt;strong class='special'&gt;hello world&lt;/strong&gt;</p>"
-  check markdown("<strong class=\"special\">hello world</strong>\n\n"
-    ) == "<p>&lt;strong class=\"special\"&gt;hello world&lt;/strong&gt;</p>"
+test "html block: default keeping":
+  check markdown("<hr>\n\n") == "<hr>"
+  check markdown("<!-- comment -->\n\n") == "<!-- comment -->"
+  check markdown("<strong>hello world</strong>\n\n") == "<p><strong>hello world</strong></p>"
+  check markdown("<strong class='special'>hello world</strong>\n\n") == "<p><strong class='special'>hello world</strong></p>"
+  check markdown("<strong class=\"special\">hello world</strong>\n\n") == "<p><strong class=\"special\">hello world</strong></p>"
+
 
 test "html block: force not keeping":
   let config = initMarkdownConfig(keepHtml = false)
@@ -97,7 +96,7 @@ test "inline escape":
 
 test "inline html":
   check markdown("hello <em>world</em>", configKeepHtml) == "<p>hello <em>world</em></p>"
-  check markdown("hello <em>world</em>") == "<p>hello &lt;em&gt;world&lt;/em&gt;</p>"
+  check markdown("hello <em>world</em>") == "<p>hello <em>world</em></p>"
 
 test "inline link":
   check markdown("[test](https://example.com)") == """<p><a href="https://example.com" title="">test</a></p>"""

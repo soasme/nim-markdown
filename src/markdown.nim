@@ -220,7 +220,7 @@ const INLINE_TAGS* = [
 
 proc initMarkdownConfig*(
   escape = true,
-  keepHtml = false
+  keepHtml = true
 ): MarkdownConfig =
   MarkdownConfig(
     escape: escape,
@@ -272,7 +272,7 @@ var blockRules = @{
     r"^(" &
     r" *(?:" &
     r"<!--[\s\S]*?-->" &
-    r"|<(" & blockTag & r")((?:" & blockTagAttribute & r")*?)>([\s\S]*?)<\/\1>" &
+    r"|<(" & blockTag & r")((?:" & blockTagAttribute & r")*?)>([\s\S]*?)<\/\2>" &
     r"|<" & blockTag & r"(?:" & blockTagAttribute & r")*?\s*\/?>" &
     r")" &
     r" *(?:\n{2,}|\s*$)" &
@@ -754,8 +754,8 @@ proc renderHTMLBlock(ctx: MarkdownContext, htmlBlock: HTMLBlock): string =
     else:
       space = " "
     result = fmt"<{htmlBlock.tag}{space}{htmlBlock.attributes}>{text}</{htmlBlock.tag}>"
-  #if not ctx.config.keepHTML:
-  #  result = result.escapeAmpersandSeq.escapeTag
+  if not ctx.config.keepHTML:
+    result = result.escapeAmpersandSeq.escapeTag
 
 proc renderHTMLTableCell(ctx: MarkdownContext, cell: TableCell, tag: string): string =
   if cell.align != "":

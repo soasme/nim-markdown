@@ -390,11 +390,10 @@ proc escapeTag*(doc: string): string =
   result = result.replace(">", "&gt;")
 
 proc escapeQuote*(doc: string): string =
-  ## Replace `'` and `"` to HTML-safe characters.
+  ## Replace `"` to HTML-safe characters.
   ## Example::
   ##     check escapeTag("'tag'") == "&quote;tag&quote;"
-  result = doc.replace("'", "&quot;")
-  result = result.replace("\"", "&quot;")
+  doc.replace("\"", "&quot;")
 
 proc escapeAmpersandChar*(doc: string): string =
   ## Replace character `&` to HTML-safe characters.
@@ -738,16 +737,23 @@ proc renderListBlock(ctx: MarkdownContext, listBlock: ListBlock): string =
   else:
     result = fmt"<ul>{result}</ul>"
 
+proc escapeInvalidHTMLTag(doc: string): string =
+  doc.replace(
+    re(r"<(title|textarea|style|xmp|iframe|noembed|noframes|script|plaintext)>",
+      {RegexFlag.reIgnoreCase}),
+    "&lt;\1>")
+
 proc renderHTMLBlock(ctx: MarkdownContext, htmlBlock: HTMLBlock): string =
+  var text = htmlBlock.text.escapeInvalidHTMLTag
   if htmlBlock.tag == "":
-    result = htmlBlock.text
+    result = text
   else:
     var space: string
     if htmlBlock.attributes == "":
       space = ""
     else:
       space = " "
-    result = fmt"<{htmlBlock.tag}{space}{htmlBlock.attributes}>{htmlBlock.text}</{htmlBlock.tag}>"
+    result = fmt"<{htmlBlock.tag}{space}{htmlBlock.attributes}>{text}</{htmlBlock.tag}>"
   #if not ctx.config.keepHTML:
   #  result = result.escapeAmpersandSeq.escapeTag
 

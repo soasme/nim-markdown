@@ -286,7 +286,7 @@ var blockRules = @{
   MarkdownTokenType.AutoLink: re"^<([^ >]+(@|:)[^ >]+)>",
   MarkdownTokenType.InlineText: re"^([\s\S]+?(?=[\\<!\[_*`~]|https?://| {2,}\n|$))",
   MarkdownTokenType.InlineEscape: re(
-    r"^\\([\\`*{}\[\]()#+\-.!_<>~|])"
+    r"^\\([\\`*{}\[\]()#+\-.!_<>~|""$%&',/:;=?@^])"
   ),
   MarkdownTokenType.InlineHTML: re(
     r"^(" &
@@ -309,7 +309,7 @@ var blockRules = @{
   ),
   MarkdownTokenType.InlineNoLink: re"^(!?\[((?:\[[^\]]*\]|[^\[\]])*)\])",
   MarkdownTokenType.InlineURL: re(
-    """^(https?:\/\/[^\s<]+[^<.,:;"')\]\s])"""
+    r"""^((https?:\/\/(?:www\.|(?!www))[a-zA-Z0-9][a-zA-Z0-9-]+[a-zA-Z0-9]\.[^\s]{2,}|www\.[a-zA-Z0-9][a-zA-Z0-9-]+[a-zA-Z0-9]\.[^\s]{2,}|https?:\/\/(?:www\.|(?!www))[a-zA-Z0-9]\.[^\s]{2,}|www\.[a-zA-Z0-9]\.[^\s]{2,}))"""
   ),
   MarkdownTokenType.InlineDoubleEmphasis: re(
     r"^(_{2}([\S]+?)_{2}(?!_)" &
@@ -356,11 +356,11 @@ let listParsingOrder = @[
 let inlineParsingOrder = @[
   MarkdownTokenType.InlineEscape,
   MarkdownTokenType.InlineHTML,
+  MarkdownTokenType.InlineURL,
   MarkdownTokenType.InlineLink,
   MarkdownTokenType.InlineFootnote,
   MarkdownTokenType.InlineRefLink,
   MarkdownTokenType.InlineNoLink,
-  MarkdownTokenType.InlineURL,
   MarkdownTokenType.InlineDoubleEmphasis,
   MarkdownTokenType.InlineEmphasis,
   MarkdownTokenType.InlineCode,

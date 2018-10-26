@@ -811,20 +811,34 @@ proc renderAutoLink(ctx: MarkdownContext, link: Link): string =
   else:
     result = fmt"""<a href="{link.url}">{link.text}</a>"""
 
+proc renderLinkTitle(text: string): string =
+  var title: string
+  if text != "":
+    fmt(" title=\"{escapeBackslash(text)}\"")
+  else:
+    ""
+
+proc renderImageAlt(text: string): string =
+  var alt: string
+  if text != "":
+    fmt(" alt=\"{escapeBackslash(text)}\"")
+  else:
+    ""
+
 proc renderInlineLink(ctx: MarkdownContext, link: Link): string =
   let url = escapeBackslash(link.url)
   if link.isImage:
-    result = fmt"""<img src="{url}" alt="{escapeBackslash(link.text)}">"""
+    result = fmt"""<img src="{url}"{renderImageAlt(link.text)}>"""
   else:
-    result = fmt"""<a href="{url}" title="{escapeBackslash(link.title)}">{link.text}</a>"""
+    result = fmt"""<a href="{url}"{renderLinkTitle(link.title)}>{link.text}</a>"""
 
 proc renderInlineRefLink(ctx: MarkdownContext, link: RefLink): string =
   if ctx.links.hasKey(link.id):
     let definedLink = ctx.links[link.id]
     if definedLink.isImage:
-      result = fmt"""<img src="{definedLink.url}" alt="{link.text}">"""
+      result = fmt"""<img src="{definedLink.url}"{renderImageAlt(link.text)}>"""
     else:
-      result = fmt"""<a href="{escapeBackslash(definedLink.url)}" title="{escapeBackslash(definedLink.title)}">{link.text}</a>"""
+      result = fmt"""<a href="{escapeBackslash(definedLink.url)}"{renderLinkTitle(definedLink.title)}>{link.text}</a>"""
   else:
     result = fmt"[{link.id}][{link.text}]"
 

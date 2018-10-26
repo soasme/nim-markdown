@@ -290,10 +290,11 @@ var blockRules = @{
   ),
   MarkdownTokenType.InlineHTML: re(
     r"^(" &
-    r"<!--(?:(?!--))*?-->" &
+    r"<!--[\s\S]*?-->" &
     r"|<(\w+" & r"(?!:/|[^\w\s@]*@)\b" & r")((?:" & blockTagAttribute & r")*?)\s*>([\s\S]*?)<\/\2>" &
     r"|<\w+" & r"(?!:/|[^\w\s@]*@)\b" & r"(?:" & blockTagAttribute & r")*?\s*\/?>" &
     r"|<!\[CDATA\[[^]]+\]\]>" &
+    r"|<\/\w+\s*>" & # eg. </a>
     r"|<\?\w+\s+[\s\S]+\s*\?>" & #eg. <?php echo a; ?>
     r"|<![\w\s\d]+>" & #eg. <!DOCTYPE>
     r")"

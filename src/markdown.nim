@@ -871,7 +871,7 @@ proc renderInlineRefLink(ctx: MarkdownContext, link: RefLink): string =
     else:
       result = fmt"""<a href="{url}"{renderLinkTitle(definedLink.title)}>{link.text}</a>"""
   else:
-    result = fmt"[{link.id}][{link.text}]"
+    result = fmt"[{link.id}]"
 
 proc renderInlineURL(ctx: MarkdownContext, url: string): string =
   result = fmt"""<a href="{escapeBackslash(url)}">{url}</a>"""

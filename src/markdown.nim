@@ -316,12 +316,12 @@ var blockRules = @{
     r"""^((https?:\/\/(?:www\.|(?!www))[a-zA-Z0-9][a-zA-Z0-9-]+[a-zA-Z0-9]\.[^\s]{2,}|www\.[a-zA-Z0-9][a-zA-Z0-9-]+[a-zA-Z0-9]\.[^\s]{2,}|https?:\/\/(?:www\.|(?!www))[a-zA-Z0-9]\.[^\s]{2,}|www\.[a-zA-Z0-9]\.[^\s]{2,}))"""
   ),
   MarkdownTokenType.InlineDoubleEmphasis: re(
-    r"^(_{2}([\w\d][\s\S]*?(?<![\\s]))_{2}(?!_)(?>=\s*|$)" &
-    r"|\*{2}([\w\d][\s\S]*?(?<![\\s]))\*{2}(?!\*)(?>=\s*|$))"
+    r"^(_{2}([\w\d][\s\S]*?(?<![\\\s]))_{2}(?!_)(?>=\s*|$)" &
+    r"|\*{2}([\w\d][\s\S]*?(?<![\\\s]))\*{2}(?!\*))"
   ),
   MarkdownTokenType.InlineEmphasis: re(
     r"^(_([^""_][\s\S]*?(?<![\\\s]))_(?!_)(?>=\s*|$)" &
-    r"|\*([\w\d][\s\S]*?(?<![\\\s]))\*(?!\*)(?>=\s*|$))"
+    r"|\*([\w\d][\s\S]*?(?<![\\\s]))\*(?!\*))"
   ),
   MarkdownTokenType.InlineCode: re"^((`+)\s*([\s\S]*?[^`])\s*\2(?!`))",
   MarkdownTokenType.InlineBreak: re"^((?: {2,}\n|\\\n)(?!\s*$))",

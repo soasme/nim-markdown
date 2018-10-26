@@ -839,7 +839,7 @@ proc renderInlineEmphasis(ctx: MarkdownContext, text: string): string =
   result = fmt"""<em>{em}</em>"""
 
 proc renderInlineCode(ctx: MarkdownContext, code: string): string =
-  let formattedCode = code.strip.escapeAmpersandChar.escapeTag.replace(re" *\n", " ")
+  let formattedCode = code.strip.escapeAmpersandChar.escapeTag.replace(re"\s+", " ")
   result = fmt"""<code>{formattedCode}</code>"""
 
 proc renderInlineBreak(ctx: MarkdownContext, code: string): string =

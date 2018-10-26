@@ -420,6 +420,9 @@ proc escapeCode*(doc: string): string =
   ## Make code block in markdown document HTML-safe.
   result = doc.escapeTag.escapeAmpersandSeq
 
+proc escapeUrl*(url: string): string =
+  url.replace(" ", "%20").replace("\\", "%5C")
+
 proc escapeBackslash*(doc: string): string =
   doc.replacef(re"\\([\\`*{}\[\]()#+\-.!_<>~|""$%&',/:;=?@^])", "$1")
 
@@ -580,6 +583,10 @@ proc genInlineEscape(matches: openArray[string]): MarkdownTokenRef =
   result = MarkdownTokenRef(type: MarkdownTokenType.InlineEscape, inlineEscapeVal: matches[0])
 
 proc genInlineLink(matches: openArray[string]): MarkdownTokenRef =
+  if matches[3].contains(re"\n"):
+    return MarkdownTokenRef(type: MarkdownTokenType.InlineText, inlineTextVal: matches[0])
+  if matches[2] != "<" and matches[3].contains(re"\s"):
+    return MarkdownTokenRef(type: MarkdownTokenType.InlineText, inlineTextVal: matches[0])
   var link: Link
   link.isEmail = false
   link.isImage = matches[0][0] == '!'
@@ -826,7 +833,7 @@ proc renderImageAlt(text: string): string =
     ""
 
 proc renderInlineLink(ctx: MarkdownContext, link: Link): string =
-  let url = escapeBackslash(link.url)
+  let url = escapeUrl(escapeBackslash(link.url))
   if link.isImage:
     result = fmt"""<img src="{url}"{renderImageAlt(link.text)}>"""
   else:
@@ -835,10 +842,11 @@ proc renderInlineLink(ctx: MarkdownContext, link: Link): string =
 proc renderInlineRefLink(ctx: MarkdownContext, link: RefLink): string =
   if ctx.links.hasKey(link.id):
     let definedLink = ctx.links[link.id]
+    let url = escapeUrl(escapeBackslash(definedLink.url))
     if definedLink.isImage:
-      result = fmt"""<img src="{definedLink.url}"{renderImageAlt(link.text)}>"""
+      result = fmt"""<img src="{url}"{renderImageAlt(link.text)}>"""
     else:
-      result = fmt"""<a href="{escapeBackslash(definedLink.url)}"{renderLinkTitle(definedLink.title)}>{link.text}</a>"""
+      result = fmt"""<a href="{url}"{renderLinkTitle(definedLink.title)}>{link.text}</a>"""
   else:
     result = fmt"[{link.id}][{link.text}]"
 

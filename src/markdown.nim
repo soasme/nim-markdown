@@ -61,7 +61,7 @@
 ## :patreon: https://www.patreon.com/join/enqueuezero
 ## :license: MIT.
 
-import re, strutils, strformat, tables, sequtils, math
+import re, strutils, strformat, tables, sequtils, math, uri, htmlparser
 
 const MARKDOWN_VERSION* = "0.3.4"
 
@@ -303,7 +303,7 @@ var blockRules = @{
     r"^(!?\[" &
     r"((?:\[[^^\]]*\]|[^\[\]]|\](?=[^\[]*\]))*)" &
     r"\]\(" &
-    r"\s*(<)?([\s\S]*?)(?(3)>)(?:\s+['""]([\s\S]*?)['""])?\s*" &
+    r"\s*(<)?((?:\\\(|\\\)|\s|\S)*?)(?(3)>)(?:\s+['""]([\s\S]*?)['""])?\s*" &
     r"\))"
   ),
   MarkdownTokenType.InlineRefLink: re(
@@ -420,8 +420,31 @@ proc escapeCode*(doc: string): string =
   ## Make code block in markdown document HTML-safe.
   result = doc.escapeTag.escapeAmpersandSeq
 
-proc escapeUrl*(url: string): string =
-  url.replace(" ", "%20").replace("\\", "%5C")
+const IGNORED_HTML_ENTITY = ["&lt;", "&gt;", "&amp;"]
+
+proc escapeHTMLEntity*(doc: string): string =
+  var entities = doc.findAll(re"&([^;]+);")
+  result = doc
+  for entity in entities:
+    if not IGNORED_HTML_ENTITY.contains(entity):
+      var utf8Char = entity[1 .. entity.len-2].entityToUtf8
+      if utf8Char != "":
+        result = result.replace(re(entity), utf8Char)
+
+proc escapeLinkUrl*(url: string): string =
+  url.escapeHTMLEntity.encodeUrl.replace("%40", "@"
+    ).replace("%3A", ":"
+    ).replace("%2B", "+"
+    ).replace("%3F", "?"
+    ).replace("%3D", "="
+    ).replace("%26", "&"
+    ).replace("%28", "("
+    ).replace("%29", ")"
+    ).replace("%25", "%"
+    ).replace("%23", "#"
+    ).replace("%2A", "*"
+    ).replace("%2C", ","
+    ).replace("%2F", "/")
 
 proc escapeBackslash*(doc: string): string =
   doc.replacef(re"\\([\\`*{}\[\]()#+\-.!_<>~|""$%&',/:;=?@^])", "$1")
@@ -808,9 +831,9 @@ proc renderInlineEscape(ctx: MarkdownContext, inlineEscape: string): string =
 
 proc renderInlineText(ctx: MarkdownContext, inlineText: string): string =
   if ctx.config.escape:
-    result = renderInlineEscape(ctx, inlineText)
+    result = renderInlineEscape(ctx, escapeHTMLEntity(inlineText))
   else:
-    result = inlineText
+    result = escapeHTMLEntity(inlineText)
 
 proc renderAutoLink(ctx: MarkdownContext, link: Link): string =
   if link.isEmail:
@@ -833,7 +856,7 @@ proc renderImageAlt(text: string): string =
     ""
 
 proc renderInlineLink(ctx: MarkdownContext, link: Link): string =
-  let url = escapeUrl(escapeBackslash(link.url))
+  let url = escapeLinkUrl(escapeBackslash(link.url))
   if link.isImage:
     result = fmt"""<img src="{url}"{renderImageAlt(link.text)}>"""
   else:
@@ -842,7 +865,7 @@ proc renderInlineLink(ctx: MarkdownContext, link: Link): string =
 proc renderInlineRefLink(ctx: MarkdownContext, link: RefLink): string =
   if ctx.links.hasKey(link.id):
     let definedLink = ctx.links[link.id]
-    let url = escapeUrl(escapeBackslash(definedLink.url))
+    let url = escapeLinkUrl(escapeBackslash(definedLink.url))
     if definedLink.isImage:
       result = fmt"""<img src="{url}"{renderImageAlt(link.text)}>"""
     else:

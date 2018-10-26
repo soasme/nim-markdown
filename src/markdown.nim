@@ -832,7 +832,11 @@ proc renderInlineURL(ctx: MarkdownContext, url: string): string =
   result = fmt"""<a href="{escapeBackslash(url)}">{url}</a>"""
 
 proc renderInlineDoubleEmphasis(ctx: MarkdownContext, text: string): string =
-  result = fmt"""<strong>{text}</strong>"""
+  # TODO: move to phase 2
+  var em = ""
+  for token in parseTokens(text, inlineParsingOrder):
+    em &= renderToken(ctx, token)
+  result = fmt"""<strong>{em}</strong>"""
 
 proc renderInlineEmphasis(ctx: MarkdownContext, text: string): string =
   # TODO: move to phase 2

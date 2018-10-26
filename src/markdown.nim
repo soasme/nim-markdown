@@ -293,6 +293,7 @@ var blockRules = @{
     r"<!--[\s\S]*?-->" &
     r"|<(\w+" & r"(?!:/|[^\w\s@]*@)\b" & r")((?:" & blockTagAttribute & r")*?)\s*>([\s\S]*?)<\/\2>" &
     r"|<\w+" & r"(?!:/|[^\w\s@]*@)\b" & r"(?:" & blockTagAttribute & r")*?\s*\/?>" &
+    r"|<!\[CDATA\[[^]]+\]\]>" &
     r")"
   ),
   MarkdownTokenType.InlineLink: re(

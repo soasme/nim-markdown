@@ -284,7 +284,7 @@ var blockRules = @{
   MarkdownTokenType.Text: re"^([^\n]+)",
   MarkdownTokenType.Newline: re"^(\n+)",
   MarkdownTokenType.AutoLink: re"^<([^ >]+(@|:)[^ >]+)>",
-  MarkdownTokenType.InlineText: re"^([\s\S]+?(?=[\\<!\[_*`~]|https?://| {2,}\n|$))",
+  MarkdownTokenType.InlineText: re"^([\s\S]+?(?=[\\<!\[`~*_]||https?://| {2,}\n|$))",
   MarkdownTokenType.InlineEscape: re(
     r"^\\([\\`*{}\[\]()#+\-.!_<>~|""$%&',/:;=?@^])"
   ),
@@ -316,8 +316,8 @@ var blockRules = @{
     r"""^((https?:\/\/(?:www\.|(?!www))[a-zA-Z0-9][a-zA-Z0-9-]+[a-zA-Z0-9]\.[^\s]{2,}|www\.[a-zA-Z0-9][a-zA-Z0-9-]+[a-zA-Z0-9]\.[^\s]{2,}|https?:\/\/(?:www\.|(?!www))[a-zA-Z0-9]\.[^\s]{2,}|www\.[a-zA-Z0-9]\.[^\s]{2,}))"""
   ),
   MarkdownTokenType.InlineDoubleEmphasis: re(
-    r"^(_{2}([\w\d][\s\S]*?(?<!\\))_{2}(?!_)" &
-    r"|\*{2}([\w\d][\s\S]*?(?<!\\))\*{2}(?!\*))"
+    r"^(_{2}([\w\d(][\s\S]*?(?<!\\))_{2}(?!_)" &
+    r"|\*{2}([\w\d(][\s\S]*?(?<!\\))\*{2}(?!\*))"
   ),
   MarkdownTokenType.InlineEmphasis: re(
     r"^(_([\w\d][\s\S]*?(?<!\\))_(?!_)" &

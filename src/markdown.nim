@@ -312,12 +312,12 @@ var blockRules = @{
     r"""^((https?:\/\/(?:www\.|(?!www))[a-zA-Z0-9][a-zA-Z0-9-]+[a-zA-Z0-9]\.[^\s]{2,}|www\.[a-zA-Z0-9][a-zA-Z0-9-]+[a-zA-Z0-9]\.[^\s]{2,}|https?:\/\/(?:www\.|(?!www))[a-zA-Z0-9]\.[^\s]{2,}|www\.[a-zA-Z0-9]\.[^\s]{2,}))"""
   ),
   MarkdownTokenType.InlineDoubleEmphasis: re(
-    r"^(_{2}([\S]+?(?<!\\))_{2}(?!_)" &
-    r"|\*{2}([\S]+?(?<!\\))\*{2}(?!\*))"
+    r"^(_{2}([\S][\s\S]*?(?<!\\))_{2}(?!_)" &
+    r"|\*{2}([\S][\s\S]*?(?<!\\))\*{2}(?!\*))"
   ),
   MarkdownTokenType.InlineEmphasis: re(
-    r"^(_([\s\S]+?(?<!\\))_(?!_)" &
-    r"|\*([\s\S]+?(?<!\\))\*(?!\*))"
+    r"^(_([\S][\s\S]*?(?<!\\))_(?!_)" &
+    r"|\*([\S][\s\S]*?(?<!\\))\*(?!\*))"
   ),
   MarkdownTokenType.InlineCode: re"^((`+)\s*([\s\S]*?[^`])\s*\2(?!`))",
   MarkdownTokenType.InlineBreak: re"^((?: {2,}\n|\\\n)(?!\s*$))",
@@ -631,8 +631,7 @@ proc genInlineEmphasis(matches: openArray[string]): MarkdownTokenRef =
   result = MarkdownTokenRef(type: MarkdownTokenType.InlineEmphasis, inlineEmphasisVal: text)
 
 proc genInlineCode(matches: openArray[string]): MarkdownTokenRef =
-  var code = matches[2]
-  result = MarkdownTokenRef(type: MarkdownTokenType.InlineCode, inlineCodeVal: code)
+  result = MarkdownTokenRef(type: MarkdownTokenType.InlineCode, inlineCodeVal: matches[2])
 
 proc genInlineBreak(matches: openArray[string]): MarkdownTokenRef =
   result = MarkdownTokenRef(type: MarkdownTokenType.InlineBreak, inlineBreakVal: "")

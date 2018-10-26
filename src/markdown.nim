@@ -284,7 +284,7 @@ var blockRules = @{
   MarkdownTokenType.Text: re"^([^\n]+)",
   MarkdownTokenType.Newline: re"^(\n+)",
   MarkdownTokenType.AutoLink: re"^<([^ >]+(@|:)[^ >]+)>",
-  MarkdownTokenType.InlineText: re"^([\s\S]+?(?=[\\<!\[`~*_]||https?://| {2,}\n|$))",
+  MarkdownTokenType.InlineText: re"^([\s\S]+?(?=[\\<!\[`~*]|\s+_|https?://| {2,}\n|$))",
   MarkdownTokenType.InlineEscape: re(
     r"^\\([\\`*{}\[\]()#+\-.!_<>~|""$%&',/:;=?@^])"
   ),

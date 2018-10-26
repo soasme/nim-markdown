@@ -303,7 +303,7 @@ var blockRules = @{
     r"^(!?\[" &
     r"((?:\[[^^\]]*\]|[^\[\]]|\](?=[^\[]*\]))*)" &
     r"\]\(" &
-    r"\s*(<)?((?:\\\(|\\\)|\s|\S)*?)(?(3)>)(?:\s+['""]([\s\S]*?)['""])?\s*" &
+    r"\s*(<)?((?:\\\(|\\\)|\s|\S)*?)(?(3)>)(?:\s+['""(]([\s\S]*?)['"")])?\s*" &
     r"\))"
   ),
   MarkdownTokenType.InlineRefLink: re(
@@ -844,14 +844,14 @@ proc renderAutoLink(ctx: MarkdownContext, link: Link): string =
 proc renderLinkTitle(text: string): string =
   var title: string
   if text != "":
-    fmt(" title=\"{escapeBackslash(text)}\"")
+    fmt(" title=\"{text.escapeBackslash.escapeQuote}\"")
   else:
     ""
 
 proc renderImageAlt(text: string): string =
   var alt: string
   if text != "":
-    fmt(" alt=\"{escapeBackslash(text)}\"")
+    fmt(" alt=\"{text.escapeBackslash.escapeQuote}\"")
   else:
     ""
 

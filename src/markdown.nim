@@ -290,10 +290,11 @@ var blockRules = @{
   ),
   MarkdownTokenType.InlineHTML: re(
     r"^(" &
-    r"<!--[\s\S]*?-->" &
+    r"<!--(?:(?!--))*?-->" &
     r"|<(\w+" & r"(?!:/|[^\w\s@]*@)\b" & r")((?:" & blockTagAttribute & r")*?)\s*>([\s\S]*?)<\/\2>" &
     r"|<\w+" & r"(?!:/|[^\w\s@]*@)\b" & r"(?:" & blockTagAttribute & r")*?\s*\/?>" &
     r"|<!\[CDATA\[[^]]+\]\]>" &
+    r"|<\?\w+\s+[\s\S]+\s*\?>" &
     r")"
   ),
   MarkdownTokenType.InlineLink: re(

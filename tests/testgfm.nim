@@ -5,6 +5,7 @@ import markdown
 
 let KNOW_ISSUES = [
   334, # *foo`*`: backtick should have higher precedence than emphasis.
+  335, # [not a `link](/foo`): backtick should have higher precedence than inline link.
 ]
 
 test "gfm":

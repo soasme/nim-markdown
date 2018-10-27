@@ -309,7 +309,7 @@ var blockRules = @{
   MarkdownTokenType.InlineRefLink: re(
     r"^(!?\[" &
     r"((?:|\s|\S)*)" &
-    r"\]\s*\[([^^\]]*)\])"
+    r"\]\[([^^\]]*)\])"
   ),
   MarkdownTokenType.InlineNoLink: re"^(!?\[((?:\[[^\]]*\]|[^\[\]])*)\])",
   MarkdownTokenType.InlineURL: re(
@@ -906,7 +906,12 @@ proc renderInlineRefLink(ctx: MarkdownContext, link: RefLink): string =
     else:
       result = fmt"""<a href="{url}"{renderLinkTitle(definedLink.title)}>{renderLinkText(ctx, link.text)}</a>"""
   else:
-    result = fmt"[{link.id}]"
+    if link.id == link.text:
+      result = fmt"[{link.id}]"
+    elif link.id != "" and link.text != "":
+      result = fmt"[{link.text}][{renderLinkText(ctx, link.id)}]"
+    else:
+      result = fmt"[{link.id}]"
 
 proc renderInlineURL(ctx: MarkdownContext, url: string): string =
   result = fmt"""<a href="{escapeBackslash(url)}">{url}</a>"""
@@ -983,10 +988,11 @@ proc buildContext(tokens: seq[MarkdownTokenRef], config: MarkdownConfig): Markdo
   for token in tokens:
     case token.type
     of MarkdownTokenType.DefineLink:
-      result.links[token.defineLinkVal.text] = Link(
-        url: token.defineLinkVal.link,
-        text: token.defineLinkVal.text,
-        title: token.defineLinkVal.title)
+      if not result.links.contains(token.defineLinkVal.text):
+        result.links[token.defineLinkVal.text] = Link(
+          url: token.defineLinkVal.link,
+          text: token.defineLinkVal.text,
+          title: token.defineLinkVal.title)
     of MarkdownTokenType.DefineFootnote:
       result.footnotes[token.defineFootnoteVal.anchor] = token.defineFootnoteVal.footnote
     else:

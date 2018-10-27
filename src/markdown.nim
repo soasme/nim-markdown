@@ -530,6 +530,9 @@ proc genText(matches: openArray[string]): MarkdownTokenRef =
   result = MarkdownTokenRef(type: MarkdownTokenType.Text, textVal: matches[0])
 
 proc genDefineLink(matches: openArray[string]): MarkdownTokenRef =
+  # if matches[1].match(re"\s+"):
+  #   return genParagraph(@[matches[0]])
+
   var val: DefineLink
   val.text = matches[1]
   val.link = matches[2]
@@ -663,8 +666,11 @@ proc genInlineHTML(matches: openArray[string]): MarkdownTokenRef =
 
 proc genInlineRefLink(matches: openArray[string]): MarkdownTokenRef =
   var link: RefLink
-  link.id = matches[2]
   link.text = matches[1]
+  if matches[2] == "":
+    link.id = link.text
+  else:
+    link.id = matches[2]
   link.isImage = matches[0][0] == '!'
   result = MarkdownTokenRef(type: MarkdownTokenType.InlineRefLink, inlineRefLinkVal: link)
 

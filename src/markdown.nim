@@ -301,7 +301,7 @@ var blockRules = @{
   ),
   MarkdownTokenType.InlineLink: re(
     r"^(!?\[" &
-    r"([\s\S]*)" &
+    r"((?:\[[^^\]]*\]|[^\[\]]|\](?=[^\[]*\]))*)" &
     r"\]\(" &
     r"\s*(<)?((?:\\\(|\\\)|\s|\S)*?)(?(3)>)(?:\s+['""(]([\s\S]*?)['"")])?\s*" &
     r"\))"
@@ -877,24 +877,25 @@ proc renderImageAlt(text: string): string =
   else:
     ""
 
-proc renderLinkText(text: string): string =
-  text.escapeHTMLEntity.escapeBackslash.escapeAmpersandSeq.escapeTag.escapeQuote
+proc renderLinkText(ctx: MarkdownContext, text: string): string =
+  for token in parseTokens(text, inlineParsingOrder):
+    result &= renderToken(ctx, token)
 
 proc renderInlineLink(ctx: MarkdownContext, link: Link): string =
   let url = escapeLinkUrl(escapeBackslash(link.url))
   if link.isImage:
-    result = fmt"""<img src="{url}"{renderImageAlt(link.text)}>"""
+    result = fmt"""<img src="{url}"{renderImageAlt(link.text)} />"""
   else:
-    result = fmt"""<a href="{url}"{renderLinkTitle(link.title)}>{renderLinkText(link.text)}</a>"""
+    result = fmt"""<a href="{url}"{renderLinkTitle(link.title)}>{renderLinkText(ctx, link.text)}</a>"""
 
 proc renderInlineRefLink(ctx: MarkdownContext, link: RefLink): string =
   if ctx.links.hasKey(link.id):
     let definedLink = ctx.links[link.id]
     let url = escapeLinkUrl(escapeBackslash(definedLink.url))
     if definedLink.isImage:
-      result = fmt"""<img src="{url}"{renderImageAlt(link.text)}>"""
+      result = fmt"""<img src="{url}"{renderImageAlt(link.text)} />"""
     else:
-      result = fmt"""<a href="{url}"{renderLinkTitle(definedLink.title)}>{renderLinkText(link.text)}</a>"""
+      result = fmt"""<a href="{url}"{renderLinkTitle(definedLink.title)}>{renderLinkText(ctx, link.text)}</a>"""
   else:
     result = fmt"[{link.id}]"
 

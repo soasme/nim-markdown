@@ -881,7 +881,7 @@ proc renderAutoLink(ctx: MarkdownContext, link: Link): string =
 proc renderLinkTitle(text: string): string =
   var title: string
   if text != "":
-    fmt(" title=\"{text.escapeBackslash.escapeQuote}\"")
+    fmt(" title=\"{text.escapeBackslash.escapeAmpersandSeq.escapeQuote}\"")
   else:
     ""
 

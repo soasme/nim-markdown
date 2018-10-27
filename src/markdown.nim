@@ -885,7 +885,7 @@ proc renderInlineText(ctx: MarkdownContext, inlineText: string): string =
 proc renderLinkTitle(text: string): string =
   var title: string
   if text != "":
-    fmt(" title=\"{text.escapeBackslash.escapeAmpersandSeq.escapeQuote}\"")
+    fmt(" title=\"{text.escapeBackslash.escapeHTMLEntity.escapeAmpersandSeq.escapeQuote}\"")
   else:
     ""
 

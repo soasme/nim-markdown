@@ -441,6 +441,8 @@ proc escapeHTMLEntity*(doc: string): string =
       var utf8Char = entity[1 .. entity.len-2].entityToUtf8
       if utf8Char != "":
         result = result.replace(re(entity), utf8Char)
+      else:
+        result = result.replace(re(entity), entity.escapeAmpersandChar)
 
 proc escapeLinkUrl*(url: string): string =
   encodeUrl(url.escapeHTMLEntity, usePlus=false).replace("%40", "@"

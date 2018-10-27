@@ -839,24 +839,24 @@ proc renderHTMLBlock(ctx: MarkdownContext, htmlBlock: HTMLBlock): string =
 
 proc renderHTMLTableCell(ctx: MarkdownContext, cell: TableCell, tag: string): string =
   if cell.align != "":
-    result = fmt"<{tag} style=""text-align: {cell.align}"">"
+    result = fmt("<{tag} style=\"text-align: {cell.align}\">")
   else:
-    result = fmt"<{tag}>"
+    result = fmt("<{tag}>")
   for token in cell.dom:
     result &= renderToken(ctx, token)
-  result &= fmt"</{tag}>"
+  result &= fmt("</{tag}>\n")
 
 proc renderHTMLTable*(ctx: MarkdownContext, table: HTMLTable): string =
-  result &= "<table>"
-  result &= "<thead>"
-  result &= "<tr>"
+  result &= "<table>\n"
+  result &= "<thead>\n"
+  result &= "<tr>\n"
   for headCell in table.head.cells:
     result &= renderHTMLTableCell(ctx, headCell, tag="th")
-  result &= "</tr>"
-  result &= "</thead>"
-  result &= "<tbody>"
+  result &= "</tr>\n"
+  result &= "</thead>\n"
+  result &= "<tbody>\n"
   for row in table.body:
-    result &= "<tr>"
+    result &= "<tr>\n"
     for cell in row.cells:
       result &= renderHTMLTableCell(ctx, cell, tag="td")
     result &= "</tr>"

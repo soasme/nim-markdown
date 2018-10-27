@@ -897,8 +897,9 @@ proc renderAutoLink(ctx: MarkdownContext, link: Link): string =
   elif link.isEmail:
     result = fmt"""<a href="mailto:{link.url}">{link.text}</a>"""
   else:
-    var url = link.url.escapeBackslash.escapeLinkUrl.escapeAmpersandSeq
-    result = fmt"""<a href="{url}">{url}</a>"""
+    var text = link.url.escapeAmpersandSeq
+    var url = link.url.escapeLinkUrl
+    result = fmt"""<a href="{url}">{text}</a>"""
 
 proc renderInlineLink(ctx: MarkdownContext, link: Link): string =
   var refId = link.text.toLower.replace(re"\s+", " ")

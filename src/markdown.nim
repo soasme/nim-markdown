@@ -897,9 +897,17 @@ proc renderLinkText(ctx: MarkdownContext, text: string): string =
     result &= renderToken(ctx, token)
 
 proc renderInlineLink(ctx: MarkdownContext, link: Link): string =
+  var refId = link.text.toLower.replace(re"\s+", " ")
+  if ctx.links.contains(refId):
+    var definedLink = ctx.links[refId]
+    let url = escapeLinkUrl(escapeBackslash(definedLink.url))
+    if definedLink.isImage:
+      return fmt"""<img src="{url}"{renderImageAlt(link.text)}{renderLinkTitle(definedLink.title)} />"""
+    else:
+      return fmt"""<a href="{url}"{renderLinkTitle(definedLink.title)}>{renderLinkText(ctx, link.text)}</a>"""
   let url = escapeLinkUrl(escapeBackslash(link.url))
   if link.isImage:
-    result = fmt"""<img src="{url}"{renderImageAlt(link.text)} />"""
+    result = fmt"""<img src="{url}"{renderImageAlt(link.text)}{renderLinkTitle(link.title)} />"""
   else:
     result = fmt"""<a href="{url}"{renderLinkTitle(link.title)}>{renderLinkText(ctx, link.text)}</a>"""
 
@@ -909,7 +917,7 @@ proc renderInlineRefLink(ctx: MarkdownContext, link: RefLink): string =
     let definedLink = ctx.links[id]
     let url = escapeLinkUrl(escapeBackslash(definedLink.url))
     if definedLink.isImage:
-      result = fmt"""<img src="{url}"{renderImageAlt(link.text)} />"""
+      result = fmt"""<img src="{url}"{renderImageAlt(link.text)}{renderLinkTitle(definedLink.title)} />"""
     else:
       result = fmt"""<a href="{url}"{renderLinkTitle(definedLink.title)}>{renderLinkText(ctx, link.text)}</a>"""
   else:

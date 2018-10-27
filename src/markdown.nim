@@ -61,7 +61,7 @@
 ## :patreon: https://www.patreon.com/join/enqueuezero
 ## :license: MIT.
 
-import re, strutils, strformat, tables, sequtils, math
+import re, strutils, strformat, tables, sequtils, math, uri, htmlparser
 
 const MARKDOWN_VERSION* = "0.3.4"
 
@@ -220,7 +220,7 @@ const INLINE_TAGS* = [
 
 proc initMarkdownConfig*(
   escape = true,
-  keepHtml = false
+  keepHtml = true
 ): MarkdownConfig =
   MarkdownConfig(
     escape: escape,
@@ -235,7 +235,7 @@ var blockRules = @{
   MarkdownTokenType.SetextHeading: re"^(((?:(?:[^\n]+)\n)+) {0,3}(=|-)+ *(?:\n+|$))",
   MarkdownTokenType.ThematicBreak: re"^ {0,3}([-*_])(?: *\1){2,} *(?:\n+|$)",
   MarkdownTokenType.IndentedBlockCode: re"^(( {4}[^\n]+\n*)+)",
-  MarkdownTokenType.FencingBlockCode: re"^( *`{3,} *([^`\s]+)? *\n([\s\S]+?)\s*`{3} *(\n+|$))",
+  MarkdownTokenType.FencingBlockCode: re"^( *(`{3,}|~{3}) *([^`\s]+)? *\n([\s\S]+?)\s*\2 *(\n+|$))",
   MarkdownTokenType.BlockQuote: re"^(( *>[^\n]*(\n[^\n]+)*\n*)+)",
   MarkdownTokenType.Paragraph: re(
     r"^(((?:[^\n]+\n?" &
@@ -272,7 +272,7 @@ var blockRules = @{
     r"^(" &
     r" *(?:" &
     r"<!--[\s\S]*?-->" &
-    r"|<(" & blockTag & r")((?:" & blockTagAttribute & r")*?)>([\s\S]*?)<\/\1>" &
+    r"|<(" & blockTag & r")((?:" & blockTagAttribute & r")*?)>([\s\S]*?)<\/\2>" &
     r"|<" & blockTag & r"(?:" & blockTagAttribute & r")*?\s*\/?>" &
     r")" &
     r" *(?:\n{2,}|\s*$)" &
@@ -284,40 +284,44 @@ var blockRules = @{
   MarkdownTokenType.Text: re"^([^\n]+)",
   MarkdownTokenType.Newline: re"^(\n+)",
   MarkdownTokenType.AutoLink: re"^<([^ >]+(@|:)[^ >]+)>",
-  MarkdownTokenType.InlineText: re"^([\s\S]+?(?=[\\<!\[_*`~]|https?://| {2,}\n|$))",
+  MarkdownTokenType.InlineText: re"^([\s\S]+?(?=[\\<!\[`~*]|\s+_|https?://| {2,}\n|$))",
   MarkdownTokenType.InlineEscape: re(
-    r"^\\([\\`*{}\[\]()#+\-.!_<>~|])"
+    r"^\\([\\`*{}\[\]()#+\-.!_<>~|""$%&',/:;=?@^])"
   ),
   MarkdownTokenType.InlineHTML: re(
     r"^(" &
     r"<!--[\s\S]*?-->" &
     r"|<(\w+" & r"(?!:/|[^\w\s@]*@)\b" & r")((?:" & blockTagAttribute & r")*?)\s*>([\s\S]*?)<\/\2>" &
     r"|<\w+" & r"(?!:/|[^\w\s@]*@)\b" & r"(?:" & blockTagAttribute & r")*?\s*\/?>" &
+    r"|<!\[CDATA\[[^]]+\]\]>" &
+    r"|<\/\w+\s*>" & # eg. </a>
+    r"|<\?\w+\s+[\s\S]+\s*\?>" & #eg. <?php echo a; ?>
+    r"|<![\w\s\d]+>" & #eg. <!DOCTYPE>
     r")"
   ),
   MarkdownTokenType.InlineLink: re(
     r"^(!?\[" &
     r"((?:\[[^^\]]*\]|[^\[\]]|\](?=[^\[]*\]))*)" &
     r"\]\(" &
-    r"\s*(<)?([\s\S]*?)(?(3)>)(?:\s+['""]([\s\S]*?)['""])?\s*" &
+    r"\s*(<)?((?:\\\(|\\\)|\s|\S)*?)(?(3)>)(?:\s+['""(]([\s\S]*?)['"")])?\s*" &
     r"\))"
   ),
   MarkdownTokenType.InlineRefLink: re(
     r"^(!?\[" &
-    r"((?:\[[^^\]]*\]|[^\[\]]|\](?=[^\[]*\]))*)" &
-    r"\]\s*\[([^^\]]*)\])"
+    r"((?:\s|\S)*)" &
+    r"\]\[([^^\]]*)\])"
   ),
   MarkdownTokenType.InlineNoLink: re"^(!?\[((?:\[[^\]]*\]|[^\[\]])*)\])",
   MarkdownTokenType.InlineURL: re(
-    """^(https?:\/\/[^\s<]+[^<.,:;"')\]\s])"""
+    r"""^((https?:\/\/(?:www\.|(?!www))[a-zA-Z0-9][a-zA-Z0-9-]+[a-zA-Z0-9]\.[^\s]{2,}|www\.[a-zA-Z0-9][a-zA-Z0-9-]+[a-zA-Z0-9]\.[^\s]{2,}|https?:\/\/(?:www\.|(?!www))[a-zA-Z0-9]\.[^\s]{2,}|www\.[a-zA-Z0-9]\.[^\s]{2,}))"""
   ),
   MarkdownTokenType.InlineDoubleEmphasis: re(
-    r"^(_{2}([\S]+?)_{2}(?!_)" &
-    r"|\*{2}([\S]+?)\*{2}(?!\*))"
+    r"^(_{2}([\w\d][\s\S]*?(?<![\\\s]))_{2}(?!_)(?>=\s*|$)" &
+    r"|\*{2}([\w\d][\s\S]*?(?<![\\\s]))\*{2}(?!\*))"
   ),
   MarkdownTokenType.InlineEmphasis: re(
-    r"^(_([\s\S]+?)_(?!_)" &
-    r"|\*([\s\S]+?)\*(?!\*))"
+    r"^(_([^""_][\s\S]*?(?<![\\\s_]))_(?!_)(?>=\s*|$)" &
+    r"|\*([\w\d][\s\S]*?(?<![\\\s*]))\*(?!\*))"
   ),
   MarkdownTokenType.InlineCode: re"^((`+)\s*([\s\S]*?[^`])\s*\2(?!`))",
   MarkdownTokenType.InlineBreak: re"^((?: {2,}\n|\\\n)(?!\s*$))",
@@ -356,17 +360,27 @@ let listParsingOrder = @[
 let inlineParsingOrder = @[
   MarkdownTokenType.InlineEscape,
   MarkdownTokenType.InlineHTML,
+  MarkdownTokenType.InlineURL,
   MarkdownTokenType.InlineLink,
   MarkdownTokenType.InlineFootnote,
   MarkdownTokenType.InlineRefLink,
   MarkdownTokenType.InlineNoLink,
-  MarkdownTokenType.InlineURL,
   MarkdownTokenType.InlineDoubleEmphasis,
   MarkdownTokenType.InlineEmphasis,
   MarkdownTokenType.InlineCode,
   MarkdownTokenType.InlineBreak,
   MarkdownTokenType.InlineStrikethrough,
   MarkdownTokenType.AutoLink,
+  MarkdownTokenType.InlineText,
+]
+
+let inlineLinkParsingOrder = @[
+  MarkdownTokenType.InlineEscape,
+  MarkdownTokenType.InlineDoubleEmphasis,
+  MarkdownTokenType.InlineEmphasis,
+  MarkdownTokenType.InlineCode,
+  MarkdownTokenType.InlineBreak,
+  MarkdownTokenType.InlineStrikethrough,
   MarkdownTokenType.InlineText,
 ]
 
@@ -390,11 +404,10 @@ proc escapeTag*(doc: string): string =
   result = result.replace(">", "&gt;")
 
 proc escapeQuote*(doc: string): string =
-  ## Replace `'` and `"` to HTML-safe characters.
+  ## Replace `"` to HTML-safe characters.
   ## Example::
   ##     check escapeTag("'tag'") == "&quote;tag&quote;"
-  result = doc.replace("'", "&quot;")
-  result = result.replace("\"", "&quot;")
+  doc.replace("\"", "&quot;")
 
 proc escapeAmpersandChar*(doc: string): string =
   ## Replace character `&` to HTML-safe characters.
@@ -415,7 +428,36 @@ proc escapeAmpersandSeq*(doc: string): string =
 
 proc escapeCode*(doc: string): string =
   ## Make code block in markdown document HTML-safe.
-  result = doc.strip(leading=false, trailing=true).escapeTag.escapeAmpersandSeq
+  result = doc.escapeTag.escapeAmpersandSeq
+
+const IGNORED_HTML_ENTITY = ["&lt;", "&gt;", "&amp;"]
+
+proc escapeHTMLEntity*(doc: string): string =
+  var entities = doc.findAll(re"&([^;]+);")
+  result = doc
+  for entity in entities:
+    if not IGNORED_HTML_ENTITY.contains(entity):
+      var utf8Char = entity[1 .. entity.len-2].entityToUtf8
+      if utf8Char != "":
+        result = result.replace(re(entity), utf8Char)
+
+proc escapeLinkUrl*(url: string): string =
+  encodeUrl(url.escapeHTMLEntity, usePlus=false).replace("%40", "@"
+    ).replace("%3A", ":"
+    ).replace("%2B", "+"
+    ).replace("%3F", "?"
+    ).replace("%3D", "="
+    ).replace("%26", "&"
+    ).replace("%28", "("
+    ).replace("%29", ")"
+    ).replace("%25", "%"
+    ).replace("%23", "#"
+    ).replace("%2A", "*"
+    ).replace("%2C", ","
+    ).replace("%2F", "/")
+
+proc escapeBackslash*(doc: string): string =
+  doc.replacef(re"\\([\\`*{}\[\]()#+\-.!_<>~|""$%&',/:;=?@^])", "$1")
 
 proc slugify*(doc: string): string =
   ## Convert the footnote key to a url-friendly key.
@@ -474,8 +516,8 @@ proc genIndentedBlockCode(matches: openArray[string]): MarkdownTokenRef =
 
 proc genFencingBlockCode(matches: openArray[string]): MarkdownTokenRef =
   var val: Fence
-  val.lang = matches[1]
-  val.code = matches[2]
+  val.lang = matches[2]
+  val.code = matches[3]
   result = MarkdownTokenRef(type: MarkdownTokenType.FencingBlockCode, fencingBlockCodeVal: val)
 
 proc genParagraph(matches: openArray[string]): MarkdownTokenRef =
@@ -488,6 +530,9 @@ proc genText(matches: openArray[string]): MarkdownTokenRef =
   result = MarkdownTokenRef(type: MarkdownTokenType.Text, textVal: matches[0])
 
 proc genDefineLink(matches: openArray[string]): MarkdownTokenRef =
+  if matches[1].match(re"\s+"):
+    return genParagraph(@[matches[0]])
+
   var val: DefineLink
   val.text = matches[1]
   val.link = matches[2]
@@ -544,7 +589,10 @@ proc genHTMLTable*(matches: openArray[string]): MarkdownTokenRef =
   var aligns = findAlign(matches[2])
   head.cells = newSeq[TableCell](len(headTokens))
   for index, headCell in headTokens:
-    head.cells[index].align = aligns[index]
+    if index > aligns.len - 1:
+      head.cells[index].align = ""
+    else:
+      head.cells[index].align = aligns[index]
     head.cells[index].dom = toSeq(parseTokens(headCell, inlineParsingOrder))
 
   var bodyItems = matches[3].replace(re"\n$", "").split("\n")
@@ -573,7 +621,32 @@ proc genInlineText(matches: openArray[string]): MarkdownTokenRef =
 proc genInlineEscape(matches: openArray[string]): MarkdownTokenRef =
   result = MarkdownTokenRef(type: MarkdownTokenType.InlineEscape, inlineEscapeVal: matches[0])
 
+proc isSquareBalanced(text: string): bool =
+  var stack: seq[char]
+  var isEscaped = false
+  for ch in text:
+    if isEscaped:
+      continue
+    elif ch == '[':
+      stack.add(ch)
+    elif ch == ']':
+      if stack.len > 0:
+        discard stack.pop
+      else:
+        return false
+    elif ch == '\\':
+      isEscaped = true
+    else:
+      continue
+  result = stack.len == 0
+
 proc genInlineLink(matches: openArray[string]): MarkdownTokenRef =
+  if matches[3].contains(re"\n"):
+    return MarkdownTokenRef(type: MarkdownTokenType.InlineText, inlineTextVal: matches[0])
+  if matches[2] != "<" and matches[3].contains(re"\s"):
+    return MarkdownTokenRef(type: MarkdownTokenType.InlineText, inlineTextVal: matches[0])
+  if not matches[1].isSquareBalanced:
+    return MarkdownTokenRef(type: MarkdownTokenType.InlineText, inlineTextVal: matches[0])
   var link: Link
   link.isEmail = false
   link.isImage = matches[0][0] == '!'
@@ -596,8 +669,11 @@ proc genInlineHTML(matches: openArray[string]): MarkdownTokenRef =
 
 proc genInlineRefLink(matches: openArray[string]): MarkdownTokenRef =
   var link: RefLink
-  link.id = matches[1]
-  link.text = matches[2]
+  link.text = matches[1]
+  if matches[2] == "":
+    link.id = link.text
+  else:
+    link.id = matches[2]
   link.isImage = matches[0][0] == '!'
   result = MarkdownTokenRef(type: MarkdownTokenType.InlineRefLink, inlineRefLinkVal: link)
 
@@ -629,8 +705,7 @@ proc genInlineEmphasis(matches: openArray[string]): MarkdownTokenRef =
   result = MarkdownTokenRef(type: MarkdownTokenType.InlineEmphasis, inlineEmphasisVal: text)
 
 proc genInlineCode(matches: openArray[string]): MarkdownTokenRef =
-  var code = matches[2]
-  result = MarkdownTokenRef(type: MarkdownTokenType.InlineCode, inlineCodeVal: code)
+  result = MarkdownTokenRef(type: MarkdownTokenType.InlineCode, inlineCodeVal: matches[2])
 
 proc genInlineBreak(matches: openArray[string]): MarkdownTokenRef =
   result = MarkdownTokenRef(type: MarkdownTokenType.InlineBreak, inlineBreakVal: "")
@@ -686,6 +761,7 @@ proc findToken(doc: string, start: var int, ruleType: MarkdownTokenType): Markdo
 
   start += size
 
+  
 proc renderHeading(ctx: MarkdownContext, heading: Heading): string =
   # Render heading tag, for example, `<h1>`, `<h2>`, etc.
   result = fmt"<h{heading.level}>"
@@ -702,7 +778,13 @@ proc renderText(ctx: MarkdownContext, text: string): string =
 
 proc renderFencingBlockCode(fence: Fence): string =
   # Render fencing block code
-  result = fmt("<pre><code lang=\"{fence.lang}\">{escapeCode(fence.code)}</code></pre>")
+  var lang: string
+  if fence.lang == "":
+    lang = ""
+  else:
+    lang = fmt(" class=\"language-{escapeBackslash(fence.lang)}\"")
+  result = fmt("""<pre><code{lang}>{escapeCode(fence.code)}
+</code></pre>""")
 
 proc renderIndentedBlockCode(code: string): string =
   # Render indented block code.
@@ -738,43 +820,51 @@ proc renderListBlock(ctx: MarkdownContext, listBlock: ListBlock): string =
   else:
     result = fmt"<ul>{result}</ul>"
 
+proc escapeInvalidHTMLTag(doc: string): string =
+  doc.replacef(
+    re(r"<(title|textarea|style|xmp|iframe|noembed|noframes|script|plaintext)>",
+      {RegexFlag.reIgnoreCase}),
+    "&lt;$1>")
+
 proc renderHTMLBlock(ctx: MarkdownContext, htmlBlock: HTMLBlock): string =
+  var text = htmlBlock.text.escapeInvalidHTMLTag
   if htmlBlock.tag == "":
-    result = htmlBlock.text
+    result = text
   else:
     var space: string
     if htmlBlock.attributes == "":
       space = ""
     else:
       space = " "
-    result = fmt"<{htmlBlock.tag}{space}{htmlBlock.attributes}>{htmlBlock.text}</{htmlBlock.tag}>"
+    result = fmt"<{htmlBlock.tag}{space}{htmlBlock.attributes}>{text}</{htmlBlock.tag}>"
   if not ctx.config.keepHTML:
     result = result.escapeAmpersandSeq.escapeTag
 
 proc renderHTMLTableCell(ctx: MarkdownContext, cell: TableCell, tag: string): string =
   if cell.align != "":
-    result = fmt"<{tag} style=""text-align: {cell.align}"">"
+    result = fmt("<{tag} style=\"text-align: {cell.align}\">")
   else:
-    result = fmt"<{tag}>"
+    result = fmt("<{tag}>")
   for token in cell.dom:
     result &= renderToken(ctx, token)
-  result &= fmt"</{tag}>"
+  result &= fmt("</{tag}>\n")
 
 proc renderHTMLTable*(ctx: MarkdownContext, table: HTMLTable): string =
-  result &= "<table>"
-  result &= "<thead>"
-  result &= "<tr>"
+  result &= "<table>\n"
+  result &= "<thead>\n"
+  result &= "<tr>\n"
   for headCell in table.head.cells:
     result &= renderHTMLTableCell(ctx, headCell, tag="th")
-  result &= "</tr>"
-  result &= "</thead>"
-  result &= "<tbody>"
-  for row in table.body:
-    result &= "<tr>"
-    for cell in row.cells:
-      result &= renderHTMLTableCell(ctx, cell, tag="td")
-    result &= "</tr>"
-  result &= "</tbody>"
+  result &= "</tr>\n"
+  result &= "</thead>\n"
+  if table.body.len > 0:
+    result &= "<tbody>\n"
+    for row in table.body:
+      result &= "<tr>\n"
+      for cell in row.cells:
+        result &= renderHTMLTableCell(ctx, cell, tag="td")
+      result &= "</tr>"
+    result &= "</tbody>"
   result &= "</table>"
 
 proc renderInlineEscape(ctx: MarkdownContext, inlineEscape: string): string =
@@ -782,37 +872,75 @@ proc renderInlineEscape(ctx: MarkdownContext, inlineEscape: string): string =
 
 proc renderInlineText(ctx: MarkdownContext, inlineText: string): string =
   if ctx.config.escape:
-    result = renderInlineEscape(ctx, inlineText)
+    result = renderInlineEscape(ctx, escapeHTMLEntity(inlineText))
   else:
-    result = inlineText
+    result = escapeHTMLEntity(inlineText)
+
+proc renderLinkTitle(text: string): string =
+  var title: string
+  if text != "":
+    fmt(" title=\"{text.escapeBackslash.escapeAmpersandSeq.escapeQuote}\"")
+  else:
+    ""
+
+proc renderImageAlt(text: string): string =
+  var alt = text.escapeBackslash.escapeQuote.replace(re"\*", "")
+  fmt(" alt=\"{alt}\"")
+
+proc renderLinkText(ctx: MarkdownContext, text: string): string =
+  for token in parseTokens(text, inlineParsingOrder):
+    result &= renderToken(ctx, token)
 
 proc renderAutoLink(ctx: MarkdownContext, link: Link): string =
-  if link.isEmail:
+  if link.isEmail and link.url.find(re(r"^mailto:", {RegexFlag.reIgnoreCase})) != -1:
+    result = fmt"""<a href="{link.url}">{link.text}</a>"""
+  elif link.isEmail:
     result = fmt"""<a href="mailto:{link.url}">{link.text}</a>"""
   else:
-    result = fmt"""<a href="{link.url}">{link.text}</a>"""
+    var url = link.url.escapeBackslash.escapeLinkUrl.escapeAmpersandSeq
+    result = fmt"""<a href="{url}">{url}</a>"""
 
 proc renderInlineLink(ctx: MarkdownContext, link: Link): string =
+  var refId = link.text.toLower.replace(re"\s+", " ")
+  if ctx.links.contains(refId):
+    var definedLink = ctx.links[refId]
+    let url = escapeLinkUrl(escapeBackslash(definedLink.url))
+    if link.isImage:
+      return fmt"""<img src="{url}"{renderImageAlt(link.text)}{renderLinkTitle(definedLink.title)} />"""
+    else:
+      return fmt"""<a href="{url}"{renderLinkTitle(definedLink.title)}>{renderLinkText(ctx, link.text)}</a>"""
+  let url = escapeLinkUrl(escapeBackslash(link.url))
   if link.isImage:
-    result = fmt"""<img src="{link.url}" alt="{link.text}">"""
+    result = fmt"""<img src="{url}"{renderImageAlt(link.text)}{renderLinkTitle(link.title)} />"""
   else:
-    result = fmt"""<a href="{link.url}" title="{link.title}">{link.text}</a>"""
+    result = fmt"""<a href="{url}"{renderLinkTitle(link.title)}>{renderLinkText(ctx, link.text)}</a>"""
 
 proc renderInlineRefLink(ctx: MarkdownContext, link: RefLink): string =
-  if ctx.links.hasKey(link.id):
-    let definedLink = ctx.links[link.id]
-    if definedLink.isImage:
-      result = fmt"""<img src="{definedLink.url}" alt="{link.text}">"""
+  var id = link.id.toLower.replace(re"\s+", " ")
+  if ctx.links.hasKey(id):
+    let definedLink = ctx.links[id]
+    let url = escapeLinkUrl(escapeBackslash(definedLink.url))
+    if link.isImage:
+      result = fmt"""<img src="{url}"{renderImageAlt(link.text)}{renderLinkTitle(definedLink.title)} />"""
     else:
-      result = fmt"""<a href="{definedLink.url}" title="{definedLink.title}">{link.text}</a>"""
+      result = fmt"""<a href="{url}"{renderLinkTitle(definedLink.title)}>{renderLinkText(ctx, link.text)}</a>"""
   else:
-    result = fmt"[{link.id}][{link.text}]"
+    if link.id != "" and link.text != "" and link.id != link.text:
+      result = fmt"[{link.text}][{renderLinkText(ctx, link.id)}]"
+    elif link.isImage:
+      result = fmt"![{link.id}]"
+    else:
+      result = fmt"[{link.id}]"
 
 proc renderInlineURL(ctx: MarkdownContext, url: string): string =
-  result = fmt"""<a href="{url}">{url}</a>"""
+  result = fmt"""<a href="{escapeBackslash(url)}">{url}</a>"""
 
 proc renderInlineDoubleEmphasis(ctx: MarkdownContext, text: string): string =
-  result = fmt"""<strong>{text}</strong>"""
+  # TODO: move to phase 2
+  var em = ""
+  for token in parseTokens(text, inlineParsingOrder):
+    em &= renderToken(ctx, token)
+  result = fmt"""<strong>{em}</strong>"""
 
 proc renderInlineEmphasis(ctx: MarkdownContext, text: string): string =
   # TODO: move to phase 2
@@ -822,7 +950,7 @@ proc renderInlineEmphasis(ctx: MarkdownContext, text: string): string =
   result = fmt"""<em>{em}</em>"""
 
 proc renderInlineCode(ctx: MarkdownContext, code: string): string =
-  let formattedCode = code.strip.escapeAmpersandChar.escapeTag.replace(re" *\n", " ")
+  let formattedCode = code.strip.escapeAmpersandChar.escapeTag.escapeQuote.replace(re"\s+", " ")
   result = fmt"""<code>{formattedCode}</code>"""
 
 proc renderInlineBreak(ctx: MarkdownContext, code: string): string =
@@ -879,10 +1007,12 @@ proc buildContext(tokens: seq[MarkdownTokenRef], config: MarkdownConfig): Markdo
   for token in tokens:
     case token.type
     of MarkdownTokenType.DefineLink:
-      result.links[token.defineLinkVal.text] = Link(
-        url: token.defineLinkVal.link,
-        text: token.defineLinkVal.text,
-        title: token.defineLinkVal.title)
+      var id = token.defineLinkVal.text.toLower.replace(re"\s+", " ")
+      if not result.links.contains(id):
+        result.links[id] = Link(
+          url: token.defineLinkVal.link,
+          text: token.defineLinkVal.text,
+          title: token.defineLinkVal.title)
     of MarkdownTokenType.DefineFootnote:
       result.footnotes[token.defineFootnoteVal.anchor] = token.defineFootnoteVal.footnote
     else:
@@ -895,7 +1025,10 @@ proc markdown*(doc: string, config: MarkdownConfig = initMarkdownConfig()): stri
   let tokens = toSeq(parseTokens(preprocessing(doc), blockParsingOrder))
   let ctx = buildContext(tokens, config)
   for token in tokens:
-      result &= renderToken(ctx, token)
+    var html = renderToken(ctx, token)
+    if html != "":
+      result &= html
+      result &= "\n"
 
 proc readCLIOptions*(): MarkdownConfig =
   ## Read options from command line.

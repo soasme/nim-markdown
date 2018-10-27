@@ -320,7 +320,7 @@ var blockRules = @{
     r"|\*{2}([\w\d][\s\S]*?(?<![\\\s]))\*{2}(?!\*))"
   ),
   MarkdownTokenType.InlineEmphasis: re(
-    r"^(_([^""_][\s\S]*?(?<![\\\s_]))_(?!_)(?>=\s*|$)" &
+    r"^(_([^""_ ][\s\S]*?(?<![\\\s_]))_(?!_)(?>=\s*|$)" &
     r"|\*([\w\d][\s\S]*?(?<![\\\s*]))\*(?!\*))"
   ),
   MarkdownTokenType.InlineCode: re"^((`+)\s*([\s\S]*?[^`])\s*\2(?!`))",

@@ -918,10 +918,10 @@ proc renderInlineRefLink(ctx: MarkdownContext, link: RefLink): string =
     else:
       result = fmt"""<a href="{url}"{renderLinkTitle(definedLink.title)}>{renderLinkText(ctx, link.text)}</a>"""
   else:
-    if link.id == link.text:
-      result = fmt"[{link.id}]"
-    elif link.id != "" and link.text != "":
+    if link.id != "" and link.text != "" and link.id != link.text:
       result = fmt"[{link.text}][{renderLinkText(ctx, link.id)}]"
+    elif link.isImage:
+      result = fmt"![{link.id}]"
     else:
       result = fmt"[{link.id}]"
 

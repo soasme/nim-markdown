@@ -888,7 +888,9 @@ proc renderLinkText(ctx: MarkdownContext, text: string): string =
     result &= renderToken(ctx, token)
 
 proc renderAutoLink(ctx: MarkdownContext, link: Link): string =
-  if link.isEmail:
+  if link.isEmail and link.url.find(re(r"^mailto:", {RegexFlag.reIgnoreCase})) != -1:
+    result = fmt"""<a href="{link.url}">{link.text}</a>"""
+  elif link.isEmail:
     result = fmt"""<a href="mailto:{link.url}">{link.text}</a>"""
   else:
     var url = link.url.escapeBackslash.escapeLinkUrl.escapeAmpersandSeq

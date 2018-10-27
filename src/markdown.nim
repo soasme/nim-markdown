@@ -785,7 +785,7 @@ proc renderFencingBlockCode(fence: Fence): string =
   if fence.lang == "":
     lang = ""
   else:
-    lang = fmt(" class=\"language-{escapeBackslash(fence.lang)}\"")
+    lang = fmt(" class=\"language-{escapeHTMLEntity(escapeBackslash(fence.lang))}\"")
   result = fmt("""<pre><code{lang}>{escapeCode(fence.code)}
 </code></pre>""")
 

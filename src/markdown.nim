@@ -795,7 +795,10 @@ proc renderIndentedBlockCode(code: string): string =
 proc renderParagraph(ctx: MarkdownContext, paragraph: Paragraph): string =
   for token in paragraph.inlines:
     result &= renderToken(ctx, token)
-  result = fmt"<p>{result}</p>"
+  if paragraph.inlines.len == 1 and paragraph.inlines[0].type == MarkdownTokenType.InlineHTML:
+    return result
+  else:
+    result = fmt"<p>{result}</p>"
 
 proc renderThematicBreak(): string =
   result = "<hr />"

@@ -160,17 +160,50 @@ test "table":
 | Cell 1   | Cell 2   | Cell 3   | Cell 4   |
 | Cell 5   | Cell 6   | Cell 7   | Cell 8   |
   """
-  ) == "<table><thead><tr><th style=\"text-align: center\">Header 1</th><th style=\"text-align: right\">Header 2</th><th style=\"text-align: left\">Header 3</th><th>Header 4</th></tr></thead>" &
-    "<tbody><tr><td>Cell 1</td><td>Cell 2</td><td>Cell 3</td><td>Cell 4</td></tr><tr><td>Cell 5</td><td>Cell 6</td><td>Cell 7</td><td>Cell 8</td></tr></tbody>" &
-    "</table>\n"
+  ) == """<table>
+<thead>
+<tr>
+<th style="text-align: center">Header 1</th>
+<th style="text-align: right">Header 2</th>
+<th style="text-align: left">Header 3</th>
+<th>Header 4</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Cell 1</td>
+<td>Cell 2</td>
+<td>Cell 3</td>
+<td>Cell 4</td>
+</tr><tr>
+<td>Cell 5</td>
+<td>Cell 6</td>
+<td>Cell 7</td>
+<td>Cell 8</td>
+</tr></tbody></table>
+"""
 
   check markdown("""
 | Header 1 | Header 2
 | -------- | --------
 | Cell 1   | Cell 2
 | Cell 3   | Cell 4"""
-  ) == "<table><thead><tr><th>Header 1</th><th>Header 2</th></tr></thead>" &
-    "<tbody><tr><td>Cell 1</td><td>Cell 2</td></tr><tr><td>Cell 3</td><td>Cell 4</td></tr></tbody></table>\n"
+  ) == """<table>
+<thead>
+<tr>
+<th>Header 1</th>
+<th>Header 2</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Cell 1</td>
+<td>Cell 2</td>
+</tr><tr>
+<td>Cell 3</td>
+<td>Cell 4</td>
+</tr></tbody></table>
+"""
 
 # https://github.github.com/gfm/
 

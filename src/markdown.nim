@@ -301,14 +301,14 @@ var blockRules = @{
   ),
   MarkdownTokenType.InlineLink: re(
     r"^(!?\[" &
-    r"((?:\[[^^\]]*\]|[^\[\]]|\](?=[^\[]*\]))*)" &
+    r"([\s\S]*)" &
     r"\]\(" &
     r"\s*(<)?((?:\\\(|\\\)|\s|\S)*?)(?(3)>)(?:\s+['""(]([\s\S]*?)['"")])?\s*" &
     r"\))"
   ),
   MarkdownTokenType.InlineRefLink: re(
     r"^(!?\[" &
-    r"((?:\[[^^\]]*\]|[^\[\]]|\](?=[^\[]*\]))*)" &
+    r"((?:|\s|\S)*)" &
     r"\]\s*\[([^^\]]*)\])"
   ),
   MarkdownTokenType.InlineNoLink: re"^(!?\[((?:\[[^\]]*\]|[^\[\]])*)\])",
@@ -625,6 +625,7 @@ proc isSquareBalanced(text: string): bool =
   result = stack.len == 0
 
 proc genInlineLink(matches: openArray[string]): MarkdownTokenRef =
+  echo(matches)
   if matches[3].contains(re"\n"):
     return MarkdownTokenRef(type: MarkdownTokenType.InlineText, inlineTextVal: matches[0])
   if matches[2] != "<" and matches[3].contains(re"\s"):
@@ -876,12 +877,15 @@ proc renderImageAlt(text: string): string =
   else:
     ""
 
+proc renderLinkText(text: string): string =
+  text.escapeHTMLEntity.escapeBackslash.escapeAmpersandSeq.escapeTag.escapeQuote
+
 proc renderInlineLink(ctx: MarkdownContext, link: Link): string =
   let url = escapeLinkUrl(escapeBackslash(link.url))
   if link.isImage:
     result = fmt"""<img src="{url}"{renderImageAlt(link.text)}>"""
   else:
-    result = fmt"""<a href="{url}"{renderLinkTitle(link.title)}>{link.text}</a>"""
+    result = fmt"""<a href="{url}"{renderLinkTitle(link.title)}>{renderLinkText(link.text)}</a>"""
 
 proc renderInlineRefLink(ctx: MarkdownContext, link: RefLink): string =
   if ctx.links.hasKey(link.id):
@@ -890,7 +894,7 @@ proc renderInlineRefLink(ctx: MarkdownContext, link: RefLink): string =
     if definedLink.isImage:
       result = fmt"""<img src="{url}"{renderImageAlt(link.text)}>"""
     else:
-      result = fmt"""<a href="{url}"{renderLinkTitle(definedLink.title)}>{link.text}</a>"""
+      result = fmt"""<a href="{url}"{renderLinkTitle(definedLink.title)}>{renderLinkText(link.text)}</a>"""
   else:
     result = fmt"[{link.id}]"
 

@@ -394,6 +394,7 @@ proc preprocessing*(doc: string): string =
   result = result.replace(re"^ {1,3}\t", "    ")
   result = result.replace("\u2424", " ")
   result = result.replace("\u0000", "\uFFFD")
+  result = result.replace("&#0;", "&#XFFFD;")
   result = result.replace(re(r"^ +$", {RegexFlag.reMultiLine}), "")
 
 proc escapeTag*(doc: string): string =
@@ -428,7 +429,7 @@ proc escapeAmpersandSeq*(doc: string): string =
 
 proc escapeCode*(doc: string): string =
   ## Make code block in markdown document HTML-safe.
-  result = doc.escapeTag.escapeAmpersandSeq
+  result = doc.escapeAmpersandChar.escapeTag
 
 const IGNORED_HTML_ENTITY = ["&lt;", "&gt;", "&amp;"]
 
@@ -440,6 +441,8 @@ proc escapeHTMLEntity*(doc: string): string =
       var utf8Char = entity[1 .. entity.len-2].entityToUtf8
       if utf8Char != "":
         result = result.replace(re(entity), utf8Char)
+      else:
+        result = result.replace(re(entity), entity.escapeAmpersandChar)
 
 proc escapeLinkUrl*(url: string): string =
   encodeUrl(url.escapeHTMLEntity, usePlus=false).replace("%40", "@"
@@ -782,7 +785,7 @@ proc renderFencingBlockCode(fence: Fence): string =
   if fence.lang == "":
     lang = ""
   else:
-    lang = fmt(" class=\"language-{escapeBackslash(fence.lang)}\"")
+    lang = fmt(" class=\"language-{escapeHTMLEntity(escapeBackslash(fence.lang))}\"")
   result = fmt("""<pre><code{lang}>{escapeCode(fence.code)}
 </code></pre>""")
 
@@ -879,7 +882,7 @@ proc renderInlineText(ctx: MarkdownContext, inlineText: string): string =
 proc renderLinkTitle(text: string): string =
   var title: string
   if text != "":
-    fmt(" title=\"{text.escapeBackslash.escapeAmpersandSeq.escapeQuote}\"")
+    fmt(" title=\"{text.escapeBackslash.escapeHTMLEntity.escapeAmpersandSeq.escapeQuote}\"")
   else:
     ""
 
@@ -897,8 +900,9 @@ proc renderAutoLink(ctx: MarkdownContext, link: Link): string =
   elif link.isEmail:
     result = fmt"""<a href="mailto:{link.url}">{link.text}</a>"""
   else:
-    var url = link.url.escapeBackslash.escapeLinkUrl.escapeAmpersandSeq
-    result = fmt"""<a href="{url}">{url}</a>"""
+    var text = link.url.escapeAmpersandSeq
+    var url = link.url.escapeLinkUrl
+    result = fmt"""<a href="{url}">{text}</a>"""
 
 proc renderInlineLink(ctx: MarkdownContext, link: Link): string =
   var refId = link.text.toLower.replace(re"\s+", " ")

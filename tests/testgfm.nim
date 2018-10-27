@@ -4,6 +4,7 @@ import re, strutils, os, json, strformat
 import markdown
 
 let KNOW_ISSUES = [
+  314, # MINOR: we convert html entity via htmlparser.entityToUtf8. Some entities are not supported.
   334, # *foo`*`: backtick should have higher precedence than emphasis.
   335, # [not a `link](/foo`): backtick should have higher precedence than inline link.
   339, # <http://foo.bar.`baz>`: backtick should be escaped in autolink.

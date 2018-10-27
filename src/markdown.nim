@@ -374,6 +374,16 @@ let inlineParsingOrder = @[
   MarkdownTokenType.InlineText,
 ]
 
+let inlineLinkParsingOrder = @[
+  MarkdownTokenType.InlineEscape,
+  MarkdownTokenType.InlineDoubleEmphasis,
+  MarkdownTokenType.InlineEmphasis,
+  MarkdownTokenType.InlineCode,
+  MarkdownTokenType.InlineBreak,
+  MarkdownTokenType.InlineStrikethrough,
+  MarkdownTokenType.InlineText,
+]
+
 proc findToken*(doc: string, start: var int, ruleType: MarkdownTokenType): MarkdownTokenRef;
 proc renderToken*(ctx: MarkdownContext, token: MarkdownTokenRef): string;
 
@@ -625,7 +635,6 @@ proc isSquareBalanced(text: string): bool =
   result = stack.len == 0
 
 proc genInlineLink(matches: openArray[string]): MarkdownTokenRef =
-  echo(matches)
   if matches[3].contains(re"\n"):
     return MarkdownTokenRef(type: MarkdownTokenType.InlineText, inlineTextVal: matches[0])
   if matches[2] != "<" and matches[3].contains(re"\s"):
@@ -654,8 +663,8 @@ proc genInlineHTML(matches: openArray[string]): MarkdownTokenRef =
 
 proc genInlineRefLink(matches: openArray[string]): MarkdownTokenRef =
   var link: RefLink
-  link.id = matches[1]
-  link.text = matches[2]
+  link.id = matches[2]
+  link.text = matches[1]
   link.isImage = matches[0][0] == '!'
   result = MarkdownTokenRef(type: MarkdownTokenType.InlineRefLink, inlineRefLinkVal: link)
 

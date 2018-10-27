@@ -14,7 +14,7 @@ Install via `nimble` in your project root.
 $ nimble install markdown
 
 # or with current stable version
-$ nimble install markdown@">= 0.3.4"
+$ nimble install markdown@">= 0.4.0"
 
 # or with the latest version
 $ nimble install markdown@#head
@@ -124,6 +124,7 @@ Features:
 
 Released:
 
+* v0.4.0, 27 Oct 2018, support `~~~` as fence mark, etc. [#12](https://github.com/soasme/nim-markdown/pull/12).
 * v0.3.4, 24 Oct 2018, support hard line breaks (gfm 6.12).
 * v0.3.3, 23 Oct 2018, strict-typed config (#5), add cli options.
 * v0.3.2, 23 Oct 2018, support setext heading.

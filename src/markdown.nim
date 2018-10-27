@@ -63,7 +63,7 @@
 
 import re, strutils, strformat, tables, sequtils, math, uri, htmlparser
 
-const MARKDOWN_VERSION* = "0.3.4"
+const MARKDOWN_VERSION* = "0.4.0"
 
 type
   MarkdownError* = object of Exception ## The error object for markdown parsing and rendering.

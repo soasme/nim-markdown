@@ -886,11 +886,8 @@ proc renderLinkTitle(text: string): string =
     ""
 
 proc renderImageAlt(text: string): string =
-  var alt: string
-  if text != "":
-    fmt(" alt=\"{text.escapeBackslash.escapeQuote}\"")
-  else:
-    " alt=\"\""
+  var alt = text.escapeBackslash.escapeQuote.replace(re"\*", "")
+  fmt(" alt=\"{alt}\"")
 
 proc renderLinkText(ctx: MarkdownContext, text: string): string =
   for token in parseTokens(text, inlineParsingOrder):

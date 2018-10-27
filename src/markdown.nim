@@ -429,7 +429,7 @@ proc escapeAmpersandSeq*(doc: string): string =
 
 proc escapeCode*(doc: string): string =
   ## Make code block in markdown document HTML-safe.
-  result = doc.escapeTag.escapeAmpersandSeq
+  result = doc.escapeAmpersandChar.escapeTag
 
 const IGNORED_HTML_ENTITY = ["&lt;", "&gt;", "&amp;"]
 

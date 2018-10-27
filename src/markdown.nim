@@ -605,10 +605,31 @@ proc genInlineText(matches: openArray[string]): MarkdownTokenRef =
 proc genInlineEscape(matches: openArray[string]): MarkdownTokenRef =
   result = MarkdownTokenRef(type: MarkdownTokenType.InlineEscape, inlineEscapeVal: matches[0])
 
+proc isSquareBalanced(text: string): bool =
+  var stack: seq[char]
+  var isEscaped = false
+  for ch in text:
+    if isEscaped:
+      continue
+    elif ch == '[':
+      stack.add(ch)
+    elif ch == ']':
+      if stack.len > 0:
+        discard stack.pop
+      else:
+        return false
+    elif ch == '\\':
+      isEscaped = true
+    else:
+      continue
+  result = stack.len == 0
+
 proc genInlineLink(matches: openArray[string]): MarkdownTokenRef =
   if matches[3].contains(re"\n"):
     return MarkdownTokenRef(type: MarkdownTokenType.InlineText, inlineTextVal: matches[0])
   if matches[2] != "<" and matches[3].contains(re"\s"):
+    return MarkdownTokenRef(type: MarkdownTokenType.InlineText, inlineTextVal: matches[0])
+  if not matches[1].isSquareBalanced:
     return MarkdownTokenRef(type: MarkdownTokenType.InlineText, inlineTextVal: matches[0])
   var link: Link
   link.isEmail = false

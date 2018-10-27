@@ -589,7 +589,10 @@ proc genHTMLTable*(matches: openArray[string]): MarkdownTokenRef =
   var aligns = findAlign(matches[2])
   head.cells = newSeq[TableCell](len(headTokens))
   for index, headCell in headTokens:
-    head.cells[index].align = aligns[index]
+    if index > aligns.len - 1:
+      head.cells[index].align = ""
+    else:
+      head.cells[index].align = aligns[index]
     head.cells[index].dom = toSeq(parseTokens(headCell, inlineParsingOrder))
 
   var bodyItems = matches[3].replace(re"\n$", "").split("\n")
@@ -854,13 +857,14 @@ proc renderHTMLTable*(ctx: MarkdownContext, table: HTMLTable): string =
     result &= renderHTMLTableCell(ctx, headCell, tag="th")
   result &= "</tr>\n"
   result &= "</thead>\n"
-  result &= "<tbody>\n"
-  for row in table.body:
-    result &= "<tr>\n"
-    for cell in row.cells:
-      result &= renderHTMLTableCell(ctx, cell, tag="td")
-    result &= "</tr>"
-  result &= "</tbody>"
+  if table.body.len > 0:
+    result &= "<tbody>\n"
+    for row in table.body:
+      result &= "<tr>\n"
+      for cell in row.cells:
+        result &= renderHTMLTableCell(ctx, cell, tag="td")
+      result &= "</tr>"
+    result &= "</tbody>"
   result &= "</table>"
 
 proc renderInlineEscape(ctx: MarkdownContext, inlineEscape: string): string =

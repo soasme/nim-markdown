@@ -890,7 +890,7 @@ proc renderImageAlt(text: string): string =
   if text != "":
     fmt(" alt=\"{text.escapeBackslash.escapeQuote}\"")
   else:
-    ""
+    " alt=\"\""
 
 proc renderLinkText(ctx: MarkdownContext, text: string): string =
   for token in parseTokens(text, inlineParsingOrder):
@@ -901,7 +901,7 @@ proc renderInlineLink(ctx: MarkdownContext, link: Link): string =
   if ctx.links.contains(refId):
     var definedLink = ctx.links[refId]
     let url = escapeLinkUrl(escapeBackslash(definedLink.url))
-    if definedLink.isImage:
+    if link.isImage:
       return fmt"""<img src="{url}"{renderImageAlt(link.text)}{renderLinkTitle(definedLink.title)} />"""
     else:
       return fmt"""<a href="{url}"{renderLinkTitle(definedLink.title)}>{renderLinkText(ctx, link.text)}</a>"""
@@ -916,7 +916,7 @@ proc renderInlineRefLink(ctx: MarkdownContext, link: RefLink): string =
   if ctx.links.hasKey(id):
     let definedLink = ctx.links[id]
     let url = escapeLinkUrl(escapeBackslash(definedLink.url))
-    if definedLink.isImage:
+    if link.isImage:
       result = fmt"""<img src="{url}"{renderImageAlt(link.text)}{renderLinkTitle(definedLink.title)} />"""
     else:
       result = fmt"""<a href="{url}"{renderLinkTitle(definedLink.title)}>{renderLinkText(ctx, link.text)}</a>"""

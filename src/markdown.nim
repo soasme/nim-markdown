@@ -432,7 +432,7 @@ proc escapeHTMLEntity*(doc: string): string =
         result = result.replace(re(entity), utf8Char)
 
 proc escapeLinkUrl*(url: string): string =
-  url.escapeHTMLEntity.encodeUrl.replace("%40", "@"
+  encodeUrl(url.escapeHTMLEntity, usePlus=false).replace("%40", "@"
     ).replace("%3A", ":"
     ).replace("%2B", "+"
     ).replace("%3F", "?"

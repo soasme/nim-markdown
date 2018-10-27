@@ -904,7 +904,7 @@ proc renderInlineLink(ctx: MarkdownContext, link: Link): string =
     result = fmt"""<a href="{url}"{renderLinkTitle(link.title)}>{renderLinkText(ctx, link.text)}</a>"""
 
 proc renderInlineRefLink(ctx: MarkdownContext, link: RefLink): string =
-  if ctx.links.hasKey(link.id):
+  if ctx.links.hasKey(link.id.toLower):
     let definedLink = ctx.links[link.id]
     let url = escapeLinkUrl(escapeBackslash(definedLink.url))
     if definedLink.isImage:
@@ -994,8 +994,8 @@ proc buildContext(tokens: seq[MarkdownTokenRef], config: MarkdownConfig): Markdo
   for token in tokens:
     case token.type
     of MarkdownTokenType.DefineLink:
-      if not result.links.contains(token.defineLinkVal.text):
-        result.links[token.defineLinkVal.text] = Link(
+      if not result.links.contains(token.defineLinkVal.text.toLower):
+        result.links[token.defineLinkVal.text.toLower] = Link(
           url: token.defineLinkVal.link,
           text: token.defineLinkVal.text,
           title: token.defineLinkVal.title)

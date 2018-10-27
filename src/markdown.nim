@@ -872,12 +872,6 @@ proc renderInlineText(ctx: MarkdownContext, inlineText: string): string =
   else:
     result = escapeHTMLEntity(inlineText)
 
-proc renderAutoLink(ctx: MarkdownContext, link: Link): string =
-  if link.isEmail:
-    result = fmt"""<a href="mailto:{link.url}">{link.text}</a>"""
-  else:
-    result = fmt"""<a href="{link.url}">{link.text}</a>"""
-
 proc renderLinkTitle(text: string): string =
   var title: string
   if text != "":
@@ -892,6 +886,13 @@ proc renderImageAlt(text: string): string =
 proc renderLinkText(ctx: MarkdownContext, text: string): string =
   for token in parseTokens(text, inlineParsingOrder):
     result &= renderToken(ctx, token)
+
+proc renderAutoLink(ctx: MarkdownContext, link: Link): string =
+  if link.isEmail:
+    result = fmt"""<a href="mailto:{link.url}">{link.text}</a>"""
+  else:
+    var url = link.url.escapeBackslash.escapeLinkUrl.escapeAmpersandSeq
+    result = fmt"""<a href="{url}">{url}</a>"""
 
 proc renderInlineLink(ctx: MarkdownContext, link: Link): string =
   var refId = link.text.toLower.replace(re"\s+", " ")

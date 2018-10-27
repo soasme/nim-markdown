@@ -308,7 +308,7 @@ var blockRules = @{
   ),
   MarkdownTokenType.InlineRefLink: re(
     r"^(!?\[" &
-    r"((?:|\s|\S)*)" &
+    r"((?:\s|\S)*)" &
     r"\]\[([^^\]]*)\])"
   ),
   MarkdownTokenType.InlineNoLink: re"^(!?\[((?:\[[^\]]*\]|[^\[\]])*)\])",
@@ -530,8 +530,8 @@ proc genText(matches: openArray[string]): MarkdownTokenRef =
   result = MarkdownTokenRef(type: MarkdownTokenType.Text, textVal: matches[0])
 
 proc genDefineLink(matches: openArray[string]): MarkdownTokenRef =
-  # if matches[1].match(re"\s+"):
-  #   return genParagraph(@[matches[0]])
+  if matches[1].match(re"\s+"):
+    return genParagraph(@[matches[0]])
 
   var val: DefineLink
   val.text = matches[1]
@@ -904,8 +904,9 @@ proc renderInlineLink(ctx: MarkdownContext, link: Link): string =
     result = fmt"""<a href="{url}"{renderLinkTitle(link.title)}>{renderLinkText(ctx, link.text)}</a>"""
 
 proc renderInlineRefLink(ctx: MarkdownContext, link: RefLink): string =
-  if ctx.links.hasKey(link.id.toLower):
-    let definedLink = ctx.links[link.id]
+  var id = link.id.toLower.replace(re"\s+", " ")
+  if ctx.links.hasKey(id):
+    let definedLink = ctx.links[id]
     let url = escapeLinkUrl(escapeBackslash(definedLink.url))
     if definedLink.isImage:
       result = fmt"""<img src="{url}"{renderImageAlt(link.text)} />"""
@@ -994,8 +995,9 @@ proc buildContext(tokens: seq[MarkdownTokenRef], config: MarkdownConfig): Markdo
   for token in tokens:
     case token.type
     of MarkdownTokenType.DefineLink:
-      if not result.links.contains(token.defineLinkVal.text.toLower):
-        result.links[token.defineLinkVal.text.toLower] = Link(
+      var id = token.defineLinkVal.text.toLower.replace(re"\s+", " ")
+      if not result.links.contains(id):
+        result.links[id] = Link(
           url: token.defineLinkVal.link,
           text: token.defineLinkVal.text,
           title: token.defineLinkVal.title)

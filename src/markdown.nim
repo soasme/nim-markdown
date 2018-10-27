@@ -394,6 +394,7 @@ proc preprocessing*(doc: string): string =
   result = result.replace(re"^ {1,3}\t", "    ")
   result = result.replace("\u2424", " ")
   result = result.replace("\u0000", "\uFFFD")
+  result = result.replace("&#0;", "&#XFFFD;")
   result = result.replace(re(r"^ +$", {RegexFlag.reMultiLine}), "")
 
 proc escapeTag*(doc: string): string =

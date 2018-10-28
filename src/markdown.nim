@@ -320,8 +320,8 @@ var blockRules = @{
     r"|\*{2}([\w\d][\s\S]*?(?<![\\\s]))\*{2}(?!\*))"
   ),
   MarkdownTokenType.InlineEmphasis: re(
-    r"^(_([^""_ ][\s\S]*?(?<![\\\s_]))_(?!_)(?>=\s*|$)" &
-    r"|\*([\w\d][\s\S]*?(?<![\\\s*]))\*(?!\*))"
+    r"^(_((?!_|\s|\p{P}|\p{Z}|\xa0)[\s\S]*?(?<![\\\s_]))_(?!_)(?>=\s*|$)" &
+    r"|\*((?!_|\s|\p{P}|\p{Z}|\xa0)[\s\S]*?(?<![\\\s*]))\*(?!\*))"
   ),
   MarkdownTokenType.InlineCode: re"^((`+)\s*([\s\S]*?[^`])\s*\2(?!`))",
   MarkdownTokenType.InlineBreak: re"^((?: {2,}\n|\\\n)(?!\s*$))",
@@ -700,6 +700,8 @@ proc genInlineDoubleEmphasis(matches: openArray[string]): MarkdownTokenRef =
   result = MarkdownTokenRef(type: MarkdownTokenType.InlineDoubleEmphasis, inlineDoubleEmphasisVal: text)
 
 proc genInlineEmphasis(matches: openArray[string]): MarkdownTokenRef =
+  if matches[2].startsWith("\u00a0") or matches[2].endswith("\u00a0"): # unicode whitespace. PCRE seems not support \u in regex.
+    return MarkdownTokenRef(type: MarkdownTokenType.InlineText, inlineTextVal: matches[0])
   var text: string
   if matches[0][0] == '_':
     text = matches[1]

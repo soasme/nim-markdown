@@ -284,7 +284,7 @@ var blockRules = @{
   MarkdownTokenType.Text: re"^([^\n]+)",
   MarkdownTokenType.Newline: re"^(\n+)",
   MarkdownTokenType.AutoLink: re"^<([^ >]+(@|:)[^ >]+)>",
-  MarkdownTokenType.InlineText: re"^([\s\S]+?(?=[\\<!\[`~*]|\s+_|https?://| {2,}\n|$))",
+  MarkdownTokenType.InlineText: re"^([\p{P}]+(?=[*_]+(?!_|\s|\p{Z}|\xa0))|[\s\S]+?(?=[\\<!\[`~]|[\s\p{P}]*\*+(?!_|\s|\p{Z}|\xa0)|[\s\p{P}]+_+(?!_|\s|\p{Z}|\xa0)|https?://| {2,}\n|$))",
   MarkdownTokenType.InlineEscape: re(
     r"^\\([\\`*{}\[\]()#+\-.!_<>~|""$%&',/:;=?@^])"
   ),
@@ -320,8 +320,8 @@ var blockRules = @{
     r"|\*{2}([\w\d][\s\S]*?(?<![\\\s]))\*{2}(?!\*))"
   ),
   MarkdownTokenType.InlineEmphasis: re(
-    r"^(_((?!_|\s|\p{P}|\p{Z}|\xa0)[\s\S]*?(?<![\\\s_]))_(?!_)(?>=\s*|$)" &
-    r"|\*((?!_|\s|\p{P}|\p{Z}|\xa0)[\s\S]*?(?<![\\\s*]))\*(?!\*))"
+    r"^(_((?!_|\s|\p{Z}|\xa0)[\s\S]*?(?<![\\\s_]))_(?!_)(?>=\s*|$)" &
+    r"|\*((?!_|\s|\p{Z}|\xa0)[\s\S]*?(?<![\\\s*]))\*(?!\*|\p{P}))"
   ),
   MarkdownTokenType.InlineCode: re"^((`+)\s*([\s\S]*?[^`])\s*\2(?!`))",
   MarkdownTokenType.InlineBreak: re"^((?: {2,}\n|\\\n)(?!\s*$))",
@@ -385,6 +385,7 @@ let inlineLinkParsingOrder = @[
 ]
 
 proc findToken*(doc: string, start: var int, ruleType: MarkdownTokenType): MarkdownTokenRef;
+proc parseInlines*(doc: string): seq[MarkdownTokenRef];
 proc renderToken*(ctx: MarkdownContext, token: MarkdownTokenRef): string;
 
 proc preprocessing*(doc: string): string =
@@ -525,7 +526,7 @@ proc genFencingBlockCode(matches: openArray[string]): MarkdownTokenRef =
 
 proc genParagraph(matches: openArray[string]): MarkdownTokenRef =
   var doc = matches[0].strip(chars={'\n', ' '}).replace(re"\n *", "\n")
-  var tokens = toSeq(parseTokens(doc, inlineParsingOrder))
+  var tokens = parseInlines(doc) # toSeq(parseTokens(doc, inlineParsingOrder))
   var val = Paragraph(inlines: tokens)
   result = MarkdownTokenRef(type: MarkdownTokenType.Paragraph, paragraphVal: val)
 
@@ -722,6 +723,106 @@ proc genInlineFootnote(matches: openArray[string]): MarkdownTokenRef =
   let footnote = RefFootnote(anchor: matches[1])
   result = MarkdownTokenRef(type: MarkdownTokenType.InlineFootnote, inlineFootnoteVal: footnote)
 
+
+const ENTITY = r"&(?:#x[a-f0-9]{1,6}|#[0-9]{1,7}|[a-z][a-z0-9]{1,31});"
+
+proc parseNewline*(doc: string, start: int, size: var int): seq[MarkdownTokenRef] = @[]
+
+proc parseBackslash*(doc: string, start: int, size: var int): seq[MarkdownTokenRef] =
+  var pos: int = start
+  var token: MarkdownTokenRef
+
+  token = findToken(doc, pos, MarkdownTokenType.InlineBreak)
+  if token != nil:
+    size = pos - start
+    return @[token]
+
+  token = findToken(doc, pos, MarkdownTokenType.InlineEscape)
+  if token != nil:
+    size = pos - start
+    return @[token]
+
+  size = -1
+  result = @[]
+
+proc parseBacktick*(doc: string, start: int, size: var int): seq[MarkdownTokenRef] =
+  var pos = start
+  let token = findToken(doc, pos, MarkdownTokenType.InlineCode)
+  if token == nil:
+    size = -1
+    result = @[]
+  else:
+    size = pos - start
+    result = @[token]
+
+proc parseEmphasis*(doc: string, start: int, size: var int): seq[MarkdownTokenRef] = @[]
+proc parseQuote*(doc: string, start: int, size: var int): seq[MarkdownTokenRef] = @[]
+proc parseOpenBracket*(doc: string, start: int, size: var int): seq[MarkdownTokenRef] = @[]
+proc parseCloseBracket*(doc: string, start: int, size: var int): seq[MarkdownTokenRef] = @[]
+
+proc parseHTMLEntity*(doc: string, start: int, size: var int): seq[MarkdownTokenRef] =
+  let regex = re(r"^(" & ENTITY & ")", {RegexFlag.reIgnoreCase})
+  var matches: array[1, string]
+  size = doc[start .. doc.len - 1].matchLen(regex, matches)
+
+  var entity: string
+
+  if size == -1:
+    return @[]
+
+  if matches[0] == "&#0;":
+    entity = "\uFFFD"
+  else:
+    entity = escapeHTMLEntity(matches[0])
+
+  result = @[MarkdownTokenRef(type: MarkdownTokenType.InlineText, inlineTextVal: entity)]
+
+proc parseBang*(doc: string, start: int, size: var int): seq[MarkdownTokenRef] = @[]
+proc parseAutolink*(doc: string, start: int, size: var int): seq[MarkdownTokenRef] = @[]
+proc parseHTMLTag*(doc: string, start: int, size: var int): seq[MarkdownTokenRef] = @[]
+proc parseString*(doc: string, start: int, size: var int): seq[MarkdownTokenRef] = @[]
+
+proc parseLessThan(doc: string, start: int, size: var int): seq[MarkdownTokenRef] =
+  result = parseAutolink(doc, start, size)
+
+  if result.len != 0:
+    return result
+
+  result = parseHTMLTag(doc, start, size)
+
+proc parseInlines*(doc: string): seq[MarkdownTokenRef] =
+  var pos = 0
+
+  for index, ch in doc:
+    if index < pos:
+      continue
+
+    var size = -1
+    var tokens: seq[MarkdownTokenRef] = @[]
+
+    case ch
+    of '\n': tokens = parseNewline(doc, index, size)
+    of '\\': tokens = parseBackslash(doc, index, size)
+    of '`': tokens = parseBacktick(doc, index, size)
+    of '*': tokens = parseEmphasis(doc, index, size)
+    of '_': tokens = parseEmphasis(doc, index, size)
+    of '\'': tokens = parseQuote(doc, index, size)
+    of '"': tokens = parseQuote(doc, index, size)
+    of '{': tokens = parseOpenBracket(doc, index, size)
+    of '}': tokens = parseCloseBracket(doc, index, size)
+    of '!': tokens = parseBang(doc, index, size)
+    of '&': tokens = parseHTMLEntity(doc, index, size)
+    of '<': tokens = parseLessThan(doc, index, size)
+    else: tokens = parseString(doc, index, size)
+
+    if size == -1:
+      tokens.add(MarkdownTokenRef(type: MarkdownTokenType.InlineText, inlineTextVal: fmt"{ch}"))
+      pos = index + 1
+    else:
+      pos += size
+
+    result.insert(tokens, result.len)
+
 proc findToken(doc: string, start: var int, ruleType: MarkdownTokenType): MarkdownTokenRef =
   ## Find a markdown token from document `doc` at position `start`,
   ## based on a rule type and regex rule.
@@ -731,7 +832,7 @@ proc findToken(doc: string, start: var int, ruleType: MarkdownTokenType): Markdo
   let size = doc[start .. doc.len - 1].matchLen(regex, matches=matches)
   if size == -1:
     return nil
-    
+
   case ruleType
   of MarkdownTokenType.Newline: result = genNewlineToken(matches)
   of MarkdownTokenType.Heading: result = genHeading(matches)
@@ -1003,7 +1104,7 @@ proc renderToken*(ctx: MarkdownContext, token: MarkdownTokenRef): string =
   else:
     result = ""
 
-proc buildContext(tokens: seq[MarkdownTokenRef], config: MarkdownConfig): MarkdownContext =
+proc buildContext*(tokens: seq[MarkdownTokenRef], config: MarkdownConfig): MarkdownContext =
   # add building context
   result = MarkdownContext(
     links: initTable[string, Link](),

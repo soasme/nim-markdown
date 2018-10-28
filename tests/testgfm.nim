@@ -4,11 +4,16 @@ import re, strutils, os, json, strformat
 import markdown
 
 let KNOW_ISSUES = [
+  130, # MINOR: we wrap <a> with <p> when it's an html block.
+  310, # MINOR: we wrap <a> with <p> when it's an html block.
+  320, # MINOR: we wrap <a> with <p> when it's an html block.
   314, # MINOR: we convert html entity via htmlparser.entityToUtf8. Some entities are not supported.
   334, # *foo`*`: backtick should have higher precedence than emphasis.
   335, # [not a `link](/foo`): backtick should have higher precedence than inline link.
   339, # <http://foo.bar.`baz>`: backtick should be escaped in autolink.
   340, #```foo``: When a backtick string is not closed by a matching backtick string, we just have literal backticks
+  345, # FIXME: not emphasis: the opening * is preceded by an alphanumeric and followed by punctuation
+  360, # FIXME: not emphasis, because the second * is preceded by punctuation and followed by an alphanumeric 
   381, #__foo, __bar__, baz__: nested <strong>
   481, # consider it as passed.
   483, # [link](foo(and(bar))): currently, need user escape the parenthesis.

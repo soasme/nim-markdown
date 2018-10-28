@@ -3,10 +3,11 @@
 
 import unittest
 
-import re, strutils, os, json, strformat
+import re, strutils, os, json, strformat, sequtils
 import markdown
 
 const
+  config = initMarkdownConfig()
   configKeepHtml = initMarkdownConfig(keepHtml = true)
   configNoEscape = initMarkdownConfig(escape = false)
 
@@ -206,6 +207,26 @@ test "table":
 """
 
 # https://github.github.com/gfm/
+
+proc renderinline(doc: string): string =
+  let tokens = parseInlines(doc)
+  var ctx = buildContext(tokens, config)
+  for token in tokens:
+    result &= renderToken(ctx, token)
+
+test "gfm 314":
+  skip
+  #check renderinline("&nbsp; &amp; &copy; &AElig; &Dcaron;\n&frac34; &HilbertSpace; &DifferentialD;\n&ClockwiseContourIntegral; &ngE;"
+  #  ) == "\u00a0 &amp; \u00a9 \u00c6 \u010e\n\u00be \u210b \u2146\n\u2232 \u2267\u0338"
+
+test "gfm 315":
+  check renderinline("&#35; &#1234; &#992; &#0;") == "# \u04d2 \u03e0 \ufffd"
+
+test "gfm 316":
+  check renderinline("&#X22; &#XD06; &#xcab;") == "&quot; \u0d06 \u0cab"
+
+test "gfm 318":
+  check renderinline("&copy") == "&amp;copy"
 
 # test "gfm 1, 2, 3":
 #   discard """Tabs in lines are not expanded to spaces.

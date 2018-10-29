@@ -61,7 +61,7 @@
 ## :patreon: https://www.patreon.com/join/enqueuezero
 ## :license: MIT.
 
-import re, strutils, strformat, tables, sequtils, math, uri, htmlparser
+import re, strutils, strformat, tables, sequtils, math, uri, htmlparser, lists
 
 const MARKDOWN_VERSION* = "0.4.0"
 
@@ -134,6 +134,19 @@ type
   BlockQuote* = object
     blocks: seq[MarkdownTokenRef]
 
+  Delimeter* = object
+    token: MarkdownTokenRef
+    kind: string
+    num: int
+    canOpen: bool
+    canClose: bool
+
+  Emphasis* = object
+    inlines: seq[MarkdownTokenRef]
+
+  DoubleEmphasis* = object
+    inlines: seq[MarkdownTokenRef]
+
   MarkdownConfig* = object ## Options for configuring parsing or rendering behavior.
     escape: bool ## escape ``<``, ``>``, and ``&`` characters to be HTML-safe
     keepHtml: bool ## preserve HTML tags rather than escape it
@@ -204,8 +217,8 @@ type
     of MarkdownTokenType.InlineRefLink: inlineRefLinkVal*: RefLink
     of MarkdownTokenType.InlineNoLink: inlineNoLinkVal*: RefLink
     of MarkdownTokenType.InlineURL: inlineURLVal*: string
-    of MarkdownTokenType.InlineDoubleEmphasis: inlineDoubleEmphasisVal*: string
-    of MarkdownTokenType.InlineEmphasis: inlineEmphasisVal*: string
+    of MarkdownTokenType.InlineDoubleEmphasis: inlineDoubleEmphasisVal*: DoubleEmphasis
+    of MarkdownTokenType.InlineEmphasis: inlineEmphasisVal*: Emphasis
     of MarkdownTokenType.InlineCode: inlineCodeVal*: string
     of MarkdownTokenType.InlineBreak: inlineBreakVal*: string
     of MarkdownTokenType.InlineStrikethrough: inlineStrikethroughVal*: string
@@ -698,7 +711,12 @@ proc genInlineDoubleEmphasis(matches: openArray[string]): MarkdownTokenRef =
     text = matches[1]
   else:
     text = matches[2]
-  result = MarkdownTokenRef(type: MarkdownTokenType.InlineDoubleEmphasis, inlineDoubleEmphasisVal: text)
+  result = MarkdownTokenRef(
+    type: MarkdownTokenType.InlineDoubleEmphasis,
+    inlineDoubleEmphasisVal: DoubleEmphasis(inlines: @[
+      MarkdownTokenRef(type: MarkdownTokenType.InlineText, inlineTextVal: text)
+    ])
+  )
 
 proc genInlineEmphasis(matches: openArray[string]): MarkdownTokenRef =
   if matches[2].startsWith("\u00a0") or matches[2].endswith("\u00a0"): # unicode whitespace. PCRE seems not support \u in regex.
@@ -708,7 +726,12 @@ proc genInlineEmphasis(matches: openArray[string]): MarkdownTokenRef =
     text = matches[1]
   else:
     text = matches[2]
-  result = MarkdownTokenRef(type: MarkdownTokenType.InlineEmphasis, inlineEmphasisVal: text)
+    result = MarkdownTokenRef(
+      type: MarkdownTokenType.InlineEmphasis,
+      inlineEmphasisVal: Emphasis(inlines: @[
+        MarkdownTokenRef(type: MarkdownTokenType.InlineText, inlineTextVal: text)
+      ])
+    )
 
 proc genInlineCode(matches: openArray[string]): MarkdownTokenRef =
   result = MarkdownTokenRef(type: MarkdownTokenType.InlineCode, inlineCodeVal: matches[2])
@@ -755,7 +778,249 @@ proc parseBacktick*(doc: string, start: int, size: var int): seq[MarkdownTokenRe
     size = pos - start
     result = @[token]
 
-proc parseEmphasis*(doc: string, start: int, size: var int): seq[MarkdownTokenRef] = @[]
+proc scanInlineDelimeters*(doc: string, start: int, delimeter: var Delimeter) =
+  var charBefore = '\n'
+  var charAfter = '\n'
+  let charCurrent = doc[start]
+
+  # get the number of delimeters.
+  for ch in doc[start .. doc.len - 1]:
+    if ch == charCurrent:
+      delimeter.num += 1
+    else:
+      break
+
+  # get the character before the starting character
+  if start > 0:
+    charBefore = doc[start - 1]
+
+  # get the character after the delimeter runs
+  if start + delimeter.num + 1 < doc.len:
+    charAfter = doc[start + delimeter.num]
+
+  let isCharAfterWhitespace = fmt"{charAfter}".match(re"^\s")
+  let isCharAfterPunctuation = fmt"{charAfter}".match(re"^\p{P}")
+  let isCharBeforeWhitespace = fmt"{charBefore}".match(re"^\s")
+  let isCharBeforePunctuation = fmt"{charBefore}".match(re"^\p{P}")
+
+  let isLeftFlanking = (
+    (not isCharAfterWhitespace) and (
+      (not isCharAfterPunctuation) or isCharBeforeWhitespace or isCharBeforePunctuation
+    )
+  )
+
+  let isRightFlanking = (
+    (not isCharBeforeWhitespace) and (
+      (not isCharBeforePunctuation) or isCharAfterWhitespace or isCharAfterPunctuation
+    )
+  )
+
+  case charCurrent
+  of '_':
+    delimeter.canOpen = isLeftFlanking and (not isRightFlanking or isCharBeforePunctuation)
+    delimeter.canClose = isRightFlanking and (not isLeftFlanking or isCharAfterPunctuation)
+  else:
+    delimeter.canOpen = isLeftFlanking
+    delimeter.canClose = isRightFlanking
+
+proc parseDelimeter*(doc: string, start: int, size: var int, delimeterStack: var DoublyLinkedList[Delimeter]): seq[MarkdownTokenRef] =
+  ## add a placeholder for delimeter and append a delimeter to the stack.
+  var delimeter = Delimeter(
+    token: nil,
+    kind: fmt"{doc[start]}",
+    num: 0,
+    canOpen: false,
+    canClose: false,
+  )
+
+  scanInlineDelimeters(doc, start, delimeter)
+
+  if delimeter.num == 0:
+    return @[]
+
+  size = delimeter.num
+
+  var inlineText = MarkdownTokenRef(
+    type: MarkdownTokenType.InlineText,
+    inlineTextVal: doc[start .. start + size - 1]
+  )
+
+  result = @[inlineText]
+  delimeter.token = inlineText
+  delimeterStack.append(delimeter)
+
+proc removeDelimeter*(delimeter: var DoublyLinkedNode[Delimeter]) =
+  if delimeter.prev != nil:
+    delimeter.prev.next = delimeter.next
+  if delimeter.next != nil:
+    delimeter.next.prev = delimeter.prev
+  delimeter = delimeter.next
+
+proc processEmphasis*(tokens: var seq[MarkdownTokenRef], delimeterStack: var DoublyLinkedList[Delimeter]) =
+  var opener: DoublyLinkedNode[Delimeter] = nil
+  var closer: DoublyLinkedNode[Delimeter] = nil
+  var oldCloser: DoublyLinkedNode[Delimeter] = nil
+  var openerFound = false
+  var oddMatch = false
+  var useDelims = 0
+  var underscoreOpenerBottom: DoublyLinkedNode[Delimeter] = nil
+  var asteriskOpenerBottom: DoublyLinkedNode[Delimeter] = nil
+
+  # find first closer above stack_bottom
+  closer = delimeterStack.head
+
+  # move forward, looking for closers, and handling each
+  while closer != nil:
+    # find the first closing delimeter.
+    if not closer.value.canClose:
+      closer = closer.next
+      continue
+    # found emphasis closer. now look back for first matching opener.
+    opener = closer.prev
+    openerFound = false
+    while opener != nil and (
+      (opener.value.kind == "*" and opener != asteriskOpenerBottom
+      ) or (opener.value.kind == "_" and opener != underscoreOpenerBottom)
+    ):
+      # oddMatch: **abc*d*abc***
+      # the second * between `abc` and `d` makes oddMatch to true
+      oddMatch = (
+        closer.value.canOpen or closer.value.canClose
+      ) and (opener.value.num + closer.value.num) mod 3 == 0
+      # found opener when opener has same kind with closer and iff it's not odd match
+      if opener.value.kind == closer.value.kind and opener.value.canOpen and not oddMatch:
+        openerFound = true
+        break
+      opener = opener.prev
+
+    oldCloser = closer
+    # if one is found.
+    if not openerFound:
+      closer = closer.next
+    else:
+      # calculate actual number of delimiters used from closer
+      if closer.value.num >= 2 and opener.value.num >= 2:
+        useDelims = 2
+      else:
+        useDelims = 1
+
+      var openerInlineText = opener.value.token
+      var closerInlineText = closer.value.token
+
+      # remove used delimiters from stack elts and inlines
+      opener.value.num -= useDelims
+      closer.value.num -= useDelims
+      openerInlineText.inlineTextVal = openerInlineText.inlineTextVal[0 .. ^(useDelims+1)]
+      closerInlineText.inlineTextVal = closerInlineText.inlineTextVal[0 .. ^(useDelims+1)]
+
+      # build contents for new emph element
+      var isEmphasized = false
+      var startIndex = 0
+      var endIndex = 0
+      var inlines: seq[MarkdownTokenRef] = @[]
+      for index, token in tokens:
+        if token == opener.value.token:
+          isEmphasized = true
+          startIndex = index
+        elif token == closer.value.token:
+          isEmphasized = false
+          endIndex = index
+        if isEmphasized:
+          inlines.add(token)
+      tokens.delete(startIndex + 1, endIndex - 1)
+
+      # add emph element to tokens
+      var emph: MarkdownTokenRef
+      if useDelims == 2:
+        emph = MarkdownTokenRef(type: MarkdownTokenType.InlineDoubleEmphasis, inlineDoubleEmphasisVal: DoubleEmphasis(inlines: inlines))
+      else:
+        emph = MarkdownTokenRef(type: MarkdownTokenType.InlineEmphasis, inlineEmphasisVal: Emphasis(inlines: inlines))
+      tokens.insert(emph, startIndex + 1)
+
+      # remove elts between opener and closer in delimiters stack
+      if opener.next != closer:
+        opener.next = closer
+        closer.prev = opener
+
+      # remove closer if no text left
+      if closer.value.num == 0:
+        tokens.delete(startIndex + 2) # the closer token
+        var tmp = closer.next
+        removeDelimeter(closer)
+        closer = tmp
+
+      # remove opener if no text left
+      if opener.value.num == 0:
+        tokens.delete(startIndex)
+        removeDelimeter(opener)
+
+    # if none is found.
+    if not openerFound and not oddMatch:
+      # Set openers_bottom to the element before current_position. 
+      # (We know that there are no openers for this kind of closer up to and including this point,
+      # so this puts a lower bound on future searches.)
+      if oldCloser.value.kind == "*":
+        asteriskOpenerBottom = oldCloser.prev
+      else:
+        underscoreOpenerBottom = oldCloser.prev
+      # If the closer at current_position is not a potential opener,
+      # remove it from the delimiter stack (since we know it can’t be a closer either).
+      if not oldCloser.value.canOpen:
+        removeDelimeter(oldCloser)
+
+  # after done, remove all delimiters
+  while delimeterStack.head != nil:
+    removeDelimeter(delimeterStack.head)
+
+  # while current != nil:
+  #   if not current.value.canClose: # find the first closing delimeter.
+  #     current = current.next
+  #   else: # handle for the first closing delimeter
+  #     opener = current.prev
+  #     while opener != nil: # find closest opening delimeter matching to the closing delimeter
+  #       if (opener.value.canOpen and opener.value.kind == current.value.kind):
+  #         break
+
+  #     if opener == nil: # ignore current closing delimeter if no matching opening delimeter
+  #       current = current.next
+  #     else: # insert emph node into tokens
+  #       var emph: MarkdownTokenRef
+
+  #       var startIndex = 0
+  #       var endIndex = 0
+  #       var inlines = newSeq[MarkdownTokenRef]();
+  #       for index, token in tokens:
+  #         if token == opener.value.token:
+  #           startIndex = index
+  #         elif token == current.value.token:
+  #           endIndex = index
+  #           break
+
+  #       for index, token in tokens:
+  #         if index > startIndex and index < endIndex:
+  #           inlines.add(token)
+  #         elif index == startIndex or index == endIndex:
+  #           if token.type == MarkdownTokenType.InlineText and token.inlineTextVal.len == opener.value.num:
+  #             token.inlineTextVal = ""
+  #           else:
+  #             token.inlineTextVal = token.inlineTextVal[0 .. token.inlineTextVal.len - opener.value.num]
+
+  #       if opener.value.num == 1:
+  #         var em = Emphasis(inlines: inlines)
+  #         emph = MarkdownTokenRef(type: MarkdownTokenType.InlineEmphasis, inlineEmphasisVal: em)
+  #       else:
+  #         var strong = DoubleEmphasis(inlines: inlines)
+  #         emph = MarkdownTokenRef(type: MarkdownTokenType.InlineDoubleEmphasis, inlineDoubleEmphasisVal: strong)
+
+  #       tokens.delete(startIndex + 1, endIndex - 1)
+  #       tokens.insert(emph, startIndex + 1)
+
+  #       while opener != current:
+  #         removeDelimeter(opener)
+  #         opener = opener.next
+
+
+
 proc parseQuote*(doc: string, start: int, size: var int): seq[MarkdownTokenRef] = @[]
 proc parseOpenBracket*(doc: string, start: int, size: var int): seq[MarkdownTokenRef] = @[]
 proc parseCloseBracket*(doc: string, start: int, size: var int): seq[MarkdownTokenRef] = @[]
@@ -792,6 +1057,7 @@ proc parseLessThan(doc: string, start: int, size: var int): seq[MarkdownTokenRef
 
 proc parseInlines*(doc: string): seq[MarkdownTokenRef] =
   var pos = 0
+  var delimeterStack: DoublyLinkedList[Delimeter]
 
   for index, ch in doc:
     if index < pos:
@@ -804,12 +1070,12 @@ proc parseInlines*(doc: string): seq[MarkdownTokenRef] =
     of '\n': tokens = parseNewline(doc, index, size)
     of '\\': tokens = parseBackslash(doc, index, size)
     of '`': tokens = parseBacktick(doc, index, size)
-    of '*': tokens = parseEmphasis(doc, index, size)
-    of '_': tokens = parseEmphasis(doc, index, size)
+    of '*': tokens = parseDelimeter(doc, index, size, delimeterStack)
+    of '_': tokens = parseDelimeter(doc, index, size, delimeterStack)
     of '\'': tokens = parseQuote(doc, index, size)
     of '"': tokens = parseQuote(doc, index, size)
-    of '{': tokens = parseOpenBracket(doc, index, size)
-    of '}': tokens = parseCloseBracket(doc, index, size)
+    of '[': tokens = parseOpenBracket(doc, index, size)
+    of ']': tokens = parseCloseBracket(doc, index, size)
     of '!': tokens = parseBang(doc, index, size)
     of '&': tokens = parseHTMLEntity(doc, index, size)
     of '<': tokens = parseLessThan(doc, index, size)
@@ -822,6 +1088,8 @@ proc parseInlines*(doc: string): seq[MarkdownTokenRef] =
       pos += size
 
     result.insert(tokens, result.len)
+
+  result.processEmphasis(delimeterStack)
 
 proc findToken(doc: string, start: var int, ruleType: MarkdownTokenType): MarkdownTokenRef =
   ## Find a markdown token from document `doc` at position `start`,
@@ -1042,17 +1310,15 @@ proc renderInlineRefLink(ctx: MarkdownContext, link: RefLink): string =
 proc renderInlineURL(ctx: MarkdownContext, url: string): string =
   result = fmt"""<a href="{escapeBackslash(url)}">{url}</a>"""
 
-proc renderInlineDoubleEmphasis(ctx: MarkdownContext, text: string): string =
-  # TODO: move to phase 2
+proc renderInlineDoubleEmphasis(ctx: MarkdownContext, emph: DoubleEmphasis): string =
   var em = ""
-  for token in parseTokens(text, inlineParsingOrder):
+  for token in emph.inlines:
     em &= renderToken(ctx, token)
   result = fmt"""<strong>{em}</strong>"""
 
-proc renderInlineEmphasis(ctx: MarkdownContext, text: string): string =
-  # TODO: move to phase 2
+proc renderInlineEmphasis(ctx: MarkdownContext, emph: Emphasis): string =
   var em = ""
-  for token in parseTokens(text, inlineParsingOrder):
+  for token in emph.inlines:
     em &= renderToken(ctx, token)
   result = fmt"""<em>{em}</em>"""
 

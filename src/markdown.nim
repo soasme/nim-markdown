@@ -138,6 +138,7 @@ type
     token: MarkdownTokenRef
     kind: string
     num: int
+    originalNum: int
     canOpen: bool
     canClose: bool
 
@@ -787,6 +788,7 @@ proc scanInlineDelimeters*(doc: string, start: int, delimeter: var Delimeter) =
   for ch in doc[start .. doc.len - 1]:
     if ch == charCurrent:
       delimeter.num += 1
+      delimeter.originalNum += 1
     else:
       break
 
@@ -798,9 +800,9 @@ proc scanInlineDelimeters*(doc: string, start: int, delimeter: var Delimeter) =
   if start + delimeter.num + 1 < doc.len:
     charAfter = doc[start + delimeter.num]
 
-  let isCharAfterWhitespace = fmt"{charAfter}".match(re"^\s")
+  let isCharAfterWhitespace = fmt"{charAfter}".match(re"^\s") or charAfter == '\u00a0'
   let isCharAfterPunctuation = fmt"{charAfter}".match(re"^\p{P}")
-  let isCharBeforeWhitespace = fmt"{charBefore}".match(re"^\s")
+  let isCharBeforeWhitespace = fmt"{charBefore}".match(re"^\s") or charBefore == '\u00a0'
   let isCharBeforePunctuation = fmt"{charBefore}".match(re"^\p{P}")
 
   let isLeftFlanking = (
@@ -817,11 +819,13 @@ proc scanInlineDelimeters*(doc: string, start: int, delimeter: var Delimeter) =
 
   case charCurrent
   of '_':
-    delimeter.canOpen = isLeftFlanking and (not isRightFlanking or isCharBeforePunctuation)
-    delimeter.canClose = isRightFlanking and (not isLeftFlanking or isCharAfterPunctuation)
+    delimeter.canOpen = isLeftFlanking and ((not isRightFlanking) or isCharBeforePunctuation)
+    delimeter.canClose = isRightFlanking and ((not isLeftFlanking) or isCharAfterPunctuation)
   else:
     delimeter.canOpen = isLeftFlanking
     delimeter.canClose = isRightFlanking
+
+  echo(fmt"{delimeter.canOpen} {delimeter.canClose}")
 
 proc parseDelimeter*(doc: string, start: int, size: var int, delimeterStack: var DoublyLinkedList[Delimeter]): seq[MarkdownTokenRef] =
   ## add a placeholder for delimeter and append a delimeter to the stack.
@@ -829,6 +833,7 @@ proc parseDelimeter*(doc: string, start: int, size: var int, delimeterStack: var
     token: nil,
     kind: fmt"{doc[start]}",
     num: 0,
+    originalNum: 0,
     canOpen: false,
     canClose: false,
   )
@@ -885,8 +890,9 @@ proc processEmphasis*(tokens: var seq[MarkdownTokenRef], delimeterStack: var Dou
       # oddMatch: **abc*d*abc***
       # the second * between `abc` and `d` makes oddMatch to true
       oddMatch = (
-        closer.value.canOpen or closer.value.canClose
-      ) and (opener.value.num + closer.value.num) mod 3 == 0
+        closer.value.canOpen or opener.value.canClose
+      ) and (opener.value.originalNum + closer.value.originalNum) mod 3 == 0
+
       # found opener when opener has same kind with closer and iff it's not odd match
       if opener.value.kind == closer.value.kind and opener.value.canOpen and not oddMatch:
         openerFound = true
@@ -894,6 +900,7 @@ proc processEmphasis*(tokens: var seq[MarkdownTokenRef], delimeterStack: var Dou
       opener = opener.prev
 
     oldCloser = closer
+
     # if one is found.
     if not openerFound:
       closer = closer.next

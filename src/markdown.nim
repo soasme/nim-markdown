@@ -932,7 +932,7 @@ proc processEmphasis*(tokens: var seq[MarkdownTokenRef], delimeterStack: var Dou
         elif token == closer.value.token:
           isEmphasized = false
           endIndex = index
-        if isEmphasized:
+        elif isEmphasized:
           inlines.add(token)
       tokens.delete(startIndex + 1, endIndex - 1)
 

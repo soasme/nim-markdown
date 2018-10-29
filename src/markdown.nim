@@ -825,7 +825,7 @@ proc scanInlineDelimeters*(doc: string, start: int, delimeter: var Delimeter) =
     delimeter.canOpen = isLeftFlanking
     delimeter.canClose = isRightFlanking
 
-  echo(fmt"{delimeter.canOpen} {delimeter.canClose}")
+  #echo(fmt"{delimeter.canOpen} {delimeter.canClose}")
 
 proc parseDelimeter*(doc: string, start: int, size: var int, delimeterStack: var DoublyLinkedList[Delimeter]): seq[MarkdownTokenRef] =
   ## add a placeholder for delimeter and append a delimeter to the stack.
@@ -979,55 +979,6 @@ proc processEmphasis*(tokens: var seq[MarkdownTokenRef], delimeterStack: var Dou
   while delimeterStack.head != nil:
     removeDelimeter(delimeterStack.head)
 
-  # while current != nil:
-  #   if not current.value.canClose: # find the first closing delimeter.
-  #     current = current.next
-  #   else: # handle for the first closing delimeter
-  #     opener = current.prev
-  #     while opener != nil: # find closest opening delimeter matching to the closing delimeter
-  #       if (opener.value.canOpen and opener.value.kind == current.value.kind):
-  #         break
-
-  #     if opener == nil: # ignore current closing delimeter if no matching opening delimeter
-  #       current = current.next
-  #     else: # insert emph node into tokens
-  #       var emph: MarkdownTokenRef
-
-  #       var startIndex = 0
-  #       var endIndex = 0
-  #       var inlines = newSeq[MarkdownTokenRef]();
-  #       for index, token in tokens:
-  #         if token == opener.value.token:
-  #           startIndex = index
-  #         elif token == current.value.token:
-  #           endIndex = index
-  #           break
-
-  #       for index, token in tokens:
-  #         if index > startIndex and index < endIndex:
-  #           inlines.add(token)
-  #         elif index == startIndex or index == endIndex:
-  #           if token.type == MarkdownTokenType.InlineText and token.inlineTextVal.len == opener.value.num:
-  #             token.inlineTextVal = ""
-  #           else:
-  #             token.inlineTextVal = token.inlineTextVal[0 .. token.inlineTextVal.len - opener.value.num]
-
-  #       if opener.value.num == 1:
-  #         var em = Emphasis(inlines: inlines)
-  #         emph = MarkdownTokenRef(type: MarkdownTokenType.InlineEmphasis, inlineEmphasisVal: em)
-  #       else:
-  #         var strong = DoubleEmphasis(inlines: inlines)
-  #         emph = MarkdownTokenRef(type: MarkdownTokenType.InlineDoubleEmphasis, inlineDoubleEmphasisVal: strong)
-
-  #       tokens.delete(startIndex + 1, endIndex - 1)
-  #       tokens.insert(emph, startIndex + 1)
-
-  #       while opener != current:
-  #         removeDelimeter(opener)
-  #         opener = opener.next
-
-
-
 proc parseQuote*(doc: string, start: int, size: var int): seq[MarkdownTokenRef] = @[]
 proc parseOpenBracket*(doc: string, start: int, size: var int): seq[MarkdownTokenRef] = @[]
 proc parseCloseBracket*(doc: string, start: int, size: var int): seq[MarkdownTokenRef] = @[]
@@ -1050,8 +1001,30 @@ proc parseHTMLEntity*(doc: string, start: int, size: var int): seq[MarkdownToken
   result = @[MarkdownTokenRef(type: MarkdownTokenType.InlineText, inlineTextVal: entity)]
 
 proc parseBang*(doc: string, start: int, size: var int): seq[MarkdownTokenRef] = @[]
-proc parseAutolink*(doc: string, start: int, size: var int): seq[MarkdownTokenRef] = @[]
-proc parseHTMLTag*(doc: string, start: int, size: var int): seq[MarkdownTokenRef] = @[]
+proc parseAutolink*(doc: string, start: int, size: var int): seq[MarkdownTokenRef] =
+  var pos: int = start
+  var token: MarkdownTokenRef
+
+  token = findToken(doc, pos, MarkdownTokenType.Autolink)
+  if token != nil:
+    size = pos - start
+    return @[token]
+
+  size = -1
+  result = @[]
+
+proc parseHTMLTag*(doc: string, start: int, size: var int): seq[MarkdownTokenRef] =
+  var pos: int = start
+  var token: MarkdownTokenRef
+
+  token = findToken(doc, pos, MarkdownTokenType.InlineHTML)
+  if token != nil:
+    size = pos - start
+    return @[token]
+
+  size = -1
+  result = @[]
+
 proc parseString*(doc: string, start: int, size: var int): seq[MarkdownTokenRef] = @[]
 
 proc parseLessThan(doc: string, start: int, size: var int): seq[MarkdownTokenRef] =

@@ -980,7 +980,43 @@ proc processEmphasis*(tokens: var seq[MarkdownTokenRef], delimeterStack: var Dou
     removeDelimeter(delimeterStack.head)
 
 proc parseQuote*(doc: string, start: int, size: var int): seq[MarkdownTokenRef] = @[]
-proc parseOpenBracket*(doc: string, start: int, size: var int): seq[MarkdownTokenRef] = @[]
+
+proc parseBang*(doc: string, start: int, size: var int, delimeterStack: var DoublyLinkedList[Delimeter]): seq[MarkdownTokenRef] =
+  var text: string
+  if doc[start .. doc.len - 1].match(re"^!\["):
+    size += 2
+    text = "!["
+  else:
+    size += 1
+    text = "["
+
+  var inlineText = MarkdownTokenRef(type: MarkdownTokenType.InlineText, inlineTextVal: text)
+  result = @[inlineText]
+  var delimeter = Delimeter(
+    token: inlineText,
+    kind: text,
+    num: text.len,
+    originalNum: 1,
+    canOpen: true,
+    canClose: false,
+  )
+  delimeterStack.append(delimeter)
+
+proc parseOpenBracket*(doc: string, start: int, size: var int, delimeterStack: var DoublyLinkedList[Delimeter]): seq[MarkdownTokenRef] =
+  size += 1
+  var token = MarkdownTokenRef(type: MarkdownTokenType.InlineText, inlineTextVal: "[")
+  result = @[token]
+  var delimeter = Delimeter(
+    token: token,
+    kind: "[",
+    num: 1,
+    originalNum: 1,
+    canOpen: true,
+    canClose: false,
+  )
+  delimeterStack.append(delimeter)
+  
+
 proc parseCloseBracket*(doc: string, start: int, size: var int): seq[MarkdownTokenRef] = @[]
 
 proc parseHTMLEntity*(doc: string, start: int, size: var int): seq[MarkdownTokenRef] =
@@ -1000,7 +1036,6 @@ proc parseHTMLEntity*(doc: string, start: int, size: var int): seq[MarkdownToken
 
   result = @[MarkdownTokenRef(type: MarkdownTokenType.InlineText, inlineTextVal: entity)]
 
-proc parseBang*(doc: string, start: int, size: var int): seq[MarkdownTokenRef] = @[]
 proc parseAutolink*(doc: string, start: int, size: var int): seq[MarkdownTokenRef] =
   var pos: int = start
   var token: MarkdownTokenRef
@@ -1054,9 +1089,9 @@ proc parseInlines*(doc: string): seq[MarkdownTokenRef] =
     of '_': tokens = parseDelimeter(doc, index, size, delimeterStack)
     of '\'': tokens = parseQuote(doc, index, size)
     of '"': tokens = parseQuote(doc, index, size)
-    of '[': tokens = parseOpenBracket(doc, index, size)
+    of '[': tokens = parseOpenBracket(doc, index, size, delimeterStack)
     of ']': tokens = parseCloseBracket(doc, index, size)
-    of '!': tokens = parseBang(doc, index, size)
+    of '!': tokens = parseBang(doc, index, size, delimeterStack)
     of '&': tokens = parseHTMLEntity(doc, index, size)
     of '<': tokens = parseLessThan(doc, index, size)
     else: tokens = parseString(doc, index, size)

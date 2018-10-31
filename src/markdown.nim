@@ -269,6 +269,16 @@ let HTML_TAG = (
   & r")"
 )
 
+let LINK_SCHEME = r"[a-zA-Z][a-zA-Z0-9+.-]{1,31}"
+let LINK_EMAIL = r"[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+(@)[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+(?![-_])"
+let LINK_LABEL = r"(?:\[[^\[\]]*\]|\\[\[\]]?|`[^`]*`|[^\[\]\\])*?"
+let LINK_HREF = r"\s*(<(?:\\[<>]?|[^\s<>\\])*>|(?:\\[()]?|\([^\s\x00-\x1f\\]*\)|[^\s\x00-\x1f()\\])*?)"
+let LINK_TITLE = r""""(?:\\"?|[^"\\])*"|'(?:\\'?|[^'\\])*'|\((?:\\\)?|[^)\\])*\)"""
+let INLINE_AUTOLINK = r"<(" & LINK_SCHEME & r"[^\s\x00-\x1f<>]*|" & LINK_EMAIL & ")>"
+let INLINE_LINK = r"!?\[(" & LINK_LABEL & r")\]\(" & LINK_HREF & r"(?:\s+(" & LINK_TITLE & r"))?\s*\)"
+let INLINE_REFLINK = r"!?\[(" & LINK_LABEL & r")\]\[(?!\s*\])((?:\\[\[\]]?|[^\[\]\\])+)\]"
+let INLINE_NOLINK = r"!?\[(?!\s*\])((?:\[[^\[\]]*\]|\\[\[\]]|[^\[\]])*)\](?:\[\])?"
+
 var blockRules = @{
   MarkdownTokenType.Heading: re"^ *(#{1,6})( +)?(?(2)([^\n]*?))( +)?(?(4)#*) *(?:\n+|$)",
   MarkdownTokenType.SetextHeading: re"^(((?:(?:[^\n]+)\n)+) {0,3}(=|-)+ *(?:\n+|$))",
@@ -322,36 +332,21 @@ var blockRules = @{
   ),
   MarkdownTokenType.Text: re"^([^\n]+)",
   MarkdownTokenType.Newline: re"^(\n+)",
-  MarkdownTokenType.AutoLink: re"^<([^ >]+(@|:)[^ >]+)>",
+  MarkdownTokenType.AutoLink: re("^(" & INLINE_AUTOLINK & ")"),
   MarkdownTokenType.InlineText: re"^([\p{P}]+(?=[*_]+(?!_|\s|\p{Z}|\xa0))|[\s\S]+?(?=[\\<!\[`~]|[\s\p{P}]*\*+(?!_|\s|\p{Z}|\xa0)|[\s\p{P}]+_+(?!_|\s|\p{Z}|\xa0)|https?://| {2,}\n|$))",
   MarkdownTokenType.InlineEscape: re(
     r"^\\([\\`*{}\[\]()#+\-.!_<>~|""$%&',/:;=?@^])"
   ),
   MarkdownTokenType.InlineHTML: re(
-    # r"^(" &
-    # r"<!--[\s\S]*?-->" &
-    # r"|<(\w+" & r"(?!:/|[^\w\s@]*@)\b" & r")((?:" & blockTagAttribute & r")*?)\s*>([\s\S]*?)<\/\2>" &
-    # r"|<\w+" & r"(?!:/|[^\w\s@]*@)\b" & r"(?:" & blockTagAttribute & r")*?\s*\/?>" &
-    # r"|<!\[CDATA\[[^]]+\]\]>" &
-    # r"|<\/\w+\s*>" & # eg. </a>
-    # r"|<\?\w+\s+[\s\S]+\s*\?>" & #eg. <?php echo a; ?>
-    # r"|<![\w\s\d]+>" & #eg. <!DOCTYPE>
-    # r")"
     "^(" & HTML_TAG & ")", {RegexFlag.reIgnoreCase}
   ),
   MarkdownTokenType.InlineLink: re(
-    r"^(!?\[" &
-    r"((?:\[[^^\]]*\]|[^\[\]]|\](?=[^\[]*\]))*)" &
-    r"\]\(" &
-    r"\s*(<)?((?:\\\(|\\\)|\s|\S)*?)(?(3)>)(?:\s+['""(]([\s\S]*?)['"")])?\s*" &
-    r"\))"
+    "^(" & INLINE_LINK & ")"
   ),
   MarkdownTokenType.InlineRefLink: re(
-    r"^(!?\[" &
-    r"((?:\s|\S)*)" &
-    r"\]\[([^^\]]*)\])"
+    "^(" & INLINE_REFLINK & ")"
   ),
-  MarkdownTokenType.InlineNoLink: re"^(!?\[((?:\[[^\]]*\]|[^\[\]])*)\])",
+  MarkdownTokenType.InlineNoLink: re("^(" & INLINE_NOLINK & ")"),
   MarkdownTokenType.InlineURL: re(
     r"""^((https?:\/\/(?:www\.|(?!www))[a-zA-Z0-9][a-zA-Z0-9-]+[a-zA-Z0-9]\.[^\s]{2,}|www\.[a-zA-Z0-9][a-zA-Z0-9-]+[a-zA-Z0-9]\.[^\s]{2,}|https?:\/\/(?:www\.|(?!www))[a-zA-Z0-9]\.[^\s]{2,}|www\.[a-zA-Z0-9]\.[^\s]{2,}))"""
   ),
@@ -654,9 +649,9 @@ proc genHTMLTable*(matches: openArray[string]): MarkdownTokenRef =
 
 proc genAutoLink(matches: openArray[string]): MarkdownTokenRef =
   var link: Link
-  link.url = matches[0]
-  link.text = matches[0]
-  link.isEmail = matches[1] == "@"
+  link.url = matches[1]
+  link.text = matches[1]
+  link.isEmail = matches[1].match(re(LINK_EMAIL))
   link.isImage = false
   result = MarkdownTokenRef(type: MarkdownTokenType.AutoLink, autoLinkVal: link)
 
@@ -687,18 +682,19 @@ proc isSquareBalanced(text: string): bool =
   result = stack.len == 0
 
 proc genInlineLink(matches: openArray[string]): MarkdownTokenRef =
-  if matches[3].contains(re"\n"):
-    return MarkdownTokenRef(type: MarkdownTokenType.InlineText, inlineTextVal: matches[0])
-  if matches[2] != "<" and matches[3].contains(re"\s"):
-    return MarkdownTokenRef(type: MarkdownTokenType.InlineText, inlineTextVal: matches[0])
-  if not matches[1].isSquareBalanced:
-    return MarkdownTokenRef(type: MarkdownTokenType.InlineText, inlineTextVal: matches[0])
+  #echo(matches)
+  # if matches[3].contains(re"\n"):
+  #   return MarkdownTokenRef(type: MarkdownTokenType.InlineText, inlineTextVal: matches[0])
+  # if matches[2] != "<" and matches[3].contains(re"\s"):
+  #   return MarkdownTokenRef(type: MarkdownTokenType.InlineText, inlineTextVal: matches[0])
+  # if not matches[1].isSquareBalanced:
+  #   return MarkdownTokenRef(type: MarkdownTokenType.InlineText, inlineTextVal: matches[0])
   var link: Link
   link.isEmail = false
   link.isImage = matches[0][0] == '!'
   link.text = matches[1]
-  link.url = matches[3]
-  link.title = matches[4]
+  link.url = matches[2]
+  link.title = matches[3]
   result = MarkdownTokenRef(type: MarkdownTokenType.InlineLink, inlineLinkVal: link)
 
 proc genInlineHTML(matches: openArray[string]): MarkdownTokenRef =
@@ -1017,15 +1013,23 @@ proc parseOpenBracket*(doc: string, start: int, size: var int): seq[MarkdownToke
   var pos: int = start
   var token: MarkdownTokenRef
 
+  token = findToken(doc, pos, MarkdownTokenType.InlineRefLink)
+  if token != nil:
+    size = pos - start
+    return @[token]
+
   token = findToken(doc, pos, MarkdownTokenType.InlineLink)
+  if token != nil:
+    size = pos - start
+    return @[token]
+
+  token = findToken(doc, pos, MarkdownTokenType.InlineNoLink)
   if token != nil:
     size = pos - start
     return @[token]
 
   size = -1
   result = @[]
-
-proc parseCloseBracket*(doc: string, start: int, size: var int): seq[MarkdownTokenRef] = @[]
 
 proc parseHTMLEntity*(doc: string, start: int, size: var int): seq[MarkdownTokenRef] =
   let regex = re(r"^(" & ENTITY & ")", {RegexFlag.reIgnoreCase})
@@ -1068,15 +1072,25 @@ proc parseHTMLTag*(doc: string, start: int, size: var int): seq[MarkdownTokenRef
   size = -1
   result = @[]
 
-proc parseString*(doc: string, start: int, size: var int): seq[MarkdownTokenRef] = @[]
+proc parseString*(doc: string, start: int, size: var int): seq[MarkdownTokenRef] =
+  var pos: int = start
+  var token: MarkdownTokenRef
+
+  token = findToken(doc, pos, MarkdownTokenType.InlineURL)
+  if token != nil:
+    size = pos - start
+    return @[token]
+
+  size = -1
+  result = @[]
 
 proc parseLessThan(doc: string, start: int, size: var int): seq[MarkdownTokenRef] =
-  result = parseAutolink(doc, start, size)
+  result = parseHTMLTag(doc, start, size)
 
   if result.len != 0:
     return result
 
-  result = parseHTMLTag(doc, start, size)
+  result = parseAutolink(doc, start, size)
 
 proc parseHardLineBreak(doc: string, start: int, size: var int): seq[MarkdownTokenRef] =
   size = doc[start .. doc.len - 1].matchLen(re"^ {2,}\n *")
@@ -1110,7 +1124,6 @@ proc parseInlines*(doc: string): seq[MarkdownTokenRef] =
     of '\'': tokens = parseQuote(doc, index, size)
     of '"': tokens = parseQuote(doc, index, size)
     of '[': tokens = parseOpenBracket(doc, index, size)
-    of ']': tokens = parseCloseBracket(doc, index, size)
     of '!': tokens = parseBang(doc, index, size, delimeterStack)
     of '&': tokens = parseHTMLEntity(doc, index, size)
     of '<': tokens = parseLessThan(doc, index, size)
@@ -1303,13 +1316,24 @@ proc renderLinkText(ctx: MarkdownContext, text: string): string =
 
 proc renderAutoLink(ctx: MarkdownContext, link: Link): string =
   if link.isEmail and link.url.find(re(r"^mailto:", {RegexFlag.reIgnoreCase})) != -1:
-    result = fmt"""<a href="{link.url}">{link.text}</a>"""
-  elif link.isEmail:
-    result = fmt"""<a href="mailto:{link.url}">{link.text}</a>"""
-  else:
-    var text = link.url.escapeAmpersandSeq
-    var url = link.url.escapeLinkUrl
-    result = fmt"""<a href="{url}">{text}</a>"""
+    return fmt"""<a href="{link.url}">{link.text}</a>"""
+
+  if link.isEmail and link.url.find(re"\\") != -1:
+    return fmt"""&lt;{link.url.escapeBackslash}&gt;"""
+
+  if link.isEmail:
+    return fmt"""<a href="mailto:{link.url}">{link.text}</a>"""
+
+  var text = link.url.escapeAmpersandSeq
+  var url = link.url.escapeLinkUrl.escapeAmpersandChar
+
+  if link.url.contains(" "):
+    return fmt"""&lt;{url}&gt;"""
+
+  if link.url.matchLen(re"^[^:]+:") == -1:
+    return fmt"""<a href="http://{url}">{text}</a>"""
+
+  result = fmt"""<a href="{url}">{text}</a>"""
 
 proc renderInlineLink(ctx: MarkdownContext, link: Link): string =
   var refId = link.text.toLower.replace(re"\s+", " ")
@@ -1344,6 +1368,9 @@ proc renderInlineRefLink(ctx: MarkdownContext, link: RefLink): string =
       result = fmt"[{link.id}]"
 
 proc renderInlineURL(ctx: MarkdownContext, url: string): string =
+  if url.matchLen(re"^[^:]+:") == -1:
+    return fmt"""<a href="http://{escapeBackslash(url)}">{url}</a>"""
+
   result = fmt"""<a href="{escapeBackslash(url)}">{url}</a>"""
 
 proc renderInlineHTML(ctx: MarkdownContext, html: string): string =

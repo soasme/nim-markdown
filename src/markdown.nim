@@ -214,7 +214,7 @@ type
     of MarkdownTokenType.DefineFootnote: defineFootnoteVal*: DefineFootnote
     of MarkdownTokenType.HTMLBlock: htmlBlockVal*: HTMLBlock
     of MarkdownTokenType.HTMLTable: htmlTableVal*: HTMLTable
-    of MarkdownTokenType.InlineHTML: inlineHTMLVal*: HTMLBlock
+    of MarkdownTokenType.InlineHTML: inlineHTMLVal*: string
     of MarkdownTokenType.InlineLink: inlineLinkVal*: Link
     of MarkdownTokenType.InlineRefLink: inlineRefLinkVal*: RefLink
     of MarkdownTokenType.InlineNoLink: inlineNoLinkVal*: RefLink
@@ -244,6 +244,30 @@ proc initMarkdownConfig*(
 
 let blockTagAttribute = """\s*[a-zA-Z\-](?:\s*\=\s*(?:"[^"]*"|'[^']*'|[^\s'">]+))?"""
 let blockTag = r"(?!(?:" & fmt"{INLINE_TAGS.join(""|"")}" & r")\b)\w+(?!:/|[^\w\s@]*@)\b"
+let TAGNAME = r"[A-Za-z][A-Za-z0-9-]*"
+let ATTRIBUTENAME = r"[a-zA-Z_:][a-zA-Z0-9:._-]*"
+let UNQUOTEDVALUE = r"[^""'=<>`\x00-\x20]+"
+let DOUBLEQUOTEDVALUE = """"[^"]*""""
+let SINGLEQUOTEDVALUE = r"'[^']*'"
+let ATTRIBUTEVALUE = "(?:" & UNQUOTEDVALUE & "|" & SINGLEQUOTEDVALUE & "|" & DOUBLEQUOTEDVALUE & ")"
+let ATTRIBUTEVALUESPEC = r"(?:\s*=" & r"\s*" & ATTRIBUTEVALUE & r")"
+let ATTRIBUTE = r"(?:\s+" & ATTRIBUTENAME & ATTRIBUTEVALUESPEC & r"?)"
+let OPEN_TAG = r"<" & TAGNAME & ATTRIBUTE & r"*" & r"\s*/?>"
+let CLOSE_TAG = r"</" & TAGNAME & r"\s*[>]"
+let HTML_COMMENT = r"<!---->|<!--(?:-?[^>-])(?:-?[^-])*-->"
+let PROCESSING_INSTRUCTION = r"[<][?].*?[?][>]"
+let DECLARATION = r"<![A-Z]+\s+[^>]*>"
+let CDATA_SECTION = r"<!\[CDATA\[[\s\S]*?\]\]>"
+let HTML_TAG = (
+  r"(?:" &
+  OPEN_TAG & "|" &
+  CLOSE_TAG & "|" &
+  HTML_COMMENT & "|" &
+  PROCESSING_INSTRUCTION & "|" &
+  DECLARATION & "|" &
+  CDATA_SECTION &
+  & r")"
+)
 
 var blockRules = @{
   MarkdownTokenType.Heading: re"^ *(#{1,6})( +)?(?(2)([^\n]*?))( +)?(?(4)#*) *(?:\n+|$)",
@@ -304,15 +328,16 @@ var blockRules = @{
     r"^\\([\\`*{}\[\]()#+\-.!_<>~|""$%&',/:;=?@^])"
   ),
   MarkdownTokenType.InlineHTML: re(
-    r"^(" &
-    r"<!--[\s\S]*?-->" &
-    r"|<(\w+" & r"(?!:/|[^\w\s@]*@)\b" & r")((?:" & blockTagAttribute & r")*?)\s*>([\s\S]*?)<\/\2>" &
-    r"|<\w+" & r"(?!:/|[^\w\s@]*@)\b" & r"(?:" & blockTagAttribute & r")*?\s*\/?>" &
-    r"|<!\[CDATA\[[^]]+\]\]>" &
-    r"|<\/\w+\s*>" & # eg. </a>
-    r"|<\?\w+\s+[\s\S]+\s*\?>" & #eg. <?php echo a; ?>
-    r"|<![\w\s\d]+>" & #eg. <!DOCTYPE>
-    r")"
+    # r"^(" &
+    # r"<!--[\s\S]*?-->" &
+    # r"|<(\w+" & r"(?!:/|[^\w\s@]*@)\b" & r")((?:" & blockTagAttribute & r")*?)\s*>([\s\S]*?)<\/\2>" &
+    # r"|<\w+" & r"(?!:/|[^\w\s@]*@)\b" & r"(?:" & blockTagAttribute & r")*?\s*\/?>" &
+    # r"|<!\[CDATA\[[^]]+\]\]>" &
+    # r"|<\/\w+\s*>" & # eg. </a>
+    # r"|<\?\w+\s+[\s\S]+\s*\?>" & #eg. <?php echo a; ?>
+    # r"|<![\w\s\d]+>" & #eg. <!DOCTYPE>
+    # r")"
+    "^(" & HTML_TAG & ")", {RegexFlag.reIgnoreCase}
   ),
   MarkdownTokenType.InlineLink: re(
     r"^(!?\[" &
@@ -343,6 +368,8 @@ var blockRules = @{
   MarkdownTokenType.InlineStrikethrough: re"^(~~(?=\S)([\s\S]*?\S)~~)",
   MarkdownTokenType.InlineFootnote: re"^(\[\^([^\]]+)\])",
 }.newTable
+
+
 
 let blockParsingOrder = @[
   MarkdownTokenType.IndentedBlockCode,
@@ -675,16 +702,7 @@ proc genInlineLink(matches: openArray[string]): MarkdownTokenRef =
   result = MarkdownTokenRef(type: MarkdownTokenType.InlineLink, inlineLinkVal: link)
 
 proc genInlineHTML(matches: openArray[string]): MarkdownTokenRef =
-  var val: HTMLBlock
-  if matches[1] == "":
-    val.tag = ""
-    val.attributes = ""
-    val.text = matches[0].strip
-  else:
-    val.tag = matches[1].strip
-    val.attributes = matches[2].strip
-    val.text = matches[3]
-  result = MarkdownTokenRef(type: MarkdownTokenType.InlineHTML, inlineHTMLVal: val)
+  result = MarkdownTokenRef(type: MarkdownTokenType.InlineHTML, inlineHTMLVal: matches[0])
 
 proc genInlineRefLink(matches: openArray[string]): MarkdownTokenRef =
   var link: RefLink
@@ -1201,16 +1219,16 @@ proc renderBlockQuote(ctx: MarkdownContext, blockQuote: BlockQuote): string =
 proc renderListItem(ctx: MarkdownContext, listItem: ListItem): string =
   for el in listItem.blocks:
     result &= renderToken(ctx, el)
-  result = fmt"<li>{result}</li>"
+  result = fmt("<li>\n{result}</li>\n")
 
 proc renderListBlock(ctx: MarkdownContext, listBlock: ListBlock): string =
   result = ""
   for el in listBlock.blocks:
     result &= renderListItem(ctx, el.listItemVal)
   if listBlock.ordered:
-    result = fmt"<ol>{result}</ol>"
+    result = fmt("<ol>\n{result}</ol>")
   else:
-    result = fmt"<ul>{result}</ul>"
+    result = fmt("<ul>\n{result}</ul>")
 
 proc escapeInvalidHTMLTag(doc: string): string =
   doc.replacef(
@@ -1328,6 +1346,9 @@ proc renderInlineRefLink(ctx: MarkdownContext, link: RefLink): string =
 proc renderInlineURL(ctx: MarkdownContext, url: string): string =
   result = fmt"""<a href="{escapeBackslash(url)}">{url}</a>"""
 
+proc renderInlineHTML(ctx: MarkdownContext, html: string): string =
+  result = html.escapeInvalidHTMLTag
+
 proc renderInlineDoubleEmphasis(ctx: MarkdownContext, emph: DoubleEmphasis): string =
   var em = ""
   for token in emph.inlines:
@@ -1374,7 +1395,7 @@ proc renderToken*(ctx: MarkdownContext, token: MarkdownTokenRef): string =
   of MarkdownTokenType.InlineText: result = renderInlineText(ctx, token.inlineTextVal)
   of MarkdownTokenType.InlineEscape: result = renderInlineEscape(ctx, token.inlineEscapeVal)
   of MarkdownTokenType.AutoLink: result = renderAutoLink(ctx, token.autoLinkVal)
-  of MarkdownTokenType.InlineHTML: result = renderHTMLBlock(ctx, token.inlineHTMLVal)
+  of MarkdownTokenType.InlineHTML: result = renderInlineHTML(ctx, token.inlineHTMLVal)
   of MarkdownTokenType.InlineLink: result = renderInlineLink(ctx, token.inlineLinkVal)
   of MarkdownTokenType.InlineRefLink: result = renderInlineRefLink(ctx, token.inlineRefLinkVal)
   of MarkdownTokenType.InlineNoLink: result = renderInlineRefLink(ctx, token.inlineNoLinkVal)

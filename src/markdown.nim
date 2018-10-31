@@ -139,6 +139,7 @@ type
     kind: string
     num: int
     originalNum: int
+    isActive: bool
     canOpen: bool
     canClose: bool
 
@@ -834,6 +835,7 @@ proc parseDelimeter*(doc: string, start: int, size: var int, delimeterStack: var
     kind: fmt"{doc[start]}",
     num: 0,
     originalNum: 0,
+    isActive: true,
     canOpen: false,
     canClose: false,
   )
@@ -982,40 +984,28 @@ proc processEmphasis*(tokens: var seq[MarkdownTokenRef], delimeterStack: var Dou
 proc parseQuote*(doc: string, start: int, size: var int): seq[MarkdownTokenRef] = @[]
 
 proc parseBang*(doc: string, start: int, size: var int, delimeterStack: var DoublyLinkedList[Delimeter]): seq[MarkdownTokenRef] =
-  var text: string
-  if doc[start .. doc.len - 1].match(re"^!\["):
-    size += 2
-    text = "!["
-  else:
-    size += 1
-    text = "["
+  var pos: int = start
+  var token: MarkdownTokenRef
 
-  var inlineText = MarkdownTokenRef(type: MarkdownTokenType.InlineText, inlineTextVal: text)
-  result = @[inlineText]
-  var delimeter = Delimeter(
-    token: inlineText,
-    kind: text,
-    num: text.len,
-    originalNum: 1,
-    canOpen: true,
-    canClose: false,
-  )
-  delimeterStack.append(delimeter)
+  token = findToken(doc, pos, MarkdownTokenType.InlineLink)
+  if token != nil:
+    size = pos - start
+    return @[token]
 
-proc parseOpenBracket*(doc: string, start: int, size: var int, delimeterStack: var DoublyLinkedList[Delimeter]): seq[MarkdownTokenRef] =
-  size += 1
-  var token = MarkdownTokenRef(type: MarkdownTokenType.InlineText, inlineTextVal: "[")
-  result = @[token]
-  var delimeter = Delimeter(
-    token: token,
-    kind: "[",
-    num: 1,
-    originalNum: 1,
-    canOpen: true,
-    canClose: false,
-  )
-  delimeterStack.append(delimeter)
-  
+  size = -1
+  result = @[]
+
+proc parseOpenBracket*(doc: string, start: int, size: var int): seq[MarkdownTokenRef] =
+  var pos: int = start
+  var token: MarkdownTokenRef
+
+  token = findToken(doc, pos, MarkdownTokenType.InlineLink)
+  if token != nil:
+    size = pos - start
+    return @[token]
+
+  size = -1
+  result = @[]
 
 proc parseCloseBracket*(doc: string, start: int, size: var int): seq[MarkdownTokenRef] = @[]
 
@@ -1070,6 +1060,18 @@ proc parseLessThan(doc: string, start: int, size: var int): seq[MarkdownTokenRef
 
   result = parseHTMLTag(doc, start, size)
 
+proc parseHardLineBreak(doc: string, start: int, size: var int): seq[MarkdownTokenRef] =
+  size = doc[start .. doc.len - 1].matchLen(re"^ {2,}\n *")
+  if size != -1:
+    return @[MarkdownTokenRef(type: MarkdownTokenType.InlineBreak, inlineBreakVal: "")]
+
+  size = doc[start .. doc.len - 1].matchLen(re" \n *")
+  if size != -1:
+    return @[MarkdownTokenRef(type: MarkdownTokenType.InlineText, inlineTextVal: "\n")]
+
+  result = @[]
+  
+
 proc parseInlines*(doc: string): seq[MarkdownTokenRef] =
   var pos = 0
   var delimeterStack: DoublyLinkedList[Delimeter]
@@ -1089,11 +1091,12 @@ proc parseInlines*(doc: string): seq[MarkdownTokenRef] =
     of '_': tokens = parseDelimeter(doc, index, size, delimeterStack)
     of '\'': tokens = parseQuote(doc, index, size)
     of '"': tokens = parseQuote(doc, index, size)
-    of '[': tokens = parseOpenBracket(doc, index, size, delimeterStack)
+    of '[': tokens = parseOpenBracket(doc, index, size)
     of ']': tokens = parseCloseBracket(doc, index, size)
     of '!': tokens = parseBang(doc, index, size, delimeterStack)
     of '&': tokens = parseHTMLEntity(doc, index, size)
     of '<': tokens = parseLessThan(doc, index, size)
+    of ' ': tokens = parseHardLineBreak(doc, index, size)
     else: tokens = parseString(doc, index, size)
 
     if size == -1:

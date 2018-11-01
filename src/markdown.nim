@@ -280,6 +280,10 @@ let INLINE_LINK = r"!?\[(" & LINK_LABEL & r")\]\(" & LINK_HREF & r"(?:\s+(" & LI
 let INLINE_REFLINK = r"!?\[(" & LINK_LABEL & r")\]\[(?!\s*\])((?:\\[\[\]]?|[^\[\]\\])+)\]"
 let INLINE_NOLINK = r"!?\[(?!\s*\])((?:\[[^\[\]]*\]|\\[\[\]]|[^\[\]])*)\](?:\[\])?"
 
+let BULLET = r"(?:[*+-]|\d+\.)"
+let HR = r"\n+(?=\1?(?:(?:- *){3,}|(?:_ *){3,}|(?:\* *){3,})(?:\\n+|$))"
+let LIST = r"( *)(" & BULLET & r") [\s\S]+?(?:hr|def|\n{2,}(?! )(?!\1" & BULLET & r" )\n*|\s*$)"
+
 var blockRules = @{
   MarkdownTokenType.Heading: re"^ *(#{1,6})( +)?(?(2)([^\n]*?))( +)?(?(4)#*) *(?:\n+|$)",
   MarkdownTokenType.SetextHeading: re"^(((?:(?:[^\n]+)\n)+) {0,3}(=|-)+ *(?:\n+|$))",

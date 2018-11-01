@@ -1032,9 +1032,6 @@ proc parseOpenBracket*(doc: string, start: int, size: var int): seq[MarkdownToke
   size = -1
   result = @[]
 
-proc parseCloseBracket*(doc: string, start: int, size: var int): seq[MarkdownTokenRef] =
-  @[]
-
 proc parseHTMLEntity*(doc: string, start: int, size: var int): seq[MarkdownTokenRef] =
   let regex = re(r"^(" & ENTITY & ")", {RegexFlag.reIgnoreCase})
   var matches: array[1, string]
@@ -1129,7 +1126,6 @@ proc parseInlines*(ctx: MarkdownContext, doc: string): seq[MarkdownTokenRef] =
     of '"': tokens = parseQuote(doc, index, size)
     of '[': tokens = parseOpenBracket(doc, index, size)
     of '!': tokens = parseBang(doc, index, size, delimeterStack)
-    of ']': tokens = parseCloseBracket(doc, index, size, delimeterStack)
     of '&': tokens = parseHTMLEntity(doc, index, size)
     of '<': tokens = parseLessThan(doc, index, size)
     of ' ': tokens = parseHardLineBreak(doc, index, size)
@@ -1419,8 +1415,8 @@ proc renderToken*(ctx: MarkdownContext, token: MarkdownTokenRef): string =
   of MarkdownTokenType.IndentedBlockCode: result = renderIndentedBlockCode(token.codeVal)
   of MarkdownTokenType.FencingBlockCode: result = renderFencingBlockCode(token.fencingBlockCodeVal)
   of MarkdownTokenType.Paragraph:
-    for token in parseInlines(ctx, token.paragraphVal.doc):
-      token.paragraphVal.inlines.add(token)
+    for inlineToken in parseInlines(ctx, token.paragraphVal.doc):
+      token.paragraphVal.inlines.add(inlineToken)
     result = renderParagraph(ctx, token.paragraphVal)
   of MarkdownTokenType.BlockQuote: result = renderBlockQuote(ctx, token.blockQuoteVal)
   of MarkdownTokenType.ListBlock: result = renderListBlock(ctx, token.listBlockVal)

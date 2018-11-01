@@ -99,6 +99,7 @@ type
     text: string
 
   Paragraph* = object ## The type for a paragraph
+    doc: string
     inlines: seq[MarkdownTokenRef]
 
   Link* = object ## The type for a link in full format.
@@ -422,7 +423,7 @@ let inlineLinkParsingOrder = @[
 ]
 
 proc findToken*(doc: string, start: var int, ruleType: MarkdownTokenType): MarkdownTokenRef;
-proc parseInlines*(doc: string): seq[MarkdownTokenRef];
+proc parseInlines*(ctx: MarkdownContext, doc: string): seq[MarkdownTokenRef];
 proc renderToken*(ctx: MarkdownContext, token: MarkdownTokenRef): string;
 
 proc preprocessing*(doc: string): string =
@@ -563,8 +564,8 @@ proc genFencingBlockCode(matches: openArray[string]): MarkdownTokenRef =
 
 proc genParagraph(matches: openArray[string]): MarkdownTokenRef =
   var doc = matches[0].strip(chars={'\n', ' '}).replace(re"\n *", "\n")
-  var tokens = parseInlines(doc) # toSeq(parseTokens(doc, inlineParsingOrder))
-  var val = Paragraph(inlines: tokens)
+  var tokens: seq[MarkdownTokenRef] = @[]
+  var val = Paragraph(inlines: tokens, doc: doc)
   result = MarkdownTokenRef(type: MarkdownTokenType.Paragraph, paragraphVal: val)
 
 proc genText(matches: openArray[string]): MarkdownTokenRef =
@@ -1031,6 +1032,9 @@ proc parseOpenBracket*(doc: string, start: int, size: var int): seq[MarkdownToke
   size = -1
   result = @[]
 
+proc parseCloseBracket*(doc: string, start: int, size: var int): seq[MarkdownTokenRef] =
+  @[]
+
 proc parseHTMLEntity*(doc: string, start: int, size: var int): seq[MarkdownTokenRef] =
   let regex = re(r"^(" & ENTITY & ")", {RegexFlag.reIgnoreCase})
   var matches: array[1, string]
@@ -1104,7 +1108,7 @@ proc parseHardLineBreak(doc: string, start: int, size: var int): seq[MarkdownTok
   result = @[]
   
 
-proc parseInlines*(doc: string): seq[MarkdownTokenRef] =
+proc parseInlines*(ctx: MarkdownContext, doc: string): seq[MarkdownTokenRef] =
   var pos = 0
   var delimeterStack: DoublyLinkedList[Delimeter]
 
@@ -1125,6 +1129,7 @@ proc parseInlines*(doc: string): seq[MarkdownTokenRef] =
     of '"': tokens = parseQuote(doc, index, size)
     of '[': tokens = parseOpenBracket(doc, index, size)
     of '!': tokens = parseBang(doc, index, size, delimeterStack)
+    of ']': tokens = parseCloseBracket(doc, index, size, delimeterStack)
     of '&': tokens = parseHTMLEntity(doc, index, size)
     of '<': tokens = parseLessThan(doc, index, size)
     of ' ': tokens = parseHardLineBreak(doc, index, size)
@@ -1413,7 +1418,10 @@ proc renderToken*(ctx: MarkdownContext, token: MarkdownTokenRef): string =
   of MarkdownTokenType.Text: result = renderText(ctx, token.textVal)
   of MarkdownTokenType.IndentedBlockCode: result = renderIndentedBlockCode(token.codeVal)
   of MarkdownTokenType.FencingBlockCode: result = renderFencingBlockCode(token.fencingBlockCodeVal)
-  of MarkdownTokenType.Paragraph: result = renderParagraph(ctx, token.paragraphVal)
+  of MarkdownTokenType.Paragraph:
+    for token in parseInlines(ctx, token.paragraphVal.doc):
+      token.paragraphVal.inlines.add(token)
+    result = renderParagraph(ctx, token.paragraphVal)
   of MarkdownTokenType.BlockQuote: result = renderBlockQuote(ctx, token.blockQuoteVal)
   of MarkdownTokenType.ListBlock: result = renderListBlock(ctx, token.listBlockVal)
   of MarkdownTokenType.ListItem: result = renderListItem(ctx, token.listItemVal)

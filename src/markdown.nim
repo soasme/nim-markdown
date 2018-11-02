@@ -161,7 +161,7 @@ type
     config: MarkdownConfig
 
   MarkdownTokenType* {.pure.} = enum # All token types
-    Heading,
+    ATXHeading,
     SetextHeading,
     ThematicBreak,
     IndentedBlockCode,
@@ -197,7 +197,7 @@ type
   MarkdownToken* = object
     len: int
     case type*: MarkdownTokenType
-    of MarkdownTokenType.Heading: headingVal*: Heading
+    of MarkdownTokenType.ATXHeading: atxHeadingVal*: Heading
     of MarkdownTokenType.SetextHeading: setextHeadingVal*: Heading
     of MarkdownTokenType.ThematicBreak: thematicBreakVal*: string
     of MarkdownTokenType.BlockQuote: blockQuoteVal*: BlockQuote
@@ -301,8 +301,10 @@ let RE_PARAGRAPH = (
   r" {0,3}>" & "|" & r"<\/?(?:" & TAG & r")(?: +|\n|\/?>)|<(?:script|pre|style|!--))[^\n]+)*"
 )
 
+let RE_ATX_HEADING = " *(#{1,6})( +)?(?(2)([^\n]*?))( +)?(?(4)#*) *(?:\n+|$)"
+
 var blockRules = @{
-  MarkdownTokenType.Heading: re"^ *(#{1,6})( +)?(?(2)([^\n]*?))( +)?(?(4)#*) *(?:\n+|$)",
+  MarkdownTokenType.ATXHeading: re("^" & RE_ATX_HEADING),
   MarkdownTokenType.SetextHeading: re"^(((?:(?:[^\n]+)\n)+) {0,3}(=|-)+ *(?:\n+|$))",
   MarkdownTokenType.ThematicBreak: re"^ {0,3}([-*_])(?: *\1){2,} *(?:\n+|$)",
   MarkdownTokenType.IndentedBlockCode: re"^(( {4}[^\n]+\n*)+)",
@@ -312,7 +314,8 @@ var blockRules = @{
     r"^(((?:[^\n]+\n?" &
     r"(?!" &
     r" {0,3}[-*_](?: *[-*_]){2,} *(?:\n+|$)|" & # ThematicBreak
-    r"( *>[^\n]+(\n[^\n]+)*\n*)+" & # blockquote
+    r"( *>[^\n]+(\n[^\n]+)*\n*)+|" & # blockquote
+    r" {0,3}(?:#{1,6}) +(?:[^\n]+?) *#* *(?:\n+|$)" & # atx heading
     r"))+)\n*)"
   ),
   MarkdownTokenType.ListBlock: re(
@@ -383,7 +386,7 @@ let blockParsingOrder = @[
   MarkdownTokenType.IndentedBlockCode,
   MarkdownTokenType.FencingBlockCode,
   MarkdownTokenType.BlockQuote,
-  MarkdownTokenType.Heading,
+  MarkdownTokenType.ATXHeading,
   MarkdownTokenType.SetextHeading,
   MarkdownTokenType.ThematicBreak,
   MarkdownTokenType.ListBlock,
@@ -399,7 +402,7 @@ let listParsingOrder = @[
   MarkdownTokenType.Newline,
   MarkdownTokenType.IndentedBlockCode,
   MarkdownTokenType.FencingBlockCode,
-  MarkdownTokenType.Heading,
+  MarkdownTokenType.ATXHeading,
   MarkdownTokenType.ThematicBreak,
   MarkdownTokenType.BlockQuote,
   MarkdownTokenType.ListBlock,
@@ -534,14 +537,14 @@ proc genNewlineToken(matches: openArray[string]): MarkdownTokenRef =
   if matches[0].len > 1:
     result = MarkdownTokenRef(type: MarkdownTokenType.Newline, newlineVal: matches[0])
 
-proc genHeading(matches: openArray[string], ): MarkdownTokenRef =
+proc genATXHeading(matches: openArray[string], ): MarkdownTokenRef =
   var val: Heading
   val.level = matches[0].len
   if matches[2] =~ re"#+": # ATX headings can be empty. Ignore closing sequence if captured.
     val.inlines = @[]
   else:
     val.inlines = toSeq(parseTokens(matches[2], inlineParsingOrder))
-  result = MarkdownTokenRef(type: MarkdownTokenType.Heading, headingVal: val) 
+  result = MarkdownTokenRef(type: MarkdownTokenType.ATXHeading, atxHeadingVal: val) 
 
 proc genSetextHeading(matches: openArray[string]): MarkdownTokenRef =
   var val: Heading
@@ -1165,7 +1168,7 @@ proc findToken(doc: string, start: var int, ruleType: MarkdownTokenType): Markdo
 
   case ruleType
   of MarkdownTokenType.Newline: result = genNewlineToken(matches)
-  of MarkdownTokenType.Heading: result = genHeading(matches)
+  of MarkdownTokenType.ATXHeading: result = genATXHeading(matches)
   of MarkdownTokenType.SetextHeading: result = genSetextHeading(matches)
   of MarkdownTokenType.ThematicBreak: result = genThematicBreakToken(matches)
   of MarkdownTokenType.BlockQuote: result = genBlockQuoteToken(matches)
@@ -1420,7 +1423,7 @@ proc renderToken*(ctx: MarkdownContext, token: MarkdownTokenRef): string =
   ## Render token.
   ## This is a simple dispatcher function.
   case token.type
-  of MarkdownTokenType.Heading: result = renderHeading(ctx, token.headingVal)
+  of MarkdownTokenType.ATXHeading: result = renderHeading(ctx, token.atxHeadingVal)
   of MarkdownTokenType.SetextHeading: result = renderHeading(ctx, token.setextHeadingVal)
   of MarkdownTokenType.ThematicBreak: result = renderThematicBreak()
   of MarkdownTokenType.Text: result = renderText(ctx, token.textVal)

@@ -281,9 +281,9 @@ let INLINE_REFLINK = r"!?\[(" & LINK_LABEL & r")\]\[(?!\s*\])((?:\\[\[\]]?|[^\[\
 let INLINE_NOLINK = r"!?\[(?!\s*\])((?:\[[^\[\]]*\]|\\[\[\]]|[^\[\]])*)\](?:\[\])?"
 
 let BULLET = r"(?:[*+-]|\d+\.)"
-let HR = r"\n+(?=\1?(?:(?:- *){3,}|(?:_ *){3,}|(?:\* *){3,})(?:\\n+|$))"
+let HR = r" {0,3}([-*_])(?: *\1){2,} *(?:\n+|$)"
 let DEF = r" {0,3}\[(" & LINK_LABEL & r")\]: *\n? *<?([^\s>]+)>?(?:(?: +\n? *| *\n *)(" & LINK_TITLE & r"))? *(?:\n+|$)"
-let LIST = r"( *)(" & BULLET & r") [\s\S]+?(?:" & HR & r"|\n+(?=" & DEF & r")|\n{2,}(?! )(?!\1" & BULLET & r" )\n*|\s*$)"
+let LIST = r"( *)(" & BULLET & r") [\s\S]+?(?=" & HR.replace(r"\1", r"\4") & r"|\n+(?=" & DEF & r")|\n{2,}(?! )(?!\2" & BULLET & r" )\n*|\s*$)"
 
 let TAG = (
   "address|article|aside|base|basefont|blockquote|body|caption" &
@@ -315,8 +315,7 @@ var blockRules = @{
     r"(?!" &
     r" {0,3}[-*_](?: *[-*_]){2,} *(?:\n+|$)|" & # ThematicBreak
     r"( *>[^\n]+(\n[^\n]+)*\n*)+|" & # blockquote
-    r" {0,3}(?:#{1,6}) +(?:[^\n]+?) *#* *(?:\n+|$)|" & # atx heading
-    r" {0,3}(?:_{3,}|-{3,}|\*{3,}) *(?:\n+|$)" & # hr
+    r" {0,3}(?:#{1,6}) +(?:[^\n]+?) *#* *(?:\n+|$)" & # atx heading
     r"))+)\n*)"
   ),
   MarkdownTokenType.ListBlock: re(
@@ -387,9 +386,9 @@ let blockParsingOrder = @[
   MarkdownTokenType.IndentedBlockCode,
   MarkdownTokenType.FencingBlockCode,
   MarkdownTokenType.BlockQuote,
+  MarkdownTokenType.ThematicBreak,
   MarkdownTokenType.ATXHeading,
   MarkdownTokenType.SetextHeading,
-  MarkdownTokenType.ThematicBreak,
   MarkdownTokenType.ListBlock,
   MarkdownTokenType.DefineLink,
   MarkdownTokenType.DefineFootnote,
@@ -535,8 +534,7 @@ iterator parseTokens*(doc: string, typeset: seq[MarkdownTokenType]): MarkdownTok
       raise newException(MarkdownError, fmt"unknown block rule at position {n}.")
 
 proc genNewlineToken(matches: openArray[string]): MarkdownTokenRef =
-  if matches[0].len > 1:
-    result = MarkdownTokenRef(type: MarkdownTokenType.Newline, newlineVal: matches[0])
+  result = MarkdownTokenRef(type: MarkdownTokenType.Newline, newlineVal: matches[0])
 
 proc genATXHeading(matches: openArray[string], ): MarkdownTokenRef =
   var val: Heading
@@ -1249,7 +1247,7 @@ proc renderBlockQuote(ctx: MarkdownContext, blockQuote: BlockQuote): string =
 proc renderListItem(ctx: MarkdownContext, listItem: ListItem): string =
   for el in listItem.blocks:
     result &= renderToken(ctx, el)
-  result = fmt("<li>\n{result}</li>\n")
+  result = fmt("<li>{result}</li>\n")
 
 proc renderListBlock(ctx: MarkdownContext, listBlock: ListBlock): string =
   result = ""

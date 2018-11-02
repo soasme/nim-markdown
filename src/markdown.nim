@@ -303,7 +303,12 @@ let RE_PARAGRAPH = (
 
 let RE_ATX_HEADING = r" {0,3}(#{1,6})( +)?(?(2)([^\n]*?))( +)?(?(4)#*) *(?:\n+|$)"
 
-let RE_BLOCKQUOTE = r"(( *>[^\n]*(\n[^\n]+)*\n*)+)(?=" & HR.replace(r"\1", r"\4") & r")"
+let RE_BLOCKQUOTE = (
+  r"(( *>[^\n]*(\n[^\n]+)*\n*)+)(?=" &
+  HR.replace(r"\1", r"\4") & "|" &
+  r"\n{2,}|$" &
+  r")"
+)
 
 var blockRules = @{
   MarkdownTokenType.ATXHeading: re("^" & RE_ATX_HEADING),

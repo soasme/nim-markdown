@@ -301,7 +301,9 @@ let RE_PARAGRAPH = (
   r" {0,3}>" & "|" & r"<\/?(?:" & TAG & r")(?: +|\n|\/?>)|<(?:script|pre|style|!--))[^\n]+)*"
 )
 
-let RE_ATX_HEADING = " {0,3}(#{1,6})( +)?(?(2)([^\n]*?))( +)?(?(4)#*) *(?:\n+|$)"
+let RE_ATX_HEADING = r" {0,3}(#{1,6})( +)?(?(2)([^\n]*?))( +)?(?(4)#*) *(?:\n+|$)"
+
+let RE_BLOCKQUOTE = r"(( *>[^\n]*(\n[^\n]+)*\n*)+)(?=" & HR.replace(r"\1", r"\4") & r")"
 
 var blockRules = @{
   MarkdownTokenType.ATXHeading: re("^" & RE_ATX_HEADING),
@@ -309,7 +311,7 @@ var blockRules = @{
   MarkdownTokenType.ThematicBreak: re"^ {0,3}([-*_])(?:[ \t]*\1){2,}[ \t]*(?:\n+|$)",
   MarkdownTokenType.IndentedBlockCode: re"^(( {4}[^\n]+\n*)+)",
   MarkdownTokenType.FencingBlockCode: re"^( *(`{3,}|~{3}) *([^`\s]+)? *\n([\s\S]+?)\s*\2 *(\n+|$))",
-  MarkdownTokenType.BlockQuote: re"^(( *>[^\n]*(\n[^\n]+)*\n*)+)",
+  MarkdownTokenType.BlockQuote: re("^" & RE_BLOCKQUOTE),
   MarkdownTokenType.Paragraph: re(
     r"^(((?:[^\n]+\n?" &
     r"(?!" &
@@ -1239,9 +1241,10 @@ proc renderThematicBreak(): string =
   result = "<hr />"
 
 proc renderBlockQuote(ctx: MarkdownContext, blockQuote: BlockQuote): string =
-  result = "<blockquote>"
+  result = "<blockquote>\n"
   for token in blockQuote.blocks:
     result &= renderToken(ctx, token)
+    result &= "\n"
   result &= "</blockquote>"
 
 proc renderListItem(ctx: MarkdownContext, listItem: ListItem): string =

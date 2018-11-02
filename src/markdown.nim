@@ -301,7 +301,7 @@ let RE_PARAGRAPH = (
   r" {0,3}>" & "|" & r"<\/?(?:" & TAG & r")(?: +|\n|\/?>)|<(?:script|pre|style|!--))[^\n]+)*"
 )
 
-let RE_ATX_HEADING = " *(#{1,6})( +)?(?(2)([^\n]*?))( +)?(?(4)#*) *(?:\n+|$)"
+let RE_ATX_HEADING = " {0,3}(#{1,6})( +)?(?(2)([^\n]*?))( +)?(?(4)#*) *(?:\n+|$)"
 
 var blockRules = @{
   MarkdownTokenType.ATXHeading: re("^" & RE_ATX_HEADING),
@@ -315,7 +315,8 @@ var blockRules = @{
     r"(?!" &
     r" {0,3}[-*_](?: *[-*_]){2,} *(?:\n+|$)|" & # ThematicBreak
     r"( *>[^\n]+(\n[^\n]+)*\n*)+|" & # blockquote
-    r" {0,3}(?:#{1,6}) +(?:[^\n]+?) *#* *(?:\n+|$)" & # atx heading
+    r" {0,3}(?:#{1,6}) +(?:[^\n]+?) *#* *(?:\n+|$)|" & # atx heading
+    r" {0,3}(?:_{3,}|-{3,}|\*{3,}) *(?:\n+|$)" & # hr
     r"))+)\n*)"
   ),
   MarkdownTokenType.ListBlock: re(

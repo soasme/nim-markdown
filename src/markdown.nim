@@ -282,7 +282,24 @@ let INLINE_NOLINK = r"!?\[(?!\s*\])((?:\[[^\[\]]*\]|\\[\[\]]|[^\[\]])*)\](?:\[\]
 
 let BULLET = r"(?:[*+-]|\d+\.)"
 let HR = r"\n+(?=\1?(?:(?:- *){3,}|(?:_ *){3,}|(?:\* *){3,})(?:\\n+|$))"
-let LIST = r"( *)(" & BULLET & r") [\s\S]+?(?:hr|def|\n{2,}(?! )(?!\1" & BULLET & r" )\n*|\s*$)"
+let DEF = r" {0,3}\[(" & LINK_LABEL & r")\]: *\n? *<?([^\s>]+)>?(?:(?: +\n? *| *\n *)(" & LINK_TITLE & r"))? *(?:\n+|$)"
+let LIST = r"( *)(" & BULLET & r") [\s\S]+?(?:" & HR & r"|\n+(?=" & DEF & r")|\n{2,}(?! )(?!\1" & BULLET & r" )\n*|\s*$)"
+
+let TAG = (
+  "address|article|aside|base|basefont|blockquote|body|caption" &
+  "|center|col|colgroup|dd|details|dialog|dir|div|dl|dt|fieldset|figcaption" &
+  "|figure|footer|form|frame|frameset|h[1-6]|head|header|hr|html|iframe" &
+  "|legend|li|link|main|menu|menuitem|meta|nav|noframes|ol|optgroup|option" &
+  "|p|param|section|source|summary|table|tbody|td|tfoot|th|thead|title|tr" &
+  "track|ul"
+)
+let RE_HEADING = r"^ *(#{1,6}) *([^\n]+?) *(?:#+ *)?(?:\n+|$)"
+let RE_LHEADING = r"^([^\n]+)\n *(=|-){2,} *(?:\n+|$)"
+let RE_PARAGRAPH = (
+  r"[^\n]+(?:\n(?!" &
+  HR & r"|" & RE_HEADING & r"|" & RE_LHEADING & "|" &
+  r" {0,3}>" & "|" & r"<\/?(?:" & TAG & r")(?: +|\n|\/?>)|<(?:script|pre|style|!--))[^\n]+)*"
+)
 
 var blockRules = @{
   MarkdownTokenType.Heading: re"^ *(#{1,6})( +)?(?(2)([^\n]*?))( +)?(?(4)#*) *(?:\n+|$)",
@@ -299,16 +316,7 @@ var blockRules = @{
     r"))+)\n*)"
   ),
   MarkdownTokenType.ListBlock: re(
-    r"^(" & # group 0 is itself.
-    r"( *)(?=[*+-]|\d+\.)" & # set group 1 to indent.
-    r"(([*+-])?(?:\d+\.)?) " & # The leading of the indent is list mark `* `, `- `, `+ `, and `1. `.
-    r"[\s\S]+?" & # first list item content (optional).
-    r"(?:" & # support below block prepending the list block (non-capturing).
-    r"\n+(?=\1?(?:[-*_] *){3,}(?:\n+|$))" & # ThematicBreak
-    r"|\n+(?=\1(?(3)\d+\.|[*+-]) )" & # mix using 1. and */+/-.
-    r"|\n{2,}(?! )(?!\1(?:[*+-]|\d+\.) )\n*" &
-    r"|\s*$" &
-    r"))"
+    r"^(" & LIST & ")"
   ),
   MarkdownTokenType.ListItem: re(
     r"^(( *)(?:[*+-]|\d+\.) [^\n]*" &

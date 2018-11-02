@@ -333,7 +333,7 @@ var blockRules = @{
     r"(?:\n(?!\2(?:[*+-]|\d+\.) )[^\n]*)*)",
     {RegexFlag.reMultiLine}
   ),
-  MarkdownTokenType.DefineLink: re"^( *\[([^^\]]+)\]: *<?([^\s>]+)>?(?: +[\""(]([^\n]+)[\"")])? *(?:\n+|$))",
+  MarkdownTokenType.DefineLink: re"^( {0,3}\[([^^\]]+)\]: *\n? *<?([^\s>]+)>?(?:(?: *\n? +)[\""'(]([^\n]+)[\""')])? *(?:\n+|$))",
   MarkdownTokenType.DefineFootnote: re(
     r"^(\[\^([^\]]+)\]: *(" &
     r"[^\n]*(?:\n+|$)" &
@@ -390,6 +390,8 @@ var blockRules = @{
 
 
 let blockParsingOrder = @[
+  MarkdownTokenType.DefineLink,
+  MarkdownTokenType.DefineFootnote,
   MarkdownTokenType.IndentedBlockCode,
   MarkdownTokenType.FencingBlockCode,
   MarkdownTokenType.BlockQuote,
@@ -397,8 +399,7 @@ let blockParsingOrder = @[
   MarkdownTokenType.ATXHeading,
   MarkdownTokenType.ListBlock,
   MarkdownTokenType.SetextHeading,
-  MarkdownTokenType.DefineLink,
-  MarkdownTokenType.DefineFootnote,
+  
   MarkdownTokenType.HTMLBlock,
   MarkdownTokenType.HTMLTable,
   MarkdownTokenType.Paragraph,

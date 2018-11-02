@@ -281,9 +281,9 @@ let INLINE_REFLINK = r"!?\[(" & LINK_LABEL & r")\]\[(?!\s*\])((?:\\[\[\]]?|[^\[\
 let INLINE_NOLINK = r"!?\[(?!\s*\])((?:\[[^\[\]]*\]|\\[\[\]]|[^\[\]])*)\](?:\[\])?"
 
 let BULLET = r"(?:[*+-]|\d+\.)"
-let HR = r" {0,3}([-*_])(?: *\1){2,} *(?:\n+|$)"
+let HR = r" {0,3}([-*_])(?:[ \t]*\1){2,}[ \t]*(?:\n+|$)"
 let DEF = r" {0,3}\[(" & LINK_LABEL & r")\]: *\n? *<?([^\s>]+)>?(?:(?: +\n? *| *\n *)(" & LINK_TITLE & r"))? *(?:\n+|$)"
-let LIST = r"( *)(" & BULLET & r") [\s\S]+?(?=" & HR.replace(r"\1", r"\4") & r"|\n+(?=" & DEF & r")|\n{2,}(?! )(?!\2" & BULLET & r" )\n*|\s*$)"
+let LIST = r"( *)(" & BULLET & r") [\s\S]+?(?=\n+" & HR.replace(r"\1", r"\4") & r"|\n+(?=" & DEF & r")|\n{2,}(?! )(?!\2" & BULLET & r" )\n*|\s*$)"
 
 let TAG = (
   "address|article|aside|base|basefont|blockquote|body|caption" &
@@ -306,7 +306,7 @@ let RE_ATX_HEADING = " {0,3}(#{1,6})( +)?(?(2)([^\n]*?))( +)?(?(4)#*) *(?:\n+|$)
 var blockRules = @{
   MarkdownTokenType.ATXHeading: re("^" & RE_ATX_HEADING),
   MarkdownTokenType.SetextHeading: re"^(((?:(?:[^\n]+)\n)+) {0,3}(=|-)+ *(?:\n+|$))",
-  MarkdownTokenType.ThematicBreak: re"^ {0,3}([-*_])(?: *\1){2,} *(?:\n+|$)",
+  MarkdownTokenType.ThematicBreak: re"^ {0,3}([-*_])(?:[ \t]*\1){2,}[ \t]*(?:\n+|$)",
   MarkdownTokenType.IndentedBlockCode: re"^(( {4}[^\n]+\n*)+)",
   MarkdownTokenType.FencingBlockCode: re"^( *(`{3,}|~{3}) *([^`\s]+)? *\n([\s\S]+?)\s*\2 *(\n+|$))",
   MarkdownTokenType.BlockQuote: re"^(( *>[^\n]*(\n[^\n]+)*\n*)+)",

@@ -417,14 +417,27 @@ let blockParsingOrder = @[
 
 let listParsingOrder = @[
   MarkdownTokenType.Newline,
-  MarkdownTokenType.IndentedBlockCode,
+  # MarkdownTokenType.IndentedBlockCode,
   MarkdownTokenType.FencingBlockCode,
-  MarkdownTokenType.ATXHeading,
-  MarkdownTokenType.ThematicBreak,
-  MarkdownTokenType.BlockQuote,
+  # MarkdownTokenType.ATXHeading,
+  # MarkdownTokenType.ThematicBreak,
+  # MarkdownTokenType.BlockQuote,
   MarkdownTokenType.ListBlock,
   MarkdownTokenType.HTMLBlock,
-  MarkdownTokenType.Text,
+  MarkdownTokenType.InlineEscape,
+  MarkdownTokenType.InlineHTML,
+  MarkdownTokenType.InlineURL,
+  MarkdownTokenType.InlineLink,
+  MarkdownTokenType.InlineFootnote,
+  MarkdownTokenType.InlineRefLink,
+  MarkdownTokenType.InlineNoLink,
+  MarkdownTokenType.InlineDoubleEmphasis,
+  MarkdownTokenType.InlineEmphasis,
+  MarkdownTokenType.InlineCode,
+  MarkdownTokenType.InlineBreak,
+  MarkdownTokenType.InlineStrikethrough,
+  MarkdownTokenType.AutoLink,
+  MarkdownTokenType.InlineText,
 ]
 
 let inlineParsingOrder = @[
@@ -1109,6 +1122,11 @@ proc parseString*(doc: string, start: int, size: var int): seq[MarkdownTokenRef]
   var token: MarkdownTokenRef
 
   token = findToken(doc, pos, MarkdownTokenType.InlineURL)
+  if token != nil:
+    size = pos - start
+    return @[token]
+
+  token = findToken(doc, pos, MarkdownTokenType.InlineStrikethrough)
   if token != nil:
     size = pos - start
     return @[token]

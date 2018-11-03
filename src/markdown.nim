@@ -338,8 +338,8 @@ var blockRules = @{
     r"^(" & LIST & ")"
   ),
   MarkdownTokenType.ListItem: re(
-    r"^(( *)(?:[*+-]|\d+\.) [^\n]*" &
-    r"(?:\n(?!\2(?:[*+-]|\d+\.) )[^\n]*)*)",
+    r"^( *(?:[*+-]|\d+\.) [^\n]*" &
+    r"(?:\n(?! *(?:[*+-]|\d+\.) )[^\n]*)*)",
     {RegexFlag.reMultiLine}
   ),
   MarkdownTokenType.DefineLink: re"^( {0,3}\[([^^\]]+)\]: *\n? *<?([^\s>]+)>?(?:(?: *\n? +)[\""'(]([^\n]+)[\""')])? *(?:\n+|$))",
@@ -738,8 +738,8 @@ proc genInlineLink(matches: openArray[string]): MarkdownTokenRef =
   link.isEmail = false
   link.isImage = matches[0][0] == '!'
   link.text = matches[1]
-  link.url = matches[2]
-  link.title = matches[3]
+  link.url = matches[2].replacef(re"<([^>]+)>", "$1")
+  link.title = matches[3].replacef(re"(['""])([^'""]+)\1", "$2")
   result = MarkdownTokenRef(type: MarkdownTokenType.InlineLink, inlineLinkVal: link)
 
 proc genInlineHTML(matches: openArray[string]): MarkdownTokenRef =
@@ -1057,6 +1057,11 @@ proc parseBang*(doc: string, start: int, size: var int, delimeterStack: var Doub
 proc parseOpenBracket*(doc: string, start: int, size: var int): seq[MarkdownTokenRef] =
   var pos: int = start
   var token: MarkdownTokenRef
+
+  token = findToken(doc, pos, MarkdownTokenType.InlineFootnote)
+  if token != nil:
+    size = pos - start
+    return @[token]
 
   token = findToken(doc, pos, MarkdownTokenType.InlineRefLink)
   if token != nil:

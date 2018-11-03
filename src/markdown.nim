@@ -283,7 +283,15 @@ let INLINE_NOLINK = r"!?\[(?!\s*\])((?:\[[^\[\]]*\]|\\[\[\]]|[^\[\]])*)\](?:\[\]
 let BULLET = r"(?:[*+-]|\d+\.)"
 let HR = r" {0,3}([-*_])(?:[ \t]*\1){2,}[ \t]*(?:\n+|$)"
 let DEF = r" {0,3}\[(" & LINK_LABEL & r")\]: *\n? *<?([^\s>]+)>?(?:(?: +\n? *| *\n *)(" & LINK_TITLE & r"))? *(?:\n+|$)"
-let LIST = r"( *)(" & BULLET & r") [\s\S]+?(?=\n+" & HR.replace(r"\1", r"\4") & r"|\n+(?=" & DEF & r")|\n{2,}(?! )(?!\2" & BULLET & r" )\n*|\s*$)"
+let LIST = (
+  r"( *)(" & BULLET & r") [\s\S]+?(?=\n+" &
+  HR.replace(r"\1", r"\4") &
+  r"|\n+(?=" &
+  DEF &
+  r")|\n{2,}(?! )(?!\2" &
+  BULLET &
+  r" )\n*|\s*$)"
+)
 
 let TAG = (
   "address|article|aside|base|basefont|blockquote|body|caption" &
@@ -322,7 +330,8 @@ var blockRules = @{
     r"(?!" &
     r" {0,3}[-*_](?: *[-*_]){2,} *(?:\n+|$)|" & # ThematicBreak
     r"( *>[^\n]+(\n[^\n]+)*\n*)+|" & # blockquote
-    r" {0,3}(?:#{1,6}) +(?:[^\n]+?) *#* *(?:\n+|$)" & # atx heading
+    r" {0,3}(?:#{1,6}) +(?:[^\n]+?) *#* *(?:\n+|$)|" & # atx heading
+    LIST & # list
     r"))+)\n*)"
   ),
   MarkdownTokenType.ListBlock: re(

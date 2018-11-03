@@ -10,10 +10,6 @@
 ##
 ##    $ markdown --no-escape < file.md
 ##
-## Keep raw HTML content via `--keep-html`::
-##
-##    $ markdown --keep-html < file.md
-##
 ## Usage of the library: import this file by writing `import markdown`.::
 ##
 ##     let s = markdown("# hello world")
@@ -22,7 +18,6 @@
 ## Options can be created with `initMarkdownConfig <#initMarkdownConfig%2C>`_.
 ## Choices of options are listed below:
 ##
-## * `keepHtml`, default `false`.
 ## * `escape`, default `true`.
 ##
 ## With the default option, `Nim & Markdown` will be translated into `Nim &amp; Markdown`.
@@ -39,22 +34,6 @@
 ##     let html = markdown(doc, config)
 ##     echo(html) # <h1>Hello World</h1><p>Nim & Markdown</p>
 ##
-## With the default option, `<em>Markdown</em>` will be translated into `&lt;em&gt;Markdown&lt;/em&gt;`.
-## It's always recommended not keeping html when converting unless you know what you're doing.
-##
-## If you want to keep the raw html in the document, turn on `KeepHTML`::
-##
-##     let config = initMarkdownConfig(keepHtml = true)
-##
-##     let doc = """
-##     # Hello World
-##
-##     Happy writing <em>Markdown</em> document!
-##     """
-##
-##     let html = markdown(doc, config)
-##     echo(html)
-##     # <h1>Hello World</h1><p>Happy writing <em>Markdown</em> document!</p>
 ##
 ## :copyright: (c) 2018 by Ju Lin.
 ## :repo: https://github.com/soasme/nim-markdown
@@ -152,7 +131,7 @@ type
 
   MarkdownConfig* = object ## Options for configuring parsing or rendering behavior.
     escape: bool ## escape ``<``, ``>``, and ``&`` characters to be HTML-safe
-    keepHtml: bool ## preserve HTML tags rather than escape it
+    keepHtml: bool ## deprecated: preserve HTML tags rather than escape it
 
   MarkdownContext* = object ## The type for saving parsing context.
     links: Table[string, Link]

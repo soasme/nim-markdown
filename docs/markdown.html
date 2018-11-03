@@ -1243,20 +1243,20 @@ function main() {
   <ul class="simple simple-toc-section">
       <li><a class="reference" href="#MarkdownError"
     title="MarkdownError = object of Exception"><wbr />Markdown<wbr />Error<span class="attachedType" style="visibility:hidden"></span></a></li>
-  <li><a class="reference" href="#Header"
-    title="Header = object
-  doc: string
-  level: int"><wbr />Header<span class="attachedType" style="visibility:hidden"></span></a></li>
+  <li><a class="reference" href="#Heading"
+    title="Heading = object
+  inlines: seq[MarkdownTokenRef]
+  level: int"><wbr />Heading<span class="attachedType" style="visibility:hidden"></span></a></li>
   <li><a class="reference" href="#Fence"
     title="Fence = object
   code: string
   lang: string"><wbr />Fence<span class="attachedType" style="visibility:hidden"></span></a></li>
   <li><a class="reference" href="#ListItem"
     title="ListItem = object
-  dom: seq[MarkdownTokenRef]"><wbr />List<wbr />Item<span class="attachedType" style="visibility:hidden"></span></a></li>
+  blocks: seq[MarkdownTokenRef]"><wbr />List<wbr />Item<span class="attachedType" style="visibility:hidden"></span></a></li>
   <li><a class="reference" href="#ListBlock"
     title="ListBlock = object
-  elems: seq[MarkdownTokenRef]
+  blocks: seq[MarkdownTokenRef]
   depth: int
   ordered: bool"><wbr />List<wbr />Block<span class="attachedType" style="visibility:hidden"></span></a></li>
   <li><a class="reference" href="#DefineLink"
@@ -1275,7 +1275,8 @@ function main() {
   text: string"><wbr />HTMLBlock<span class="attachedType" style="visibility:hidden"></span></a></li>
   <li><a class="reference" href="#Paragraph"
     title="Paragraph = object
-  dom: iterator (): MarkdownTokenRef"><wbr />Paragraph<span class="attachedType" style="visibility:hidden"></span></a></li>
+  doc: string
+  inlines: seq[MarkdownTokenRef]"><wbr />Paragraph<span class="attachedType" style="visibility:hidden"></span></a></li>
   <li><a class="reference" href="#Link"
     title="Link = object
   url: string
@@ -1292,32 +1293,69 @@ function main() {
   <li><a class="reference" href="#RefFootnote"
     title="RefFootnote = object
   anchor: string"><wbr />Ref<wbr />Footnote<span class="attachedType" style="visibility:hidden"></span></a></li>
+  <li><a class="reference" href="#TableCell"
+    title="TableCell = object
+  dom: seq[MarkdownTokenRef]
+  align: string"><wbr />Table<wbr />Cell<span class="attachedType" style="visibility:hidden"></span></a></li>
+  <li><a class="reference" href="#TableHead"
+    title="TableHead = object
+  cells: seq[TableCell]"><wbr />Table<wbr />Head<span class="attachedType" style="visibility:hidden"></span></a></li>
+  <li><a class="reference" href="#TableRow"
+    title="TableRow = object
+  cells: seq[TableCell]"><wbr />Table<wbr />Row<span class="attachedType" style="visibility:hidden"></span></a></li>
+  <li><a class="reference" href="#HTMLTable"
+    title="HTMLTable = object
+  head: TableHead
+  body: seq[TableRow]"><wbr />HTMLTable<span class="attachedType" style="visibility:hidden"></span></a></li>
+  <li><a class="reference" href="#BlockQuote"
+    title="BlockQuote = object
+  blocks: seq[MarkdownTokenRef]"><wbr />Block<wbr />Quote<span class="attachedType" style="visibility:hidden"></span></a></li>
+  <li><a class="reference" href="#Delimeter"
+    title="Delimeter = object
+  token: MarkdownTokenRef
+  kind: string
+  num: int
+  originalNum: int
+  isActive: bool
+  canOpen: bool
+  canClose: bool"><wbr />Delimeter<span class="attachedType" style="visibility:hidden"></span></a></li>
+  <li><a class="reference" href="#Emphasis"
+    title="Emphasis = object
+  inlines: seq[MarkdownTokenRef]"><wbr />Emphasis<span class="attachedType" style="visibility:hidden"></span></a></li>
+  <li><a class="reference" href="#DoubleEmphasis"
+    title="DoubleEmphasis = object
+  inlines: seq[MarkdownTokenRef]"><wbr />Double<wbr />Emphasis<span class="attachedType" style="visibility:hidden"></span></a></li>
+  <li><a class="reference" href="#MarkdownConfig"
+    title="MarkdownConfig = object
+  escape: bool                 ## escape ``&lt;``, ``&gt;``, and ``&amp;`` characters to be HTML-safe
+  keepHtml: bool               ## deprecated: preserve HTML tags rather than escape it"><wbr />Markdown<wbr />Config<span class="attachedType" style="visibility:hidden"></span></a></li>
   <li><a class="reference" href="#MarkdownContext"
     title="MarkdownContext = object
   links: Table[string, Link]
   footnotes: Table[string, string]
-  escape: bool
-  keepHTML: bool
-  listDepth: int"><wbr />Markdown<wbr />Context<span class="attachedType" style="visibility:hidden"></span></a></li>
+  listDepth: int
+  config: MarkdownConfig"><wbr />Markdown<wbr />Context<span class="attachedType" style="visibility:hidden"></span></a></li>
   <li><a class="reference" href="#MarkdownTokenType"
     title="MarkdownTokenType {.pure.} = enum
-  Header, Hrule, IndentedBlockCode, FencingBlockCode, Paragraph, Text, ListItem,
-  ListBlock, BlockQuote, DefineLink, DefineFootnote, HTMLBlock, Newline, AutoLink,
-  InlineEscape, InlineText, InlineHTML, InlineLink, InlineRefLink, InlineNoLink,
-  InlineURL, InlineDoubleEmphasis, InlineEmphasis, InlineCode, InlineBreak,
-  InlineStrikethrough, InlineFootnote"><wbr />Markdown<wbr />Token<wbr />Type<span class="attachedType" style="visibility:hidden"></span></a></li>
+  ATXHeading, SetextHeading, ThematicBreak, IndentedBlockCode, FencingBlockCode,
+  Paragraph, Text, ListItem, ListBlock, BlockQuote, DefineLink, DefineFootnote,
+  HTMLBlock, HTMLTable, Newline, AutoLink, InlineEscape, InlineText, InlineHTML,
+  InlineLink, InlineRefLink, InlineNoLink, InlineURL, InlineDoubleEmphasis,
+  InlineEmphasis, InlineCode, InlineBreak, InlineStrikethrough, InlineFootnote"><wbr />Markdown<wbr />Token<wbr />Type<span class="attachedType" style="visibility:hidden"></span></a></li>
   <li><a class="reference" href="#MarkdownTokenRef"
     title="MarkdownTokenRef = ref MarkdownToken"><wbr />Markdown<wbr />Token<wbr />Ref<span class="attachedType" style="visibility:hidden"></span></a></li>
   <li><a class="reference" href="#MarkdownToken"
     title="MarkdownToken = object
   len: int
   case type*: MarkdownTokenType
-  of MarkdownTokenType.Header:
-    headerVal*: Header
-  of MarkdownTokenType.Hrule:
-    hruleVal*: string
+  of MarkdownTokenType.ATXHeading:
+    atxHeadingVal*: Heading
+  of MarkdownTokenType.SetextHeading:
+    setextHeadingVal*: Heading
+  of MarkdownTokenType.ThematicBreak:
+    thematicBreakVal*: string
   of MarkdownTokenType.BlockQuote:
-    blockQuoteVal*: string
+    blockQuoteVal*: BlockQuote
   of MarkdownTokenType.IndentedBlockCode:
     codeVal*: string
   of MarkdownTokenType.FencingBlockCode:
@@ -1344,8 +1382,10 @@ function main() {
     defineFootnoteVal*: DefineFootnote
   of MarkdownTokenType.HTMLBlock:
     htmlBlockVal*: HTMLBlock
+  of MarkdownTokenType.HTMLTable:
+    htmlTableVal*: HTMLTable
   of MarkdownTokenType.InlineHTML:
-    inlineHTMLVal*: HTMLBlock
+    inlineHTMLVal*: string
   of MarkdownTokenType.InlineLink:
     inlineLinkVal*: Link
   of MarkdownTokenType.InlineRefLink:
@@ -1355,9 +1395,9 @@ function main() {
   of MarkdownTokenType.InlineURL:
     inlineURLVal*: string
   of MarkdownTokenType.InlineDoubleEmphasis:
-    inlineDoubleEmphasisVal*: string
+    inlineDoubleEmphasisVal*: DoubleEmphasis
   of MarkdownTokenType.InlineEmphasis:
-    inlineEmphasisVal*: string
+    inlineEmphasisVal*: Emphasis
   of MarkdownTokenType.InlineCode:
     inlineCodeVal*: string
   of MarkdownTokenType.InlineBreak:
@@ -1372,7 +1412,9 @@ function main() {
 <li>
   <a class="reference reference-toplevel" href="#10" id="60">Consts</a>
   <ul class="simple simple-toc-section">
-      <li><a class="reference" href="#INLINE_TAGS"
+      <li><a class="reference" href="#MARKDOWN_VERSION"
+    title="MARKDOWN_VERSION = &quot;0.4.0&quot;"><wbr />MARKDOWN_<wbr />VERSION<span class="attachedType" style="visibility:hidden"></span></a></li>
+  <li><a class="reference" href="#INLINE_TAGS"
     title="INLINE_TAGS = [&quot;a&quot;, &quot;em&quot;, &quot;strong&quot;, &quot;small&quot;, &quot;s&quot;, &quot;cite&quot;, &quot;q&quot;, &quot;dfn&quot;, &quot;abbr&quot;, &quot;data&quot;,
              &quot;time&quot;, &quot;code&quot;, &quot;var&quot;, &quot;samp&quot;, &quot;kbd&quot;, &quot;sub&quot;, &quot;sup&quot;, &quot;i&quot;, &quot;b&quot;, &quot;u&quot;, &quot;mark&quot;,
              &quot;ruby&quot;, &quot;rt&quot;, &quot;rp&quot;, &quot;bdi&quot;, &quot;bdo&quot;, &quot;span&quot;, &quot;br&quot;, &quot;wbr&quot;, &quot;ins&quot;, &quot;del&quot;, &quot;img&quot;,
@@ -1383,7 +1425,9 @@ function main() {
 <li>
   <a class="reference reference-toplevel" href="#12" id="62">Procs</a>
   <ul class="simple simple-toc-section">
-      <li><a class="reference" href="#preprocessing,string"
+      <li><a class="reference" href="#initMarkdownConfig,"
+    title="initMarkdownConfig(escape = true; keepHtml = true): MarkdownConfig"><wbr />init<wbr />Markdown<wbr />Config<span class="attachedType" style="visibility:hidden">MarkdownConfig</span></a></li>
+  <li><a class="reference" href="#preprocessing,string"
     title="preprocessing(doc: string): string"><wbr />preprocessing<span class="attachedType" style="visibility:hidden"></span></a></li>
   <li><a class="reference" href="#escapeTag,string"
     title="escapeTag(doc: string): string"><wbr />escape<wbr />Tag<span class="attachedType" style="visibility:hidden"></span></a></li>
@@ -1395,16 +1439,62 @@ function main() {
     title="escapeAmpersandSeq(doc: string): string"><wbr />escape<wbr />Ampersand<wbr />Seq<span class="attachedType" style="visibility:hidden"></span></a></li>
   <li><a class="reference" href="#escapeCode,string"
     title="escapeCode(doc: string): string"><wbr />escape<wbr />Code<span class="attachedType" style="visibility:hidden"></span></a></li>
+  <li><a class="reference" href="#escapeHTMLEntity,string"
+    title="escapeHTMLEntity(doc: string): string"><wbr />escape<wbr />HTMLEntity<span class="attachedType" style="visibility:hidden"></span></a></li>
+  <li><a class="reference" href="#escapeLinkUrl,string"
+    title="escapeLinkUrl(url: string): string"><wbr />escape<wbr />Link<wbr />Url<span class="attachedType" style="visibility:hidden"></span></a></li>
+  <li><a class="reference" href="#escapeBackslash,string"
+    title="escapeBackslash(doc: string): string"><wbr />escape<wbr />Backslash<span class="attachedType" style="visibility:hidden"></span></a></li>
   <li><a class="reference" href="#slugify,string"
     title="slugify(doc: string): string"><wbr />slugify<span class="attachedType" style="visibility:hidden"></span></a></li>
+  <li><a class="reference" href="#genHTMLTable,openArray[string]"
+    title="genHTMLTable(matches: openArray[string]): MarkdownTokenRef"><wbr />gen<wbr />HTMLTable<span class="attachedType" style="visibility:hidden">MarkdownTokenRef</span></a></li>
+  <li><a class="reference" href="#parseNewline,string,int,int"
+    title="parseNewline(doc: string; start: int; size: var int): seq[MarkdownTokenRef]"><wbr />parse<wbr />Newline<span class="attachedType" style="visibility:hidden">MarkdownTokenRef</span></a></li>
+  <li><a class="reference" href="#parseBackslash,string,int,int"
+    title="parseBackslash(doc: string; start: int; size: var int): seq[MarkdownTokenRef]"><wbr />parse<wbr />Backslash<span class="attachedType" style="visibility:hidden">MarkdownTokenRef</span></a></li>
+  <li><a class="reference" href="#parseBacktick,string,int,int"
+    title="parseBacktick(doc: string; start: int; size: var int): seq[MarkdownTokenRef]"><wbr />parse<wbr />Backtick<span class="attachedType" style="visibility:hidden">MarkdownTokenRef</span></a></li>
+  <li><a class="reference" href="#scanInlineDelimeters,string,int,Delimeter"
+    title="scanInlineDelimeters(doc: string; start: int; delimeter: var Delimeter)"><wbr />scan<wbr />Inline<wbr />Delimeters<span class="attachedType" style="visibility:hidden">Delimeter</span></a></li>
+  <li><a class="reference" href="#parseDelimeter,string,int,int,DoublyLinkedList[Delimeter]"
+    title="parseDelimeter(doc: string; start: int; size: var int;
+               delimeterStack: var DoublyLinkedList[Delimeter]): seq[
+    MarkdownTokenRef]"><wbr />parse<wbr />Delimeter<span class="attachedType" style="visibility:hidden">MarkdownTokenRef</span></a></li>
+  <li><a class="reference" href="#removeDelimeter,DoublyLinkedNode[Delimeter]"
+    title="removeDelimeter(delimeter: var DoublyLinkedNode[Delimeter])"><wbr />remove<wbr />Delimeter<span class="attachedType" style="visibility:hidden">Delimeter</span></a></li>
+  <li><a class="reference" href="#processEmphasis,seq[MarkdownTokenRef],DoublyLinkedList[Delimeter]"
+    title="processEmphasis(tokens: var seq[MarkdownTokenRef];
+                delimeterStack: var DoublyLinkedList[Delimeter])"><wbr />process<wbr />Emphasis<span class="attachedType" style="visibility:hidden">MarkdownTokenRef</span></a></li>
+  <li><a class="reference" href="#parseQuote,string,int,int"
+    title="parseQuote(doc: string; start: int; size: var int): seq[MarkdownTokenRef]"><wbr />parse<wbr />Quote<span class="attachedType" style="visibility:hidden">MarkdownTokenRef</span></a></li>
+  <li><a class="reference" href="#parseBang,string,int,int,DoublyLinkedList[Delimeter]"
+    title="parseBang(doc: string; start: int; size: var int;
+          delimeterStack: var DoublyLinkedList[Delimeter]): seq[MarkdownTokenRef]"><wbr />parse<wbr />Bang<span class="attachedType" style="visibility:hidden">MarkdownTokenRef</span></a></li>
+  <li><a class="reference" href="#parseOpenBracket,string,int,int"
+    title="parseOpenBracket(doc: string; start: int; size: var int): seq[MarkdownTokenRef]"><wbr />parse<wbr />Open<wbr />Bracket<span class="attachedType" style="visibility:hidden">MarkdownTokenRef</span></a></li>
+  <li><a class="reference" href="#parseHTMLEntity,string,int,int"
+    title="parseHTMLEntity(doc: string; start: int; size: var int): seq[MarkdownTokenRef]"><wbr />parse<wbr />HTMLEntity<span class="attachedType" style="visibility:hidden">MarkdownTokenRef</span></a></li>
+  <li><a class="reference" href="#parseAutolink,string,int,int"
+    title="parseAutolink(doc: string; start: int; size: var int): seq[MarkdownTokenRef]"><wbr />parse<wbr />Autolink<span class="attachedType" style="visibility:hidden">MarkdownTokenRef</span></a></li>
+  <li><a class="reference" href="#parseHTMLTag,string,int,int"
+    title="parseHTMLTag(doc: string; start: int; size: var int): seq[MarkdownTokenRef]"><wbr />parse<wbr />HTMLTag<span class="attachedType" style="visibility:hidden">MarkdownTokenRef</span></a></li>
+  <li><a class="reference" href="#parseString,string,int,int"
+    title="parseString(doc: string; start: int; size: var int): seq[MarkdownTokenRef]"><wbr />parse<wbr />String<span class="attachedType" style="visibility:hidden">MarkdownTokenRef</span></a></li>
+  <li><a class="reference" href="#parseInlines,MarkdownContext,string"
+    title="parseInlines(ctx: MarkdownContext; doc: string): seq[MarkdownTokenRef]"><wbr />parse<wbr />Inlines<span class="attachedType" style="visibility:hidden">MarkdownContext</span></a></li>
   <li><a class="reference" href="#findToken,string,int,MarkdownTokenType"
     title="findToken(doc: string; start: var int; ruleType: MarkdownTokenType): MarkdownTokenRef"><wbr />find<wbr />Token<span class="attachedType" style="visibility:hidden">MarkdownTokenRef</span></a></li>
+  <li><a class="reference" href="#renderHTMLTable,MarkdownContext,HTMLTable"
+    title="renderHTMLTable(ctx: MarkdownContext; table: HTMLTable): string"><wbr />render<wbr />HTMLTable<span class="attachedType" style="visibility:hidden">MarkdownContext</span></a></li>
   <li><a class="reference" href="#renderToken,MarkdownContext,MarkdownTokenRef"
     title="renderToken(ctx: MarkdownContext; token: MarkdownTokenRef): string"><wbr />render<wbr />Token<span class="attachedType" style="visibility:hidden">MarkdownContext</span></a></li>
-  <li><a class="reference" href="#markdown,string,string"
-    title="markdown(doc: string; config: string = &quot;&quot;&quot;Escape: true
-KeepHTML: false
-&quot;&quot;&quot;): string"><wbr />markdown<span class="attachedType" style="visibility:hidden"></span></a></li>
+  <li><a class="reference" href="#buildContext,seq[MarkdownTokenRef],MarkdownConfig"
+    title="buildContext(tokens: seq[MarkdownTokenRef]; config: MarkdownConfig): MarkdownContext"><wbr />build<wbr />Context<span class="attachedType" style="visibility:hidden">MarkdownTokenRef</span></a></li>
+  <li><a class="reference" href="#markdown,string,MarkdownConfig"
+    title="markdown(doc: string; config: MarkdownConfig = initMarkdownConfig()): string"><wbr />markdown<span class="attachedType" style="visibility:hidden">MarkdownConfig</span></a></li>
+  <li><a class="reference" href="#readCLIOptions,"
+    title="readCLIOptions(): MarkdownConfig"><wbr />read<wbr />CLIOptions<span class="attachedType" style="visibility:hidden">MarkdownConfig</span></a></li>
 
   </ul>
 </li>
@@ -1426,19 +1516,18 @@ KeepHTML: false
 <p>Usage of the binary: convert markdown document in bash like below.:<pre>
 $ markdown &lt; file.md &gt; file.html</pre>
 </p>
+<p>Disable escaping characters via <cite>--no-escape</cite>:<pre>
+$ markdown --no-escape &lt; file.md</pre>
+</p>
 <p>Usage of the library: import this file by writing <cite>import markdown</cite>.:<pre>
 let s = markdown(&quot;# hello world&quot;)
 echo(s)</pre>
 </p>
-<p>Options are passed as config string. Choices of options are listed below:</p>
-<ul class="simple"><li><cite>KeepHTML</cite>, default <cite>false</cite>.</li>
-<li><cite>Escape</cite>, default <cite>true</cite>.</li>
+<p>Options can be created with <a class="reference external" href="#initMarkdownConfig%2C">initMarkdownConfig</a>. Choices of options are listed below:</p>
+<ul class="simple"><li><cite>escape</cite>, default <cite>true</cite>.</li>
 </ul>
-<p>With the default option, <cite>Nim &amp; Markdown</cite> will be translated into <cite>Nim &amp;amp; Markdown</cite>. If you don't want to escaping characters in the document, turn off <cite>Escape</cite>:<pre>
-let config = &quot;&quot;&quot;
-Escape: false
-KeepHTML: false
-&quot;&quot;&quot;
+<p>With the default option, <cite>Nim &amp; Markdown</cite> will be translated into <cite>Nim &amp;amp; Markdown</cite>. If you want to escape no characters in the document, turn off <cite>Escape</cite>:<pre>
+let config = initMarkdownConfig(escape = false)
 
 let doc = &quot;&quot;&quot;
 # Hello World
@@ -1448,23 +1537,6 @@ Nim &amp; Markdown
 
 let html = markdown(doc, config)
 echo(html) # &lt;h1&gt;Hello World&lt;/h1&gt;&lt;p&gt;Nim &amp; Markdown&lt;/p&gt;</pre>
-</p>
-<p>With the default option, <cite>&lt;em&gt;Markdown&lt;/em&gt;</cite> will be translated into <cite>&amp;lt;em&amp;gt;Markdown&amp;lt;/em&amp;gt;</cite>. It's always recommended not keeping html when converting unless you know what you're doing.</p>
-<p>If you want to keep the raw html in the document, turn on <cite>KeepHTML</cite>:<pre>
-let config = &quot;&quot;&quot;
-Escape: true
-KeepHTML: true
-&quot;&quot;&quot;
-
-let doc = &quot;&quot;&quot;
-# Hello World
-
-Happy writing &lt;em&gt;Markdown&lt;/em&gt; document!
-&quot;&quot;&quot;
-
-let html = markdown(doc, config)
-echo(html)
-# &lt;h1&gt;Hello World&lt;/h1&gt;&lt;p&gt;Happy writing &lt;em&gt;Markdown&lt;/em&gt; document!&lt;/p&gt;</pre>
 </p>
 <table class="docinfo" frame="void" rules="none"><col class="docinfo-name" /><col class="docinfo-content" /><tbody valign="top"><tr><th class="docinfo-name">copyright:</th><td> (c) 2018 by Ju Lin.</td></tr>
 <tr><th class="docinfo-name">repo:</th><td> <a class="reference external" href="https://github.com/soasme/nim-markdown">https://github.com/soasme/nim-markdown</a></td></tr>
@@ -1479,12 +1551,12 @@ echo(html)
 The error object for markdown parsing and rendering.
 
 </dd>
-<dt id="Header"><a name="Header"></a><pre><a href="markdown.html#Header"><span class="Identifier">Header</span></a> <span class="Other">=</span> <span class="Keyword">object</span>
-  <span class="Identifier">doc</span><span class="Other">:</span> <span class="Identifier">string</span>
+<dt id="Heading"><a name="Heading"></a><pre><a href="markdown.html#Heading"><span class="Identifier">Heading</span></a> <span class="Other">=</span> <span class="Keyword">object</span>
+  <span class="Identifier">inlines</span><span class="Other">:</span> <span class="Identifier">seq</span><span class="Other">[</span><a href="markdown.html#MarkdownTokenRef"><span class="Identifier">MarkdownTokenRef</span></a><span class="Other">]</span>
   <span class="Identifier">level</span><span class="Other">:</span> <span class="Identifier">int</span>
 </pre></dt>
 <dd>
-The type for storing header element.
+The type for heading element.
 
 </dd>
 <dt id="Fence"><a name="Fence"></a><pre><a href="markdown.html#Fence"><span class="Identifier">Fence</span></a> <span class="Other">=</span> <span class="Keyword">object</span>
@@ -1492,18 +1564,18 @@ The type for storing header element.
   <span class="Identifier">lang</span><span class="Other">:</span> <span class="Identifier">string</span>
 </pre></dt>
 <dd>
-The type for fencing block code
+The type for fences.
 
 </dd>
 <dt id="ListItem"><a name="ListItem"></a><pre><a href="markdown.html#ListItem"><span class="Identifier">ListItem</span></a> <span class="Other">=</span> <span class="Keyword">object</span>
-  <span class="Identifier">dom</span><span class="Other">:</span> <span class="Identifier">seq</span><span class="Other">[</span><a href="markdown.html#MarkdownTokenRef"><span class="Identifier">MarkdownTokenRef</span></a><span class="Other">]</span>
+  <span class="Identifier">blocks</span><span class="Other">:</span> <span class="Identifier">seq</span><span class="Other">[</span><a href="markdown.html#MarkdownTokenRef"><span class="Identifier">MarkdownTokenRef</span></a><span class="Other">]</span>
 </pre></dt>
 <dd>
 The type for the list item
 
 </dd>
 <dt id="ListBlock"><a name="ListBlock"></a><pre><a href="markdown.html#ListBlock"><span class="Identifier">ListBlock</span></a> <span class="Other">=</span> <span class="Keyword">object</span>
-  <span class="Identifier">elems</span><span class="Other">:</span> <span class="Identifier">seq</span><span class="Other">[</span><a href="markdown.html#MarkdownTokenRef"><span class="Identifier">MarkdownTokenRef</span></a><span class="Other">]</span>
+  <span class="Identifier">blocks</span><span class="Other">:</span> <span class="Identifier">seq</span><span class="Other">[</span><a href="markdown.html#MarkdownTokenRef"><span class="Identifier">MarkdownTokenRef</span></a><span class="Other">]</span>
   <span class="Identifier">depth</span><span class="Other">:</span> <span class="Identifier">int</span>
   <span class="Identifier">ordered</span><span class="Other">:</span> <span class="Identifier">bool</span>
 </pre></dt>
@@ -1538,7 +1610,8 @@ The type for a raw HTML block.
 
 </dd>
 <dt id="Paragraph"><a name="Paragraph"></a><pre><a href="markdown.html#Paragraph"><span class="Identifier">Paragraph</span></a> <span class="Other">=</span> <span class="Keyword">object</span>
-  <span class="Identifier">dom</span><span class="Other">:</span> <span class="Keyword">iterator</span> <span class="Other">(</span><span class="Other">)</span><span class="Other">:</span> <a href="markdown.html#MarkdownTokenRef"><span class="Identifier">MarkdownTokenRef</span></a>
+  <span class="Identifier">doc</span><span class="Other">:</span> <span class="Identifier">string</span>
+  <span class="Identifier">inlines</span><span class="Other">:</span> <span class="Identifier">seq</span><span class="Other">[</span><a href="markdown.html#MarkdownTokenRef"><span class="Identifier">MarkdownTokenRef</span></a><span class="Other">]</span>
 </pre></dt>
 <dd>
 The type for a paragraph
@@ -1572,23 +1645,94 @@ The type for a link in referencing mode.
 The type for a footnote in referencing mode.
 
 </dd>
+<dt id="TableCell"><a name="TableCell"></a><pre><a href="markdown.html#TableCell"><span class="Identifier">TableCell</span></a> <span class="Other">=</span> <span class="Keyword">object</span>
+  <span class="Identifier">dom</span><span class="Other">:</span> <span class="Identifier">seq</span><span class="Other">[</span><a href="markdown.html#MarkdownTokenRef"><span class="Identifier">MarkdownTokenRef</span></a><span class="Other">]</span>
+  <span class="Identifier">align</span><span class="Other">:</span> <span class="Identifier">string</span>
+</pre></dt>
+<dd>
+
+
+</dd>
+<dt id="TableHead"><a name="TableHead"></a><pre><a href="markdown.html#TableHead"><span class="Identifier">TableHead</span></a> <span class="Other">=</span> <span class="Keyword">object</span>
+  <span class="Identifier">cells</span><span class="Other">:</span> <span class="Identifier">seq</span><span class="Other">[</span><a href="markdown.html#TableCell"><span class="Identifier">TableCell</span></a><span class="Other">]</span>
+</pre></dt>
+<dd>
+
+
+</dd>
+<dt id="TableRow"><a name="TableRow"></a><pre><a href="markdown.html#TableRow"><span class="Identifier">TableRow</span></a> <span class="Other">=</span> <span class="Keyword">object</span>
+  <span class="Identifier">cells</span><span class="Other">:</span> <span class="Identifier">seq</span><span class="Other">[</span><a href="markdown.html#TableCell"><span class="Identifier">TableCell</span></a><span class="Other">]</span>
+</pre></dt>
+<dd>
+
+
+</dd>
+<dt id="HTMLTable"><a name="HTMLTable"></a><pre><a href="markdown.html#HTMLTable"><span class="Identifier">HTMLTable</span></a> <span class="Other">=</span> <span class="Keyword">object</span>
+  <span class="Identifier">head</span><span class="Other">:</span> <a href="markdown.html#TableHead"><span class="Identifier">TableHead</span></a>
+  <span class="Identifier">body</span><span class="Other">:</span> <span class="Identifier">seq</span><span class="Other">[</span><a href="markdown.html#TableRow"><span class="Identifier">TableRow</span></a><span class="Other">]</span>
+</pre></dt>
+<dd>
+
+
+</dd>
+<dt id="BlockQuote"><a name="BlockQuote"></a><pre><a href="markdown.html#BlockQuote"><span class="Identifier">BlockQuote</span></a> <span class="Other">=</span> <span class="Keyword">object</span>
+  <span class="Identifier">blocks</span><span class="Other">:</span> <span class="Identifier">seq</span><span class="Other">[</span><a href="markdown.html#MarkdownTokenRef"><span class="Identifier">MarkdownTokenRef</span></a><span class="Other">]</span>
+</pre></dt>
+<dd>
+
+
+</dd>
+<dt id="Delimeter"><a name="Delimeter"></a><pre><a href="markdown.html#Delimeter"><span class="Identifier">Delimeter</span></a> <span class="Other">=</span> <span class="Keyword">object</span>
+  <span class="Identifier">token</span><span class="Other">:</span> <a href="markdown.html#MarkdownTokenRef"><span class="Identifier">MarkdownTokenRef</span></a>
+  <span class="Identifier">kind</span><span class="Other">:</span> <span class="Identifier">string</span>
+  <span class="Identifier">num</span><span class="Other">:</span> <span class="Identifier">int</span>
+  <span class="Identifier">originalNum</span><span class="Other">:</span> <span class="Identifier">int</span>
+  <span class="Identifier">isActive</span><span class="Other">:</span> <span class="Identifier">bool</span>
+  <span class="Identifier">canOpen</span><span class="Other">:</span> <span class="Identifier">bool</span>
+  <span class="Identifier">canClose</span><span class="Other">:</span> <span class="Identifier">bool</span>
+</pre></dt>
+<dd>
+
+
+</dd>
+<dt id="Emphasis"><a name="Emphasis"></a><pre><a href="markdown.html#Emphasis"><span class="Identifier">Emphasis</span></a> <span class="Other">=</span> <span class="Keyword">object</span>
+  <span class="Identifier">inlines</span><span class="Other">:</span> <span class="Identifier">seq</span><span class="Other">[</span><a href="markdown.html#MarkdownTokenRef"><span class="Identifier">MarkdownTokenRef</span></a><span class="Other">]</span>
+</pre></dt>
+<dd>
+
+
+</dd>
+<dt id="DoubleEmphasis"><a name="DoubleEmphasis"></a><pre><a href="markdown.html#DoubleEmphasis"><span class="Identifier">DoubleEmphasis</span></a> <span class="Other">=</span> <span class="Keyword">object</span>
+  <span class="Identifier">inlines</span><span class="Other">:</span> <span class="Identifier">seq</span><span class="Other">[</span><a href="markdown.html#MarkdownTokenRef"><span class="Identifier">MarkdownTokenRef</span></a><span class="Other">]</span>
+</pre></dt>
+<dd>
+
+
+</dd>
+<dt id="MarkdownConfig"><a name="MarkdownConfig"></a><pre><a href="markdown.html#MarkdownConfig"><span class="Identifier">MarkdownConfig</span></a> <span class="Other">=</span> <span class="Keyword">object</span>
+  <span class="Identifier">escape</span><span class="Other">:</span> <span class="Identifier">bool</span>                 <span class="Comment">## escape ``&lt;``, ``&gt;``, and ``&amp;`` characters to be HTML-safe</span>
+  <span class="Identifier">keepHtml</span><span class="Other">:</span> <span class="Identifier">bool</span>               <span class="Comment">## deprecated: preserve HTML tags rather than escape it</span>
+  </pre></dt>
+<dd>
+Options for configuring parsing or rendering behavior.
+
+</dd>
 <dt id="MarkdownContext"><a name="MarkdownContext"></a><pre><a href="markdown.html#MarkdownContext"><span class="Identifier">MarkdownContext</span></a> <span class="Other">=</span> <span class="Keyword">object</span>
   <span class="Identifier">links</span><span class="Other">:</span> <span class="Identifier">Table</span><span class="Other">[</span><span class="Identifier">string</span><span class="Other">,</span> <a href="markdown.html#Link"><span class="Identifier">Link</span></a><span class="Other">]</span>
   <span class="Identifier">footnotes</span><span class="Other">:</span> <span class="Identifier">Table</span><span class="Other">[</span><span class="Identifier">string</span><span class="Other">,</span> <span class="Identifier">string</span><span class="Other">]</span>
-  <span class="Identifier">escape</span><span class="Other">:</span> <span class="Identifier">bool</span>
-  <span class="Identifier">keepHTML</span><span class="Other">:</span> <span class="Identifier">bool</span>
   <span class="Identifier">listDepth</span><span class="Other">:</span> <span class="Identifier">int</span>
+  <span class="Identifier">config</span><span class="Other">:</span> <a href="markdown.html#MarkdownConfig"><span class="Identifier">MarkdownConfig</span></a>
 </pre></dt>
 <dd>
 The type for saving parsing context.
 
 </dd>
 <dt id="MarkdownTokenType"><a name="MarkdownTokenType"></a><pre><a href="markdown.html#MarkdownTokenType"><span class="Identifier">MarkdownTokenType</span></a> <span><span class="Other">{</span><span class="Other pragmadots">...</span><span class="Other">}</span></span><span class="pragmawrap"><span class="Other">{.</span><span class="pragma"><span class="Identifier">pure</span></span><span class="Other">.}</span></span> <span class="Other">=</span> <span class="Keyword">enum</span>
-  <span class="Identifier">Header</span><span class="Other">,</span> <span class="Identifier">Hrule</span><span class="Other">,</span> <span class="Identifier">IndentedBlockCode</span><span class="Other">,</span> <span class="Identifier">FencingBlockCode</span><span class="Other">,</span> <span class="Identifier">Paragraph</span><span class="Other">,</span> <span class="Identifier">Text</span><span class="Other">,</span> <span class="Identifier">ListItem</span><span class="Other">,</span>
-  <span class="Identifier">ListBlock</span><span class="Other">,</span> <span class="Identifier">BlockQuote</span><span class="Other">,</span> <span class="Identifier">DefineLink</span><span class="Other">,</span> <span class="Identifier">DefineFootnote</span><span class="Other">,</span> <span class="Identifier">HTMLBlock</span><span class="Other">,</span> <span class="Identifier">Newline</span><span class="Other">,</span> <span class="Identifier">AutoLink</span><span class="Other">,</span>
-  <span class="Identifier">InlineEscape</span><span class="Other">,</span> <span class="Identifier">InlineText</span><span class="Other">,</span> <span class="Identifier">InlineHTML</span><span class="Other">,</span> <span class="Identifier">InlineLink</span><span class="Other">,</span> <span class="Identifier">InlineRefLink</span><span class="Other">,</span> <span class="Identifier">InlineNoLink</span><span class="Other">,</span>
-  <span class="Identifier">InlineURL</span><span class="Other">,</span> <span class="Identifier">InlineDoubleEmphasis</span><span class="Other">,</span> <span class="Identifier">InlineEmphasis</span><span class="Other">,</span> <span class="Identifier">InlineCode</span><span class="Other">,</span> <span class="Identifier">InlineBreak</span><span class="Other">,</span>
-  <span class="Identifier">InlineStrikethrough</span><span class="Other">,</span> <span class="Identifier">InlineFootnote</span></pre></dt>
+  <span class="Identifier">ATXHeading</span><span class="Other">,</span> <span class="Identifier">SetextHeading</span><span class="Other">,</span> <span class="Identifier">ThematicBreak</span><span class="Other">,</span> <span class="Identifier">IndentedBlockCode</span><span class="Other">,</span> <span class="Identifier">FencingBlockCode</span><span class="Other">,</span>
+  <span class="Identifier">Paragraph</span><span class="Other">,</span> <span class="Identifier">Text</span><span class="Other">,</span> <span class="Identifier">ListItem</span><span class="Other">,</span> <span class="Identifier">ListBlock</span><span class="Other">,</span> <span class="Identifier">BlockQuote</span><span class="Other">,</span> <span class="Identifier">DefineLink</span><span class="Other">,</span> <span class="Identifier">DefineFootnote</span><span class="Other">,</span>
+  <span class="Identifier">HTMLBlock</span><span class="Other">,</span> <span class="Identifier">HTMLTable</span><span class="Other">,</span> <span class="Identifier">Newline</span><span class="Other">,</span> <span class="Identifier">AutoLink</span><span class="Other">,</span> <span class="Identifier">InlineEscape</span><span class="Other">,</span> <span class="Identifier">InlineText</span><span class="Other">,</span> <span class="Identifier">InlineHTML</span><span class="Other">,</span>
+  <span class="Identifier">InlineLink</span><span class="Other">,</span> <span class="Identifier">InlineRefLink</span><span class="Other">,</span> <span class="Identifier">InlineNoLink</span><span class="Other">,</span> <span class="Identifier">InlineURL</span><span class="Other">,</span> <span class="Identifier">InlineDoubleEmphasis</span><span class="Other">,</span>
+  <span class="Identifier">InlineEmphasis</span><span class="Other">,</span> <span class="Identifier">InlineCode</span><span class="Other">,</span> <span class="Identifier">InlineBreak</span><span class="Other">,</span> <span class="Identifier">InlineStrikethrough</span><span class="Other">,</span> <span class="Identifier">InlineFootnote</span></pre></dt>
 <dd>
 
 
@@ -1604,12 +1748,14 @@ Hold two values:<ul class="simple"><li>type: MarkdownTokenType</li>
 <dt id="MarkdownToken"><a name="MarkdownToken"></a><pre><a href="markdown.html#MarkdownToken"><span class="Identifier">MarkdownToken</span></a> <span class="Other">=</span> <span class="Keyword">object</span>
   <span class="Identifier">len</span><span class="Other">:</span> <span class="Identifier">int</span>
   <span class="Keyword">case</span> <span class="Keyword">type</span><span class="Operator">*</span><span class="Other">:</span> <a href="markdown.html#MarkdownTokenType"><span class="Identifier">MarkdownTokenType</span></a>
-  <span class="Keyword">of</span> <span class="Identifier">MarkdownTokenType</span><span class="Other">.</span><span class="Identifier">Header</span><span class="Other">:</span>
-    <span class="Identifier">headerVal</span><span class="Operator">*</span><span class="Other">:</span> <a href="markdown.html#Header"><span class="Identifier">Header</span></a>
-  <span class="Keyword">of</span> <span class="Identifier">MarkdownTokenType</span><span class="Other">.</span><span class="Identifier">Hrule</span><span class="Other">:</span>
-    <span class="Identifier">hruleVal</span><span class="Operator">*</span><span class="Other">:</span> <span class="Identifier">string</span>
+  <span class="Keyword">of</span> <span class="Identifier">MarkdownTokenType</span><span class="Other">.</span><span class="Identifier">ATXHeading</span><span class="Other">:</span>
+    <span class="Identifier">atxHeadingVal</span><span class="Operator">*</span><span class="Other">:</span> <a href="markdown.html#Heading"><span class="Identifier">Heading</span></a>
+  <span class="Keyword">of</span> <span class="Identifier">MarkdownTokenType</span><span class="Other">.</span><span class="Identifier">SetextHeading</span><span class="Other">:</span>
+    <span class="Identifier">setextHeadingVal</span><span class="Operator">*</span><span class="Other">:</span> <a href="markdown.html#Heading"><span class="Identifier">Heading</span></a>
+  <span class="Keyword">of</span> <span class="Identifier">MarkdownTokenType</span><span class="Other">.</span><span class="Identifier">ThematicBreak</span><span class="Other">:</span>
+    <span class="Identifier">thematicBreakVal</span><span class="Operator">*</span><span class="Other">:</span> <span class="Identifier">string</span>
   <span class="Keyword">of</span> <span class="Identifier">MarkdownTokenType</span><span class="Other">.</span><span class="Identifier">BlockQuote</span><span class="Other">:</span>
-    <span class="Identifier">blockQuoteVal</span><span class="Operator">*</span><span class="Other">:</span> <span class="Identifier">string</span>
+    <span class="Identifier">blockQuoteVal</span><span class="Operator">*</span><span class="Other">:</span> <a href="markdown.html#BlockQuote"><span class="Identifier">BlockQuote</span></a>
   <span class="Keyword">of</span> <span class="Identifier">MarkdownTokenType</span><span class="Other">.</span><span class="Identifier">IndentedBlockCode</span><span class="Other">:</span>
     <span class="Identifier">codeVal</span><span class="Operator">*</span><span class="Other">:</span> <span class="Identifier">string</span>
   <span class="Keyword">of</span> <span class="Identifier">MarkdownTokenType</span><span class="Other">.</span><span class="Identifier">FencingBlockCode</span><span class="Other">:</span>
@@ -1636,8 +1782,10 @@ Hold two values:<ul class="simple"><li>type: MarkdownTokenType</li>
     <span class="Identifier">defineFootnoteVal</span><span class="Operator">*</span><span class="Other">:</span> <a href="markdown.html#DefineFootnote"><span class="Identifier">DefineFootnote</span></a>
   <span class="Keyword">of</span> <span class="Identifier">MarkdownTokenType</span><span class="Other">.</span><span class="Identifier">HTMLBlock</span><span class="Other">:</span>
     <span class="Identifier">htmlBlockVal</span><span class="Operator">*</span><span class="Other">:</span> <a href="markdown.html#HTMLBlock"><span class="Identifier">HTMLBlock</span></a>
+  <span class="Keyword">of</span> <span class="Identifier">MarkdownTokenType</span><span class="Other">.</span><span class="Identifier">HTMLTable</span><span class="Other">:</span>
+    <span class="Identifier">htmlTableVal</span><span class="Operator">*</span><span class="Other">:</span> <a href="markdown.html#HTMLTable"><span class="Identifier">HTMLTable</span></a>
   <span class="Keyword">of</span> <span class="Identifier">MarkdownTokenType</span><span class="Other">.</span><span class="Identifier">InlineHTML</span><span class="Other">:</span>
-    <span class="Identifier">inlineHTMLVal</span><span class="Operator">*</span><span class="Other">:</span> <a href="markdown.html#HTMLBlock"><span class="Identifier">HTMLBlock</span></a>
+    <span class="Identifier">inlineHTMLVal</span><span class="Operator">*</span><span class="Other">:</span> <span class="Identifier">string</span>
   <span class="Keyword">of</span> <span class="Identifier">MarkdownTokenType</span><span class="Other">.</span><span class="Identifier">InlineLink</span><span class="Other">:</span>
     <span class="Identifier">inlineLinkVal</span><span class="Operator">*</span><span class="Other">:</span> <a href="markdown.html#Link"><span class="Identifier">Link</span></a>
   <span class="Keyword">of</span> <span class="Identifier">MarkdownTokenType</span><span class="Other">.</span><span class="Identifier">InlineRefLink</span><span class="Other">:</span>
@@ -1647,9 +1795,9 @@ Hold two values:<ul class="simple"><li>type: MarkdownTokenType</li>
   <span class="Keyword">of</span> <span class="Identifier">MarkdownTokenType</span><span class="Other">.</span><span class="Identifier">InlineURL</span><span class="Other">:</span>
     <span class="Identifier">inlineURLVal</span><span class="Operator">*</span><span class="Other">:</span> <span class="Identifier">string</span>
   <span class="Keyword">of</span> <span class="Identifier">MarkdownTokenType</span><span class="Other">.</span><span class="Identifier">InlineDoubleEmphasis</span><span class="Other">:</span>
-    <span class="Identifier">inlineDoubleEmphasisVal</span><span class="Operator">*</span><span class="Other">:</span> <span class="Identifier">string</span>
+    <span class="Identifier">inlineDoubleEmphasisVal</span><span class="Operator">*</span><span class="Other">:</span> <a href="markdown.html#DoubleEmphasis"><span class="Identifier">DoubleEmphasis</span></a>
   <span class="Keyword">of</span> <span class="Identifier">MarkdownTokenType</span><span class="Other">.</span><span class="Identifier">InlineEmphasis</span><span class="Other">:</span>
-    <span class="Identifier">inlineEmphasisVal</span><span class="Operator">*</span><span class="Other">:</span> <span class="Identifier">string</span>
+    <span class="Identifier">inlineEmphasisVal</span><span class="Operator">*</span><span class="Other">:</span> <a href="markdown.html#Emphasis"><span class="Identifier">Emphasis</span></a>
   <span class="Keyword">of</span> <span class="Identifier">MarkdownTokenType</span><span class="Other">.</span><span class="Identifier">InlineCode</span><span class="Other">:</span>
     <span class="Identifier">inlineCodeVal</span><span class="Operator">*</span><span class="Other">:</span> <span class="Identifier">string</span>
   <span class="Keyword">of</span> <span class="Identifier">MarkdownTokenType</span><span class="Other">.</span><span class="Identifier">InlineBreak</span><span class="Other">:</span>
@@ -1668,6 +1816,11 @@ Hold two values:<ul class="simple"><li>type: MarkdownTokenType</li>
 <div class="section" id="10">
 <h1><a class="toc-backref" href="#10">Consts</a></h1>
 <dl class="item">
+<dt id="MARKDOWN_VERSION"><a name="MARKDOWN_VERSION"></a><pre><span class="Identifier">MARKDOWN_VERSION</span> <span class="Other">=</span> <span class="StringLit">&quot;0.4.0&quot;</span></pre></dt>
+<dd>
+
+
+</dd>
 <dt id="INLINE_TAGS"><a name="INLINE_TAGS"></a><pre><span class="Identifier">INLINE_TAGS</span> <span class="Other">=</span> <span class="Other">[</span><span class="StringLit">&quot;a&quot;</span><span class="Other">,</span> <span class="StringLit">&quot;em&quot;</span><span class="Other">,</span> <span class="StringLit">&quot;strong&quot;</span><span class="Other">,</span> <span class="StringLit">&quot;small&quot;</span><span class="Other">,</span> <span class="StringLit">&quot;s&quot;</span><span class="Other">,</span> <span class="StringLit">&quot;cite&quot;</span><span class="Other">,</span> <span class="StringLit">&quot;q&quot;</span><span class="Other">,</span> <span class="StringLit">&quot;dfn&quot;</span><span class="Other">,</span> <span class="StringLit">&quot;abbr&quot;</span><span class="Other">,</span> <span class="StringLit">&quot;data&quot;</span><span class="Other">,</span>
              <span class="StringLit">&quot;time&quot;</span><span class="Other">,</span> <span class="StringLit">&quot;code&quot;</span><span class="Other">,</span> <span class="StringLit">&quot;var&quot;</span><span class="Other">,</span> <span class="StringLit">&quot;samp&quot;</span><span class="Other">,</span> <span class="StringLit">&quot;kbd&quot;</span><span class="Other">,</span> <span class="StringLit">&quot;sub&quot;</span><span class="Other">,</span> <span class="StringLit">&quot;sup&quot;</span><span class="Other">,</span> <span class="StringLit">&quot;i&quot;</span><span class="Other">,</span> <span class="StringLit">&quot;b&quot;</span><span class="Other">,</span> <span class="StringLit">&quot;u&quot;</span><span class="Other">,</span> <span class="StringLit">&quot;mark&quot;</span><span class="Other">,</span>
              <span class="StringLit">&quot;ruby&quot;</span><span class="Other">,</span> <span class="StringLit">&quot;rt&quot;</span><span class="Other">,</span> <span class="StringLit">&quot;rp&quot;</span><span class="Other">,</span> <span class="StringLit">&quot;bdi&quot;</span><span class="Other">,</span> <span class="StringLit">&quot;bdo&quot;</span><span class="Other">,</span> <span class="StringLit">&quot;span&quot;</span><span class="Other">,</span> <span class="StringLit">&quot;br&quot;</span><span class="Other">,</span> <span class="StringLit">&quot;wbr&quot;</span><span class="Other">,</span> <span class="StringLit">&quot;ins&quot;</span><span class="Other">,</span> <span class="StringLit">&quot;del&quot;</span><span class="Other">,</span> <span class="StringLit">&quot;img&quot;</span><span class="Other">,</span>
@@ -1681,6 +1834,12 @@ Hold two values:<ul class="simple"><li>type: MarkdownTokenType</li>
 <div class="section" id="12">
 <h1><a class="toc-backref" href="#12">Procs</a></h1>
 <dl class="item">
+<dt id="initMarkdownConfig"><a name="initMarkdownConfig,"></a><pre><span class="Keyword">proc</span> <span class="Identifier">initMarkdownConfig</span><span class="Other">(</span><span class="Identifier">escape</span> <span class="Other">=</span> <span class="Identifier">true</span><span class="Other">;</span> <span class="Identifier">keepHtml</span> <span class="Other">=</span> <span class="Identifier">true</span><span class="Other">)</span><span class="Other">:</span> <a href="markdown.html#MarkdownConfig"><span class="Identifier">MarkdownConfig</span></a> <span><span class="Other">{</span><span class="Other pragmadots">...</span><span class="Other">}</span></span><span class="pragmawrap"><span class="Other">{.</span><span class="pragma"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span><span class="Other">,</span>
+    <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span><span class="Other">.}</span></span></pre></dt>
+<dd>
+
+
+</dd>
 <dt id="preprocessing"><a name="preprocessing,string"></a><pre><span class="Keyword">proc</span> <span class="Identifier">preprocessing</span><span class="Other">(</span><span class="Identifier">doc</span><span class="Other">:</span> <span class="Identifier">string</span><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">string</span> <span><span class="Other">{</span><span class="Other pragmadots">...</span><span class="Other">}</span></span><span class="pragmawrap"><span class="Other">{.</span><span class="pragma"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">Exception</span><span class="Other">,</span> <span class="Identifier">RegexError</span><span class="Other">]</span><span class="Other">,</span>
                                       <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">RootEffect</span><span class="Other">]</span></span><span class="Other">.}</span></span></pre></dt>
 <dd>
@@ -1695,7 +1854,7 @@ Replace <cite>&lt;</cite> and <cite>&gt;</cite> to HTML-safe characters. Example
 </dd>
 <dt id="escapeQuote"><a name="escapeQuote,string"></a><pre><span class="Keyword">proc</span> <span class="Identifier">escapeQuote</span><span class="Other">(</span><span class="Identifier">doc</span><span class="Other">:</span> <span class="Identifier">string</span><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">string</span> <span><span class="Other">{</span><span class="Other pragmadots">...</span><span class="Other">}</span></span><span class="pragmawrap"><span class="Other">{.</span><span class="pragma"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span><span class="Other">.}</span></span></pre></dt>
 <dd>
-Replace <cite>'</cite> and <cite>&quot;</cite> to HTML-safe characters. Example:<pre>check escapeTag(&quot;'tag'&quot;) == &quot;&amp;quote;tag&amp;quote;&quot;</pre>
+Replace <cite>&quot;</cite> to HTML-safe characters. Example:<pre>check escapeTag(&quot;'tag'&quot;) == &quot;&amp;quote;tag&amp;quote;&quot;</pre>
 
 
 </dd>
@@ -1719,29 +1878,171 @@ escapeAmpersandSeq(&quot;&amp;amp;&quot;) == &quot;&amp;amp;&quot;</pre>
 Make code block in markdown document HTML-safe.
 
 </dd>
+<dt id="escapeHTMLEntity"><a name="escapeHTMLEntity,string"></a><pre><span class="Keyword">proc</span> <span class="Identifier">escapeHTMLEntity</span><span class="Other">(</span><span class="Identifier">doc</span><span class="Other">:</span> <span class="Identifier">string</span><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">string</span> <span><span class="Other">{</span><span class="Other pragmadots">...</span><span class="Other">}</span></span><span class="pragmawrap"><span class="Other">{.</span><span class="pragma"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">Exception</span><span class="Other">,</span> <span class="Identifier">RegexError</span><span class="Other">]</span><span class="Other">,</span>
+    <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">RootEffect</span><span class="Other">]</span></span><span class="Other">.}</span></span></pre></dt>
+<dd>
+iterates over each item of <cite>a</cite>.
+
+</dd>
+<dt id="escapeLinkUrl"><a name="escapeLinkUrl,string"></a><pre><span class="Keyword">proc</span> <span class="Identifier">escapeLinkUrl</span><span class="Other">(</span><span class="Identifier">url</span><span class="Other">:</span> <span class="Identifier">string</span><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">string</span> <span><span class="Other">{</span><span class="Other pragmadots">...</span><span class="Other">}</span></span><span class="pragmawrap"><span class="Other">{.</span><span class="pragma"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">Exception</span><span class="Other">,</span> <span class="Identifier">RegexError</span><span class="Other">]</span><span class="Other">,</span>
+                                      <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">RootEffect</span><span class="Other">]</span></span><span class="Other">.}</span></span></pre></dt>
+<dd>
+
+
+</dd>
+<dt id="escapeBackslash"><a name="escapeBackslash,string"></a><pre><span class="Keyword">proc</span> <span class="Identifier">escapeBackslash</span><span class="Other">(</span><span class="Identifier">doc</span><span class="Other">:</span> <span class="Identifier">string</span><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">string</span> <span><span class="Other">{</span><span class="Other pragmadots">...</span><span class="Other">}</span></span><span class="pragmawrap"><span class="Other">{.</span><span class="pragma"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">ValueError</span><span class="Other">,</span> <span class="Identifier">Exception</span><span class="Other">,</span> <span class="Identifier">RegexError</span><span class="Other">]</span><span class="Other">,</span>
+                                        <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">RootEffect</span><span class="Other">]</span></span><span class="Other">.}</span></span></pre></dt>
+<dd>
+
+
+</dd>
 <dt id="slugify"><a name="slugify,string"></a><pre><span class="Keyword">proc</span> <span class="Identifier">slugify</span><span class="Other">(</span><span class="Identifier">doc</span><span class="Other">:</span> <span class="Identifier">string</span><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">string</span> <span><span class="Other">{</span><span class="Other pragmadots">...</span><span class="Other">}</span></span><span class="pragmawrap"><span class="Other">{.</span><span class="pragma"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">Exception</span><span class="Other">,</span> <span class="Identifier">RegexError</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">RootEffect</span><span class="Other">]</span></span><span class="Other">.}</span></span></pre></dt>
 <dd>
 Convert the footnote key to a url-friendly key.
 
 </dd>
+<dt id="genHTMLTable"><a name="genHTMLTable,openArray[string]"></a><pre><span class="Keyword">proc</span> <span class="Identifier">genHTMLTable</span><span class="Other">(</span><span class="Identifier">matches</span><span class="Other">:</span> <span class="Identifier">openArray</span><span class="Other">[</span><span class="Identifier">string</span><span class="Other">]</span><span class="Other">)</span><span class="Other">:</span> <a href="markdown.html#MarkdownTokenRef"><span class="Identifier">MarkdownTokenRef</span></a> <span><span class="Other">{</span><span class="Other pragmadots">...</span><span class="Other">}</span></span><span class="pragmawrap"><span class="Other">{.</span><span class="pragma">
+    <span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">Exception</span><span class="Other">,</span> <span class="Identifier">RegexError</span><span class="Other">,</span> <span class="Identifier">MarkdownError</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">RootEffect</span><span class="Other">]</span></span><span class="Other">.}</span></span></pre></dt>
+<dd>
+iterates over each item of <cite>a</cite>. Yields <tt class="docutils literal"><span class="pre">(index, a[index])</span></tt> pairs.
+
+</dd>
+<dt id="parseNewline"><a name="parseNewline,string,int,int"></a><pre><span class="Keyword">proc</span> <span class="Identifier">parseNewline</span><span class="Other">(</span><span class="Identifier">doc</span><span class="Other">:</span> <span class="Identifier">string</span><span class="Other">;</span> <span class="Identifier">start</span><span class="Other">:</span> <span class="Identifier">int</span><span class="Other">;</span> <span class="Identifier">size</span><span class="Other">:</span> <span class="Keyword">var</span> <span class="Identifier">int</span><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">seq</span><span class="Other">[</span><a href="markdown.html#MarkdownTokenRef"><span class="Identifier">MarkdownTokenRef</span></a><span class="Other">]</span> <span><span class="Other">{</span><span class="Other pragmadots">...</span><span class="Other">}</span></span><span class="pragmawrap"><span class="Other">{.</span><span class="pragma">
+    <span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span><span class="Other">.}</span></span></pre></dt>
+<dd>
+
+
+</dd>
+<dt id="parseBackslash"><a name="parseBackslash,string,int,int"></a><pre><span class="Keyword">proc</span> <span class="Identifier">parseBackslash</span><span class="Other">(</span><span class="Identifier">doc</span><span class="Other">:</span> <span class="Identifier">string</span><span class="Other">;</span> <span class="Identifier">start</span><span class="Other">:</span> <span class="Identifier">int</span><span class="Other">;</span> <span class="Identifier">size</span><span class="Other">:</span> <span class="Keyword">var</span> <span class="Identifier">int</span><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">seq</span><span class="Other">[</span><a href="markdown.html#MarkdownTokenRef"><span class="Identifier">MarkdownTokenRef</span></a><span class="Other">]</span> <span><span class="Other">{</span><span class="Other pragmadots">...</span><span class="Other">}</span></span><span class="pragmawrap"><span class="Other">{.</span><span class="pragma">
+    <span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">Exception</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">RootEffect</span><span class="Other">]</span></span><span class="Other">.}</span></span></pre></dt>
+<dd>
+unequals operator. This is a shorthand for <tt class="docutils literal"><span class="pre">not (x == y)</span></tt>.
+
+</dd>
+<dt id="parseBacktick"><a name="parseBacktick,string,int,int"></a><pre><span class="Keyword">proc</span> <span class="Identifier">parseBacktick</span><span class="Other">(</span><span class="Identifier">doc</span><span class="Other">:</span> <span class="Identifier">string</span><span class="Other">;</span> <span class="Identifier">start</span><span class="Other">:</span> <span class="Identifier">int</span><span class="Other">;</span> <span class="Identifier">size</span><span class="Other">:</span> <span class="Keyword">var</span> <span class="Identifier">int</span><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">seq</span><span class="Other">[</span><a href="markdown.html#MarkdownTokenRef"><span class="Identifier">MarkdownTokenRef</span></a><span class="Other">]</span> <span><span class="Other">{</span><span class="Other pragmadots">...</span><span class="Other">}</span></span><span class="pragmawrap"><span class="Other">{.</span><span class="pragma">
+    <span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">Exception</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">RootEffect</span><span class="Other">]</span></span><span class="Other">.}</span></span></pre></dt>
+<dd>
+
+
+</dd>
+<dt id="scanInlineDelimeters"><a name="scanInlineDelimeters,string,int,Delimeter"></a><pre><span class="Keyword">proc</span> <span class="Identifier">scanInlineDelimeters</span><span class="Other">(</span><span class="Identifier">doc</span><span class="Other">:</span> <span class="Identifier">string</span><span class="Other">;</span> <span class="Identifier">start</span><span class="Other">:</span> <span class="Identifier">int</span><span class="Other">;</span> <span class="Identifier">delimeter</span><span class="Other">:</span> <span class="Keyword">var</span> <a href="markdown.html#Delimeter"><span class="Identifier">Delimeter</span></a><span class="Other">)</span> <span><span class="Other">{</span><span class="Other pragmadots">...</span><span class="Other">}</span></span><span class="pragmawrap"><span class="Other">{.</span><span class="pragma">
+    <span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">Exception</span><span class="Other">,</span> <span class="Identifier">RegexError</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">RootEffect</span><span class="Other">]</span></span><span class="Other">.}</span></span></pre></dt>
+<dd>
+iterates over each item of <cite>a</cite>.
+
+</dd>
+<dt id="parseDelimeter"><a name="parseDelimeter,string,int,int,DoublyLinkedList[Delimeter]"></a><pre><span class="Keyword">proc</span> <span class="Identifier">parseDelimeter</span><span class="Other">(</span><span class="Identifier">doc</span><span class="Other">:</span> <span class="Identifier">string</span><span class="Other">;</span> <span class="Identifier">start</span><span class="Other">:</span> <span class="Identifier">int</span><span class="Other">;</span> <span class="Identifier">size</span><span class="Other">:</span> <span class="Keyword">var</span> <span class="Identifier">int</span><span class="Other">;</span>
+                   <span class="Identifier">delimeterStack</span><span class="Other">:</span> <span class="Keyword">var</span> <span class="Identifier">DoublyLinkedList</span><span class="Other">[</span><a href="markdown.html#Delimeter"><span class="Identifier">Delimeter</span></a><span class="Other">]</span><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">seq</span><span class="Other">[</span>
+    <a href="markdown.html#MarkdownTokenRef"><span class="Identifier">MarkdownTokenRef</span></a><span class="Other">]</span> <span><span class="Other">{</span><span class="Other pragmadots">...</span><span class="Other">}</span></span><span class="pragmawrap"><span class="Other">{.</span><span class="pragma"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">Exception</span><span class="Other">,</span> <span class="Identifier">RegexError</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">RootEffect</span><span class="Other">]</span></span><span class="Other">.}</span></span></pre></dt>
+<dd>
+add a placeholder for delimeter and append a delimeter to the stack.
+
+</dd>
+<dt id="removeDelimeter"><a name="removeDelimeter,DoublyLinkedNode[Delimeter]"></a><pre><span class="Keyword">proc</span> <span class="Identifier">removeDelimeter</span><span class="Other">(</span><span class="Identifier">delimeter</span><span class="Other">:</span> <span class="Keyword">var</span> <span class="Identifier">DoublyLinkedNode</span><span class="Other">[</span><a href="markdown.html#Delimeter"><span class="Identifier">Delimeter</span></a><span class="Other">]</span><span class="Other">)</span> <span><span class="Other">{</span><span class="Other pragmadots">...</span><span class="Other">}</span></span><span class="pragmawrap"><span class="Other">{.</span><span class="pragma"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span><span class="Other">,</span>
+    <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span><span class="Other">.}</span></span></pre></dt>
+<dd>
+unequals operator. This is a shorthand for <tt class="docutils literal"><span class="pre">not (x == y)</span></tt>.
+
+</dd>
+<dt id="processEmphasis"><a name="processEmphasis,seq[MarkdownTokenRef],DoublyLinkedList[Delimeter]"></a><pre><span class="Keyword">proc</span> <span class="Identifier">processEmphasis</span><span class="Other">(</span><span class="Identifier">tokens</span><span class="Other">:</span> <span class="Keyword">var</span> <span class="Identifier">seq</span><span class="Other">[</span><a href="markdown.html#MarkdownTokenRef"><span class="Identifier">MarkdownTokenRef</span></a><span class="Other">]</span><span class="Other">;</span>
+                    <span class="Identifier">delimeterStack</span><span class="Other">:</span> <span class="Keyword">var</span> <span class="Identifier">DoublyLinkedList</span><span class="Other">[</span><a href="markdown.html#Delimeter"><span class="Identifier">Delimeter</span></a><span class="Other">]</span><span class="Other">)</span> <span><span class="Other">{</span><span class="Other pragmadots">...</span><span class="Other">}</span></span><span class="pragmawrap"><span class="Other">{.</span><span class="pragma"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span><span class="Other">,</span>
+    <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span><span class="Other">.}</span></span></pre></dt>
+<dd>
+unequals operator. This is a shorthand for <tt class="docutils literal"><span class="pre">not (x == y)</span></tt>.
+
+</dd>
+<dt id="parseQuote"><a name="parseQuote,string,int,int"></a><pre><span class="Keyword">proc</span> <span class="Identifier">parseQuote</span><span class="Other">(</span><span class="Identifier">doc</span><span class="Other">:</span> <span class="Identifier">string</span><span class="Other">;</span> <span class="Identifier">start</span><span class="Other">:</span> <span class="Identifier">int</span><span class="Other">;</span> <span class="Identifier">size</span><span class="Other">:</span> <span class="Keyword">var</span> <span class="Identifier">int</span><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">seq</span><span class="Other">[</span><a href="markdown.html#MarkdownTokenRef"><span class="Identifier">MarkdownTokenRef</span></a><span class="Other">]</span> <span><span class="Other">{</span><span class="Other pragmadots">...</span><span class="Other">}</span></span><span class="pragmawrap"><span class="Other">{.</span><span class="pragma">
+    <span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span><span class="Other">.}</span></span></pre></dt>
+<dd>
+
+
+</dd>
+<dt id="parseBang"><a name="parseBang,string,int,int,DoublyLinkedList[Delimeter]"></a><pre><span class="Keyword">proc</span> <span class="Identifier">parseBang</span><span class="Other">(</span><span class="Identifier">doc</span><span class="Other">:</span> <span class="Identifier">string</span><span class="Other">;</span> <span class="Identifier">start</span><span class="Other">:</span> <span class="Identifier">int</span><span class="Other">;</span> <span class="Identifier">size</span><span class="Other">:</span> <span class="Keyword">var</span> <span class="Identifier">int</span><span class="Other">;</span>
+              <span class="Identifier">delimeterStack</span><span class="Other">:</span> <span class="Keyword">var</span> <span class="Identifier">DoublyLinkedList</span><span class="Other">[</span><a href="markdown.html#Delimeter"><span class="Identifier">Delimeter</span></a><span class="Other">]</span><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">seq</span><span class="Other">[</span>
+    <a href="markdown.html#MarkdownTokenRef"><span class="Identifier">MarkdownTokenRef</span></a><span class="Other">]</span> <span><span class="Other">{</span><span class="Other pragmadots">...</span><span class="Other">}</span></span><span class="pragmawrap"><span class="Other">{.</span><span class="pragma"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">Exception</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">RootEffect</span><span class="Other">]</span></span><span class="Other">.}</span></span></pre></dt>
+<dd>
+unequals operator. This is a shorthand for <tt class="docutils literal"><span class="pre">not (x == y)</span></tt>.
+
+</dd>
+<dt id="parseOpenBracket"><a name="parseOpenBracket,string,int,int"></a><pre><span class="Keyword">proc</span> <span class="Identifier">parseOpenBracket</span><span class="Other">(</span><span class="Identifier">doc</span><span class="Other">:</span> <span class="Identifier">string</span><span class="Other">;</span> <span class="Identifier">start</span><span class="Other">:</span> <span class="Identifier">int</span><span class="Other">;</span> <span class="Identifier">size</span><span class="Other">:</span> <span class="Keyword">var</span> <span class="Identifier">int</span><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">seq</span><span class="Other">[</span><a href="markdown.html#MarkdownTokenRef"><span class="Identifier">MarkdownTokenRef</span></a><span class="Other">]</span> <span><span class="Other">{</span><span class="Other pragmadots">...</span><span class="Other">}</span></span><span class="pragmawrap"><span class="Other">{.</span><span class="pragma">
+    <span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">Exception</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">RootEffect</span><span class="Other">]</span></span><span class="Other">.}</span></span></pre></dt>
+<dd>
+unequals operator. This is a shorthand for <tt class="docutils literal"><span class="pre">not (x == y)</span></tt>.
+
+</dd>
+<dt id="parseHTMLEntity"><a name="parseHTMLEntity,string,int,int"></a><pre><span class="Keyword">proc</span> <span class="Identifier">parseHTMLEntity</span><span class="Other">(</span><span class="Identifier">doc</span><span class="Other">:</span> <span class="Identifier">string</span><span class="Other">;</span> <span class="Identifier">start</span><span class="Other">:</span> <span class="Identifier">int</span><span class="Other">;</span> <span class="Identifier">size</span><span class="Other">:</span> <span class="Keyword">var</span> <span class="Identifier">int</span><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">seq</span><span class="Other">[</span><a href="markdown.html#MarkdownTokenRef"><span class="Identifier">MarkdownTokenRef</span></a><span class="Other">]</span> <span><span class="Other">{</span><span class="Other pragmadots">...</span><span class="Other">}</span></span><span class="pragmawrap"><span class="Other">{.</span><span class="pragma">
+    <span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">Exception</span><span class="Other">,</span> <span class="Identifier">RegexError</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">RootEffect</span><span class="Other">]</span></span><span class="Other">.}</span></span></pre></dt>
+<dd>
+
+
+</dd>
+<dt id="parseAutolink"><a name="parseAutolink,string,int,int"></a><pre><span class="Keyword">proc</span> <span class="Identifier">parseAutolink</span><span class="Other">(</span><span class="Identifier">doc</span><span class="Other">:</span> <span class="Identifier">string</span><span class="Other">;</span> <span class="Identifier">start</span><span class="Other">:</span> <span class="Identifier">int</span><span class="Other">;</span> <span class="Identifier">size</span><span class="Other">:</span> <span class="Keyword">var</span> <span class="Identifier">int</span><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">seq</span><span class="Other">[</span><a href="markdown.html#MarkdownTokenRef"><span class="Identifier">MarkdownTokenRef</span></a><span class="Other">]</span> <span><span class="Other">{</span><span class="Other pragmadots">...</span><span class="Other">}</span></span><span class="pragmawrap"><span class="Other">{.</span><span class="pragma">
+    <span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">Exception</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">RootEffect</span><span class="Other">]</span></span><span class="Other">.}</span></span></pre></dt>
+<dd>
+unequals operator. This is a shorthand for <tt class="docutils literal"><span class="pre">not (x == y)</span></tt>.
+
+</dd>
+<dt id="parseHTMLTag"><a name="parseHTMLTag,string,int,int"></a><pre><span class="Keyword">proc</span> <span class="Identifier">parseHTMLTag</span><span class="Other">(</span><span class="Identifier">doc</span><span class="Other">:</span> <span class="Identifier">string</span><span class="Other">;</span> <span class="Identifier">start</span><span class="Other">:</span> <span class="Identifier">int</span><span class="Other">;</span> <span class="Identifier">size</span><span class="Other">:</span> <span class="Keyword">var</span> <span class="Identifier">int</span><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">seq</span><span class="Other">[</span><a href="markdown.html#MarkdownTokenRef"><span class="Identifier">MarkdownTokenRef</span></a><span class="Other">]</span> <span><span class="Other">{</span><span class="Other pragmadots">...</span><span class="Other">}</span></span><span class="pragmawrap"><span class="Other">{.</span><span class="pragma">
+    <span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">Exception</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">RootEffect</span><span class="Other">]</span></span><span class="Other">.}</span></span></pre></dt>
+<dd>
+unequals operator. This is a shorthand for <tt class="docutils literal"><span class="pre">not (x == y)</span></tt>.
+
+</dd>
+<dt id="parseString"><a name="parseString,string,int,int"></a><pre><span class="Keyword">proc</span> <span class="Identifier">parseString</span><span class="Other">(</span><span class="Identifier">doc</span><span class="Other">:</span> <span class="Identifier">string</span><span class="Other">;</span> <span class="Identifier">start</span><span class="Other">:</span> <span class="Identifier">int</span><span class="Other">;</span> <span class="Identifier">size</span><span class="Other">:</span> <span class="Keyword">var</span> <span class="Identifier">int</span><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">seq</span><span class="Other">[</span><a href="markdown.html#MarkdownTokenRef"><span class="Identifier">MarkdownTokenRef</span></a><span class="Other">]</span> <span><span class="Other">{</span><span class="Other pragmadots">...</span><span class="Other">}</span></span><span class="pragmawrap"><span class="Other">{.</span><span class="pragma">
+    <span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">Exception</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">RootEffect</span><span class="Other">]</span></span><span class="Other">.}</span></span></pre></dt>
+<dd>
+unequals operator. This is a shorthand for <tt class="docutils literal"><span class="pre">not (x == y)</span></tt>.
+
+</dd>
+<dt id="parseInlines"><a name="parseInlines,MarkdownContext,string"></a><pre><span class="Keyword">proc</span> <span class="Identifier">parseInlines</span><span class="Other">(</span><span class="Identifier">ctx</span><span class="Other">:</span> <a href="markdown.html#MarkdownContext"><span class="Identifier">MarkdownContext</span></a><span class="Other">;</span> <span class="Identifier">doc</span><span class="Other">:</span> <span class="Identifier">string</span><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">seq</span><span class="Other">[</span><a href="markdown.html#MarkdownTokenRef"><span class="Identifier">MarkdownTokenRef</span></a><span class="Other">]</span> <span><span class="Other">{</span><span class="Other pragmadots">...</span><span class="Other">}</span></span><span class="pragmawrap"><span class="Other">{.</span><span class="pragma">
+    <span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">Exception</span><span class="Other">,</span> <span class="Identifier">RegexError</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">RootEffect</span><span class="Other">]</span></span><span class="Other">.}</span></span></pre></dt>
+<dd>
+iterates over each item of <cite>a</cite>. Yields <tt class="docutils literal"><span class="pre">(index, a[index])</span></tt> pairs.
+
+</dd>
 <dt id="findToken"><a name="findToken,string,int,MarkdownTokenType"></a><pre><span class="Keyword">proc</span> <span class="Identifier">findToken</span><span class="Other">(</span><span class="Identifier">doc</span><span class="Other">:</span> <span class="Identifier">string</span><span class="Other">;</span> <span class="Identifier">start</span><span class="Other">:</span> <span class="Keyword">var</span> <span class="Identifier">int</span><span class="Other">;</span> <span class="Identifier">ruleType</span><span class="Other">:</span> <a href="markdown.html#MarkdownTokenType"><span class="Identifier">MarkdownTokenType</span></a><span class="Other">)</span><span class="Other">:</span> <a href="markdown.html#MarkdownTokenRef"><span class="Identifier">MarkdownTokenRef</span></a> <span><span class="Other">{</span><span class="Other pragmadots">...</span><span class="Other">}</span></span><span class="pragmawrap"><span class="Other">{.</span><span class="pragma">
-    <span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">KeyError</span><span class="Other">,</span> <span class="Identifier">Exception</span><span class="Other">,</span> <span class="Identifier">RegexError</span><span class="Other">,</span> <span class="Identifier">MarkdownError</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">RootEffect</span><span class="Other">]</span></span><span class="Other">.}</span></span></pre></dt>
+    <span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">KeyError</span><span class="Other">,</span> <span class="Identifier">Exception</span><span class="Other">,</span> <span class="Identifier">RegexError</span><span class="Other">,</span> <span class="Identifier">MarkdownError</span><span class="Other">,</span> <span class="Identifier">ValueError</span><span class="Other">]</span><span class="Other">,</span>
+    <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">RootEffect</span><span class="Other">]</span></span><span class="Other">.}</span></span></pre></dt>
 <dd>
 Find a markdown token from document <cite>doc</cite> at position <cite>start</cite>, based on a rule type and regex rule.
 
 </dd>
+<dt id="renderHTMLTable"><a name="renderHTMLTable,MarkdownContext,HTMLTable"></a><pre><span class="Keyword">proc</span> <span class="Identifier">renderHTMLTable</span><span class="Other">(</span><span class="Identifier">ctx</span><span class="Other">:</span> <a href="markdown.html#MarkdownContext"><span class="Identifier">MarkdownContext</span></a><span class="Other">;</span> <span class="Identifier">table</span><span class="Other">:</span> <a href="markdown.html#HTMLTable"><span class="Identifier">HTMLTable</span></a><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">string</span> <span><span class="Other">{</span><span class="Other pragmadots">...</span><span class="Other">}</span></span><span class="pragmawrap"><span class="Other">{.</span><span class="pragma">
+    <span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">Exception</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">RootEffect</span><span class="Other">]</span></span><span class="Other">.}</span></span></pre></dt>
+<dd>
+iterates over each item of <cite>a</cite>.
+
+</dd>
 <dt id="renderToken"><a name="renderToken,MarkdownContext,MarkdownTokenRef"></a><pre><span class="Keyword">proc</span> <span class="Identifier">renderToken</span><span class="Other">(</span><span class="Identifier">ctx</span><span class="Other">:</span> <a href="markdown.html#MarkdownContext"><span class="Identifier">MarkdownContext</span></a><span class="Other">;</span> <span class="Identifier">token</span><span class="Other">:</span> <a href="markdown.html#MarkdownTokenRef"><span class="Identifier">MarkdownTokenRef</span></a><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">string</span> <span><span class="Other">{</span><span class="Other pragmadots">...</span><span class="Other">}</span></span><span class="pragmawrap"><span class="Other">{.</span><span class="pragma">
-    <span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">Exception</span><span class="Other">,</span> <span class="Identifier">KeyError</span><span class="Other">,</span> <span class="Identifier">RegexError</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">RootEffect</span><span class="Other">]</span></span><span class="Other">.}</span></span></pre></dt>
+    <span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">Exception</span><span class="Other">,</span> <span class="Identifier">RegexError</span><span class="Other">,</span> <span class="Identifier">ValueError</span><span class="Other">,</span> <span class="Identifier">KeyError</span><span class="Other">,</span> <span class="Identifier">MarkdownError</span><span class="Other">]</span><span class="Other">,</span>
+    <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">RootEffect</span><span class="Other">]</span></span><span class="Other">.}</span></span></pre></dt>
 <dd>
 Render token. This is a simple dispatcher function.
 
 </dd>
-<dt id="markdown"><a name="markdown,string,string"></a><pre><span class="Keyword">proc</span> <span class="Identifier">markdown</span><span class="Other">(</span><span class="Identifier">doc</span><span class="Other">:</span> <span class="Identifier">string</span><span class="Other">;</span> <span class="Identifier">config</span><span class="Other">:</span> <span class="Identifier">string</span> <span class="Other">=</span> <span class="StringLit">&quot;&quot;&quot;Escape: true
-KeepHTML: false
-&quot;&quot;&quot;</span><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">string</span> <span><span class="Other">{</span><span class="Other pragmadots">...</span><span class="Other">}</span></span><span class="pragmawrap"><span class="Other">{.</span><span class="pragma">
-    <span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">Exception</span><span class="Other">,</span> <span class="Identifier">RegexError</span><span class="Other">,</span> <span class="Identifier">KeyError</span><span class="Other">,</span> <span class="Identifier">MarkdownError</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">RootEffect</span><span class="Other">]</span></span><span class="Other">.}</span></span></pre></dt>
+<dt id="buildContext"><a name="buildContext,seq[MarkdownTokenRef],MarkdownConfig"></a><pre><span class="Keyword">proc</span> <span class="Identifier">buildContext</span><span class="Other">(</span><span class="Identifier">tokens</span><span class="Other">:</span> <span class="Identifier">seq</span><span class="Other">[</span><a href="markdown.html#MarkdownTokenRef"><span class="Identifier">MarkdownTokenRef</span></a><span class="Other">]</span><span class="Other">;</span> <span class="Identifier">config</span><span class="Other">:</span> <a href="markdown.html#MarkdownConfig"><span class="Identifier">MarkdownConfig</span></a><span class="Other">)</span><span class="Other">:</span> <a href="markdown.html#MarkdownContext"><span class="Identifier">MarkdownContext</span></a> <span><span class="Other">{</span><span class="Other pragmadots">...</span><span class="Other">}</span></span><span class="pragmawrap"><span class="Other">{.</span><span class="pragma">
+    <span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">Exception</span><span class="Other">,</span> <span class="Identifier">RegexError</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">RootEffect</span><span class="Other">]</span></span><span class="Other">.}</span></span></pre></dt>
 <dd>
-Convert markdown string <cite>doc</cite> into an HTML string.
+iterates over each item of <cite>a</cite>.
+
+</dd>
+<dt id="markdown"><a name="markdown,string,MarkdownConfig"></a><pre><span class="Keyword">proc</span> <span class="Identifier">markdown</span><span class="Other">(</span><span class="Identifier">doc</span><span class="Other">:</span> <span class="Identifier">string</span><span class="Other">;</span> <span class="Identifier">config</span><span class="Other">:</span> <a href="markdown.html#MarkdownConfig"><span class="Identifier">MarkdownConfig</span></a> <span class="Other">=</span> <span class="Identifier">initMarkdownConfig</span><span class="Other">(</span><span class="Other">)</span><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">string</span> <span><span class="Other">{</span><span class="Other pragmadots">...</span><span class="Other">}</span></span><span class="pragmawrap"><span class="Other">{.</span><span class="pragma">
+    <span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">Exception</span><span class="Other">,</span> <span class="Identifier">RegexError</span><span class="Other">,</span> <span class="Identifier">KeyError</span><span class="Other">,</span> <span class="Identifier">MarkdownError</span><span class="Other">,</span> <span class="Identifier">ValueError</span><span class="Other">]</span><span class="Other">,</span>
+    <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">RootEffect</span><span class="Other">]</span></span><span class="Other">.}</span></span></pre></dt>
+<dd>
+Convert markdown string <cite>doc</cite> into an HTML string. Parsing &amp; rendering behavior can be customized using <tt class="docutils literal"><span class="pre">config</span></tt> - see <a class="reference external" href="#MarkdownConfig">MarkdownConfig</a> for the available options.
+
+</dd>
+<dt id="readCLIOptions"><a name="readCLIOptions,"></a><pre><span class="Keyword">proc</span> <span class="Identifier">readCLIOptions</span><span class="Other">(</span><span class="Other">)</span><span class="Other">:</span> <a href="markdown.html#MarkdownConfig"><span class="Identifier">MarkdownConfig</span></a> <span><span class="Other">{</span><span class="Other pragmadots">...</span><span class="Other">}</span></span><span class="pragmawrap"><span class="Other">{.</span><span class="pragma"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span><span class="Other">.}</span></span></pre></dt>
+<dd>
+<p>Read options from command line. If no option passed, the corresponding option will be the default.</p>
+<p>Available options:</p>
+<ul class="simple"><li><cite>-e</cite> / <cite>--escape</cite></li>
+<li><cite>--no-escape</cite></li>
+<li><cite>-k</cite> / <cite>--keep-html</cite></li>
+<li>'--no-keep-html`</li>
+</ul>
+
 
 </dd>
 
@@ -1765,7 +2066,7 @@ Parse markdown document into a sequence of tokens.
       <div class="twelve-columns footer">
         <span class="nim-sprite"></span>
         <br/>
-        <small>Made with Nim. Generated: 2018-10-19 02:15:13 UTC</small>
+        <small>Made with Nim. Generated: 2018-11-03 09:42:31 UTC</small>
       </div>
     </div>
   </div>

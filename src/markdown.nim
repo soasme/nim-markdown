@@ -417,11 +417,11 @@ let blockParsingOrder = @[
 
 let listParsingOrder = @[
   MarkdownTokenType.Newline,
-  # MarkdownTokenType.IndentedBlockCode,
+  MarkdownTokenType.IndentedBlockCode,
   MarkdownTokenType.FencingBlockCode,
-  # MarkdownTokenType.ATXHeading,
-  # MarkdownTokenType.ThematicBreak,
-  # MarkdownTokenType.BlockQuote,
+  MarkdownTokenType.ATXHeading,
+  MarkdownTokenType.ThematicBreak,
+  MarkdownTokenType.BlockQuote,
   MarkdownTokenType.ListBlock,
   MarkdownTokenType.HTMLBlock,
   MarkdownTokenType.InlineEscape,

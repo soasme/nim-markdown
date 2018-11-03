@@ -1032,18 +1032,6 @@ proc processEmphasis*(tokens: var seq[MarkdownTokenRef], delimeterStack: var Dou
 
 proc parseQuote*(doc: string, start: int, size: var int): seq[MarkdownTokenRef] = @[]
 
-proc parseBang*(doc: string, start: int, size: var int, delimeterStack: var DoublyLinkedList[Delimeter]): seq[MarkdownTokenRef] =
-  var pos: int = start
-  var token: MarkdownTokenRef
-
-  token = findToken(doc, pos, MarkdownTokenType.InlineLink)
-  if token != nil:
-    size = pos - start
-    return @[token]
-
-  size = -1
-  result = @[]
-
 proc parseOpenBracket*(doc: string, start: int, size: var int): seq[MarkdownTokenRef] =
   var pos: int = start
   var token: MarkdownTokenRef
@@ -1174,7 +1162,7 @@ proc parseInlines*(ctx: MarkdownContext, doc: string): seq[MarkdownTokenRef] =
     of '\'': tokens = parseQuote(doc, index, size)
     of '"': tokens = parseQuote(doc, index, size)
     of '[': tokens = parseOpenBracket(doc, index, size)
-    of '!': tokens = parseBang(doc, index, size, delimeterStack)
+    of '!': tokens = parseOpenBracket(doc, index, size)
     of '&': tokens = parseHTMLEntity(doc, index, size)
     of '<': tokens = parseLessThan(doc, index, size)
     of ' ': tokens = parseHardLineBreak(doc, index, size)

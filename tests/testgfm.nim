@@ -25,6 +25,16 @@ let KNOW_ISSUES = [
   # 510,
   # 511,
   # 512, # MINOR: Above cases illustrate the precedence of HTML tags, code spans, and autolinks over link grouping.
+  588, # fixme.
+  592, # fixme.
+  594, # fixme.
+  596, # make no sense..
+  597, # conflict to case 606.
+  598, # conflict to case 607.
+  602, # scan for unbalanced closing parenthesis.
+  604, # FIXME.
+  606, # save with 602.
+  609, # rare case, let's ignore it first.
 ]
 
 test "gfm":

@@ -254,7 +254,7 @@ let HTML_TAG = (
 let LINK_SCHEME = r"[a-zA-Z][a-zA-Z0-9+.-]{1,31}"
 let LINK_EMAIL = r"[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+(@)[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+(?![-_])"
 let LINK_LABEL = r"(?:\[[^\[\]]*\]|\\[\[\]]?|`[^`]*`|[^\[\]\\])*?"
-let LINK_HREF = r"\s*(<(?:\\[<>]?|[^\s<>\\])*>|(?:\\[()]?|\([^\s\x00-\x1f\\]*\)|[^\s\x00-\x1f()\\])*?)"
+let LINK_HREF = r"\s*(<(?:\\[<>]?|[^\n<>\\])*>|(?:\\[()]?|\([^\s\x00-\x1f\\]*\)|[^\s\x00-\x1f()\\])*?)"
 let LINK_TITLE = r""""(?:\\"?|[^"\\])*"|'(?:\\'?|[^'\\])*'|\((?:\\\)?|[^)\\])*\)"""
 let INLINE_AUTOLINK = r"<(" & LINK_SCHEME & r"[^\s\x00-\x1f<>]*|" & LINK_EMAIL & ")>"
 let INLINE_LINK = r"!?\[(" & LINK_LABEL & r")\]\(" & LINK_HREF & r"(?:\s+(" & LINK_TITLE & r"))?\s*\)"
@@ -713,7 +713,6 @@ proc isSquareBalanced*(text: string): bool =
   result = stack.len == 0
 
 proc genInlineLink(matches: openArray[string]): MarkdownTokenRef =
-  #echo(matches)
   # if matches[3].contains(re"\n"):
   #   return MarkdownTokenRef(type: MarkdownTokenType.InlineText, inlineTextVal: matches[0])
   # if matches[2] != "<" and matches[3].contains(re"\s"):
@@ -724,8 +723,8 @@ proc genInlineLink(matches: openArray[string]): MarkdownTokenRef =
   link.isEmail = false
   link.isImage = matches[0][0] == '!'
   link.text = matches[1]
-  link.url = matches[2].replacef(re"<([^>]+)>", "$1")
-  link.title = matches[3].replacef(re"(['""])([^'""]+)\1", "$2")
+  link.url = matches[2].replacef(re"<([^>]*)>", "$1")
+  link.title = matches[3].replacef(re"^'(.*)'", "$1").replacef(re"^\((.*)\)$", "$1").replacef(re("^\"(.*)\""), "$1")
   result = MarkdownTokenRef(type: MarkdownTokenType.InlineLink, inlineLinkVal: link)
 
 proc genInlineHTML(matches: openArray[string]): MarkdownTokenRef =

@@ -693,15 +693,15 @@ proc genInlineText(matches: openArray[string]): MarkdownTokenRef =
 proc genInlineEscape(matches: openArray[string]): MarkdownTokenRef =
   result = MarkdownTokenRef(type: MarkdownTokenType.InlineEscape, inlineEscapeVal: matches[0])
 
-proc isSquareBalanced*(text: string): bool =
+proc isCharBalanced*(text: string, leftChar: char = '[', rightChar: char = ']'): bool =
   var stack: seq[char]
   var isEscaped = false
   for ch in text:
     if isEscaped:
       continue
-    elif ch == '[':
+    elif ch == leftChar:
       stack.add(ch)
-    elif ch == ']':
+    elif ch == rightChar:
       if stack.len > 0:
         discard stack.pop
       else:
@@ -713,12 +713,6 @@ proc isSquareBalanced*(text: string): bool =
   result = stack.len == 0
 
 proc genInlineLink(matches: openArray[string]): MarkdownTokenRef =
-  # if matches[3].contains(re"\n"):
-  #   return MarkdownTokenRef(type: MarkdownTokenType.InlineText, inlineTextVal: matches[0])
-  # if matches[2] != "<" and matches[3].contains(re"\s"):
-  #   return MarkdownTokenRef(type: MarkdownTokenType.InlineText, inlineTextVal: matches[0])
-  # if not matches[1].isSquareBalanced:
-  #   return MarkdownTokenRef(type: MarkdownTokenType.InlineText, inlineTextVal: matches[0])
   var link: Link
   link.isEmail = false
   link.isImage = matches[0][0] == '!'
@@ -784,6 +778,8 @@ proc genInlineEmphasis(matches: openArray[string]): MarkdownTokenRef =
     )
 
 proc genInlineCode(matches: openArray[string]): MarkdownTokenRef =
+  if not isCharBalanced(matches[2], '`', '`'):
+    return MarkdownTokenRef(type: MarkdownTokenType.InlineText, inlineTextVal: fmt"{matches[1]}{matches[2]}{matches[1]}")
   result = MarkdownTokenRef(type: MarkdownTokenType.InlineCode, inlineCodeVal: matches[2])
 
 proc genInlineBreak(matches: openArray[string]): MarkdownTokenRef =

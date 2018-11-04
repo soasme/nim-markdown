@@ -25,6 +25,8 @@ let KNOW_ISSUES = [
   # 510,
   # 511,
   # 512, # MINOR: Above cases illustrate the precedence of HTML tags, code spans, and autolinks over link grouping.
+  560, # todo
+  561, # todo
   588, # fixme.
   592, # fixme.
   594, # fixme.

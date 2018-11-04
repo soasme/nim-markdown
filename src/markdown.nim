@@ -163,6 +163,7 @@ type
     InlineRefLink,
     InlineNoLink,
     InlineURL,
+    InlineEmail,
     InlineDoubleEmphasis,
     InlineEmphasis,
     InlineCode,
@@ -199,6 +200,7 @@ type
     of MarkdownTokenType.InlineRefLink: inlineRefLinkVal*: RefLink
     of MarkdownTokenType.InlineNoLink: inlineNoLinkVal*: RefLink
     of MarkdownTokenType.InlineURL: inlineURLVal*: string
+    of MarkdownTokenType.InlineEmail: inlineEmailVal*: string
     of MarkdownTokenType.InlineDoubleEmphasis: inlineDoubleEmphasisVal*: DoubleEmphasis
     of MarkdownTokenType.InlineEmphasis: inlineEmphasisVal*: Emphasis
     of MarkdownTokenType.InlineCode: inlineCodeVal*: string
@@ -252,7 +254,7 @@ let HTML_TAG = (
 let LINK_SCHEME = r"[a-zA-Z][a-zA-Z0-9+.-]{1,31}"
 let LINK_EMAIL = r"[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+(@)[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+(?![-_])"
 let LINK_LABEL = r"(?:\[[^\[\]]*\]|\\[\[\]]?|`[^`]*`|[^\[\]\\])*?"
-let LINK_HREF = r"\s*(<(?:\\[<>]?|[^\s<>\\])*>|(?:\\[()]?|\([^\s\x00-\x1f\\]*\)|[^\s\x00-\x1f()\\])*?)"
+let LINK_HREF = r"\s*(<(?:\\[<>]?|[^\n<>\\])*>|(?:\\[()]?|\([^\s\x00-\x1f\\]*\)|[^\s\x00-\x1f()\\])*?)"
 let LINK_TITLE = r""""(?:\\"?|[^"\\])*"|'(?:\\'?|[^'\\])*'|\((?:\\\)?|[^)\\])*\)"""
 let INLINE_AUTOLINK = r"<(" & LINK_SCHEME & r"[^\s\x00-\x1f<>]*|" & LINK_EMAIL & ")>"
 let INLINE_LINK = r"!?\[(" & LINK_LABEL & r")\]\(" & LINK_HREF & r"(?:\s+(" & LINK_TITLE & r"))?\s*\)"
@@ -283,18 +285,18 @@ let TAG = (
 let RE_HEADING = r"^ *(#{1,6}) *([^\n]+?) *(?:#+ *)?(?:\n+|$)"
 let RE_LHEADING = r"^([^\n]+)\n *(=|-){2,} *(?:\n+|$)"
 let RE_PARAGRAPH = (
-  r"[^\n]+(?:\n(?!" &
-  HR & r"|" & RE_HEADING & r"|" & RE_LHEADING & "|" &
-  r" {0,3}>" & "|" & r"<\/?(?:" & TAG & r")(?: +|\n|\/?>)|<(?:script|pre|style|!--))[^\n]+)*"
+  r"(((?:[^\n]+\n?" &
+  r"(?!" &
+  r" {0,3}[-*_](?: *[-*_]){2,} *(?:\n+|$)|" & # ThematicBreak
+  r" {0,3}(?:#{1,6}) +(?:[^\n]+?) *#* *(?:\n+|$)|" & # atx heading
+  LIST & # list
+  r"))+)\n*)"
 )
 
 let RE_ATX_HEADING = r" {0,3}(#{1,6})( +)?(?(2)([^\n]*?))( +)?(?(4)#*) *(?:\n+|$)"
 
 let RE_BLOCKQUOTE = (
-  r"(( *>[^\n]*(\n[^\n]+)*\n*)+)(?=" &
-  HR.replace(r"\1", r"\4") & "|" &
-  r"\n{2,}|$" &
-  r")"
+  r"( {0,3}> ?([^\n]*(?:\n[^\n]+)*\n*)(?:\n|$))+"
 )
 
 var blockRules = @{
@@ -303,15 +305,9 @@ var blockRules = @{
   MarkdownTokenType.ThematicBreak: re"^ {0,3}([-*_])(?:[ \t]*\1){2,}[ \t]*(?:\n+|$)",
   MarkdownTokenType.IndentedBlockCode: re"^(( {4}[^\n]+\n*)+)",
   MarkdownTokenType.FencingBlockCode: re"^( *(`{3,}|~{3}) *([^`\s]+)? *\n([\s\S]+?)\s*\2 *(\n+|$))",
-  MarkdownTokenType.BlockQuote: re("^" & RE_BLOCKQUOTE),
+  MarkdownTokenType.BlockQuote: re(r"^(" & RE_BLOCKQUOTE & r")"),
   MarkdownTokenType.Paragraph: re(
-    r"^(((?:[^\n]+\n?" &
-    r"(?!" &
-    r" {0,3}[-*_](?: *[-*_]){2,} *(?:\n+|$)|" & # ThematicBreak
-    r"( *>[^\n]+(\n[^\n]+)*\n*)+|" & # blockquote
-    r" {0,3}(?:#{1,6}) +(?:[^\n]+?) *#* *(?:\n+|$)|" & # atx heading
-    LIST & # list
-    r"))+)\n*)"
+    "^(" & RE_PARAGRAPH & ")"
   ),
   MarkdownTokenType.ListBlock: re(
     r"^(" & LIST & ")"
@@ -359,7 +355,16 @@ var blockRules = @{
   ),
   MarkdownTokenType.InlineNoLink: re("^(" & INLINE_NOLINK & ")"),
   MarkdownTokenType.InlineURL: re(
-    r"""^((https?:\/\/(?:www\.|(?!www))[a-zA-Z0-9][a-zA-Z0-9-]+[a-zA-Z0-9]\.[^\s]{2,}|www\.[a-zA-Z0-9][a-zA-Z0-9-]+[a-zA-Z0-9]\.[^\s]{2,}|https?:\/\/(?:www\.|(?!www))[a-zA-Z0-9]\.[^\s]{2,}|www\.[a-zA-Z0-9]\.[^\s]{2,}))"""
+    r"^(" &
+    r"(?:www|https?://[\w\d_\-]+|ftp://[\w\d_\-]+)" &
+    r"(?:\.[\w\d_\-.]+)+" &
+    r"[^< ]+[^?!.,:*_~< ]" &
+    r")"
+  ),
+  MarkdownTokenType.InlineEmail: re(
+    r"^(" &
+    r"(?!(?:(?:\x22?\x5C[\x00-\x7E]\x22?)|(?:\x22?[^\x5C\x22]\x22?)){255,})(?!(?:(?:\x22?\x5C[\x00-\x7E]\x22?)|(?:\x22?[^\x5C\x22]\x22?)){65,}@)(?:(?:[\x21\x23-\x27\x2A\x2B\x2D\x2F-\x39\x3D\x3F\x5E-\x7E]+)|(?:\x22(?:[\x01-\x08\x0B\x0C\x0E-\x1F\x21\x23-\x5B\x5D-\x7F]|(?:\x5C[\x00-\x7F]))*\x22))(?:\.(?:(?:[\x21\x23-\x27\x2A\x2B\x2D\x2F-\x39\x3D\x3F\x5E-\x7E]+)|(?:\x22(?:[\x01-\x08\x0B\x0C\x0E-\x1F\x21\x23-\x5B\x5D-\x7F]|(?:\x5C[\x00-\x7F]))*\x22)))*@(?:(?:(?!.*[^.]{64,})(?:(?:(?:xn--)?[a-z0-9]+(?:-[a-z0-9]+)*\.){1,126}){1,}(?:(?:[a-z][a-z0-9]*)|(?:(?:xn--)[a-z0-9]+))(?:-[a-z0-9]+)*)|(?:\[(?:(?:IPv6:(?:(?:[a-f0-9]{1,4}(?::[a-f0-9]{1,4}){7})|(?:(?!(?:.*[a-f0-9][:\]]){7,})(?:[a-f0-9]{1,4}(?::[a-f0-9]{1,4}){0,5})?::(?:[a-f0-9]{1,4}(?::[a-f0-9]{1,4}){0,5})?)))|(?:(?:IPv6:(?:(?:[a-f0-9]{1,4}(?::[a-f0-9]{1,4}){5}:)|(?:(?!(?:.*[a-f0-9]:){5,})(?:[a-f0-9]{1,4}(?::[a-f0-9]{1,4}){0,3})?::(?:[a-f0-9]{1,4}(?::[a-f0-9]{1,4}){0,3}:)?)))?(?:(?:25[0-5])|(?:2[0-4][0-9])|(?:1[0-9]{2})|(?:[1-9]?[0-9]))(?:\.(?:(?:25[0-5])|(?:2[0-4][0-9])|(?:1[0-9]{2})|(?:[1-9]?[0-9]))){3}))\]))" &
+    r")"
   ),
   MarkdownTokenType.InlineDoubleEmphasis: re(
     r"^(_{2}([\w\d][\s\S]*?(?<![\\\s]))_{2}(?!_)(?>=\s*|$)" &
@@ -406,6 +411,7 @@ let listParsingOrder = @[
   MarkdownTokenType.InlineEscape,
   MarkdownTokenType.InlineHTML,
   MarkdownTokenType.InlineURL,
+  MarkdownTokenType.InlineEmail,
   MarkdownTokenType.InlineLink,
   MarkdownTokenType.InlineFootnote,
   MarkdownTokenType.InlineRefLink,
@@ -423,6 +429,7 @@ let inlineParsingOrder = @[
   MarkdownTokenType.InlineEscape,
   MarkdownTokenType.InlineHTML,
   MarkdownTokenType.InlineURL,
+  MarkdownTokenType.InlineEmail,
   MarkdownTokenType.InlineLink,
   MarkdownTokenType.InlineFootnote,
   MarkdownTokenType.InlineRefLink,
@@ -686,15 +693,15 @@ proc genInlineText(matches: openArray[string]): MarkdownTokenRef =
 proc genInlineEscape(matches: openArray[string]): MarkdownTokenRef =
   result = MarkdownTokenRef(type: MarkdownTokenType.InlineEscape, inlineEscapeVal: matches[0])
 
-proc isSquareBalanced(text: string): bool =
+proc isCharBalanced*(text: string, leftChar: char = '[', rightChar: char = ']'): bool =
   var stack: seq[char]
   var isEscaped = false
   for ch in text:
     if isEscaped:
       continue
-    elif ch == '[':
+    elif ch == leftChar:
       stack.add(ch)
-    elif ch == ']':
+    elif ch == rightChar:
       if stack.len > 0:
         discard stack.pop
       else:
@@ -706,19 +713,12 @@ proc isSquareBalanced(text: string): bool =
   result = stack.len == 0
 
 proc genInlineLink(matches: openArray[string]): MarkdownTokenRef =
-  #echo(matches)
-  # if matches[3].contains(re"\n"):
-  #   return MarkdownTokenRef(type: MarkdownTokenType.InlineText, inlineTextVal: matches[0])
-  # if matches[2] != "<" and matches[3].contains(re"\s"):
-  #   return MarkdownTokenRef(type: MarkdownTokenType.InlineText, inlineTextVal: matches[0])
-  # if not matches[1].isSquareBalanced:
-  #   return MarkdownTokenRef(type: MarkdownTokenType.InlineText, inlineTextVal: matches[0])
   var link: Link
   link.isEmail = false
   link.isImage = matches[0][0] == '!'
   link.text = matches[1]
-  link.url = matches[2].replacef(re"<([^>]+)>", "$1")
-  link.title = matches[3].replacef(re"(['""])([^'""]+)\1", "$2")
+  link.url = matches[2].replacef(re"<([^>]*)>", "$1")
+  link.title = matches[3].replacef(re"^'(.*)'", "$1").replacef(re"^\((.*)\)$", "$1").replacef(re("^\"(.*)\""), "$1")
   result = MarkdownTokenRef(type: MarkdownTokenType.InlineLink, inlineLinkVal: link)
 
 proc genInlineHTML(matches: openArray[string]): MarkdownTokenRef =
@@ -744,6 +744,10 @@ proc genInlineNoLink(matches: openArray[string]): MarkdownTokenRef =
 proc genInlineURL(matches: openArray[string]): MarkdownTokenRef =
   let url = matches[0]
   result = MarkdownTokenRef(type: MarkdownTokenType.InlineURL, inlineURLVal: url)
+
+proc genInlineEmail(matches: openArray[string]): MarkdownTokenRef =
+  let email = matches[0]
+  result = MarkdownTokenRef(type: MarkdownTokenType.InlineEmail, inlineEmailVal: email)
 
 proc genInlineDoubleEmphasis(matches: openArray[string]): MarkdownTokenRef =
   var text: string
@@ -1021,18 +1025,6 @@ proc processEmphasis*(tokens: var seq[MarkdownTokenRef], delimeterStack: var Dou
 
 proc parseQuote*(doc: string, start: int, size: var int): seq[MarkdownTokenRef] = @[]
 
-proc parseBang*(doc: string, start: int, size: var int, delimeterStack: var DoublyLinkedList[Delimeter]): seq[MarkdownTokenRef] =
-  var pos: int = start
-  var token: MarkdownTokenRef
-
-  token = findToken(doc, pos, MarkdownTokenType.InlineLink)
-  if token != nil:
-    size = pos - start
-    return @[token]
-
-  size = -1
-  result = @[]
-
 proc parseOpenBracket*(doc: string, start: int, size: var int): seq[MarkdownTokenRef] =
   var pos: int = start
   var token: MarkdownTokenRef
@@ -1110,6 +1102,11 @@ proc parseString*(doc: string, start: int, size: var int): seq[MarkdownTokenRef]
     size = pos - start
     return @[token]
 
+  token = findToken(doc, pos, MarkdownTokenType.InlineEmail)
+  if token != nil:
+    size = pos - start
+    return @[token]
+
   token = findToken(doc, pos, MarkdownTokenType.InlineStrikethrough)
   if token != nil:
     size = pos - start
@@ -1158,7 +1155,7 @@ proc parseInlines*(ctx: MarkdownContext, doc: string): seq[MarkdownTokenRef] =
     of '\'': tokens = parseQuote(doc, index, size)
     of '"': tokens = parseQuote(doc, index, size)
     of '[': tokens = parseOpenBracket(doc, index, size)
-    of '!': tokens = parseBang(doc, index, size, delimeterStack)
+    of '!': tokens = parseOpenBracket(doc, index, size)
     of '&': tokens = parseHTMLEntity(doc, index, size)
     of '<': tokens = parseLessThan(doc, index, size)
     of ' ': tokens = parseHardLineBreak(doc, index, size)
@@ -1181,6 +1178,7 @@ proc findToken(doc: string, start: var int, ruleType: MarkdownTokenType): Markdo
   var matches: array[5, string]
 
   let size = doc[start .. doc.len - 1].matchLen(regex, matches=matches)
+
   if size == -1:
     return nil
 
@@ -1207,6 +1205,7 @@ proc findToken(doc: string, start: var int, ruleType: MarkdownTokenType): Markdo
   of MarkdownTokenType.InlineRefLink: result = genInlineRefLink(matches)
   of MarkdownTokenType.InlineNoLink: result = genInlineNoLink(matches)
   of MarkdownTokenType.InlineURL: result = genInlineURL(matches)
+  of MarkdownTokenType.InlineEmail: result = genInlineEmail(matches)
   of MarkdownTokenType.InlineDoubleEmphasis: result = genInlineDoubleEmphasis(matches)
   of MarkdownTokenType.InlineEmphasis: result = genInlineEmphasis(matches)
   of MarkdownTokenType.InlineCode: result = genInlineCode(matches)
@@ -1408,6 +1407,9 @@ proc renderInlineURL(ctx: MarkdownContext, url: string): string =
 
   result = fmt"""<a href="{escapeBackslash(url)}">{url}</a>"""
 
+proc renderInlineEmail(ctx: MarkdownContext, email: string): string =
+  result = fmt"""<a href="mailto:{email}">{email}</a>"""
+
 proc renderInlineHTML(ctx: MarkdownContext, html: string): string =
   result = html.escapeInvalidHTMLTag
 
@@ -1465,6 +1467,7 @@ proc renderToken*(ctx: MarkdownContext, token: MarkdownTokenRef): string =
   of MarkdownTokenType.InlineRefLink: result = renderInlineRefLink(ctx, token.inlineRefLinkVal)
   of MarkdownTokenType.InlineNoLink: result = renderInlineRefLink(ctx, token.inlineNoLinkVal)
   of MarkdownTokenType.InlineURL: result = renderInlineURL(ctx, token.inlineURLVal)
+  of MarkdownTokenType.InlineEmail: result = renderInlineEmail(ctx, token.inlineEmailVal)
   of MarkdownTokenType.InlineDoubleEmphasis: result = renderInlineDoubleEmphasis(ctx, token.inlineDoubleEmphasisVal)
   of MarkdownTokenType.InlineEmphasis: result = renderInlineEmphasis(ctx, token.inlineEmphasisVal)
   of MarkdownTokenType.InlineCode: result = renderInlineCode(ctx, token.inlineCodeVal)

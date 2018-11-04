@@ -778,8 +778,6 @@ proc genInlineEmphasis(matches: openArray[string]): MarkdownTokenRef =
     )
 
 proc genInlineCode(matches: openArray[string]): MarkdownTokenRef =
-  if not isCharBalanced(matches[2], '`', '`'):
-    return MarkdownTokenRef(type: MarkdownTokenType.InlineText, inlineTextVal: fmt"{matches[1]}{matches[2]}{matches[1]}")
   result = MarkdownTokenRef(type: MarkdownTokenType.InlineCode, inlineCodeVal: matches[2])
 
 proc genInlineBreak(matches: openArray[string]): MarkdownTokenRef =

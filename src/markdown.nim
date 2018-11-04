@@ -40,7 +40,7 @@
 ## :patreon: https://www.patreon.com/join/enqueuezero
 ## :license: MIT.
 
-import re, strutils, strformat, tables, sequtils, math, uri, htmlparser, lists
+import re, strutils, strformat, tables, sequtils, math, uri, htmlparser, lists, unicode
 
 const MARKDOWN_VERSION* = "0.5.0"
 
@@ -826,6 +826,8 @@ proc scanInlineDelimeters*(doc: string, start: int, delimeter: var Delimeter) =
   var charBefore = '\n'
   var charAfter = '\n'
   let charCurrent = doc[start]
+  var isCharAfterWhitespace = true
+  var isCharBeforeWhitespace = true
 
   # get the number of delimeters.
   for ch in doc[start .. doc.len - 1]:
@@ -838,14 +840,14 @@ proc scanInlineDelimeters*(doc: string, start: int, delimeter: var Delimeter) =
   # get the character before the starting character
   if start > 0:
     charBefore = doc[start - 1]
+    isCharBeforeWhitespace = fmt"{charBefore}".match(re"^\s") or doc.runeAt(start - 1).isWhitespace
 
   # get the character after the delimeter runs
   if start + delimeter.num + 1 < doc.len:
     charAfter = doc[start + delimeter.num]
+    isCharAfterWhitespace = fmt"{charAfter}".match(re"^\s") or doc.runeAt(start + delimeter.num).isWhitespace
 
-  let isCharAfterWhitespace = fmt"{charAfter}".match(re"^\s") or charAfter == '\u00a0'
   let isCharAfterPunctuation = fmt"{charAfter}".match(re"^\p{P}")
-  let isCharBeforeWhitespace = fmt"{charBefore}".match(re"^\s") or charBefore == '\u00a0'
   let isCharBeforePunctuation = fmt"{charBefore}".match(re"^\p{P}")
 
   let isLeftFlanking = (

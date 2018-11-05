@@ -14,7 +14,7 @@ Install via `nimble` in your project root.
 $ nimble install markdown
 
 # or with current stable version
-$ nimble install markdown@">= 0.5.1"
+$ nimble install markdown@">= 0.5.2"
 
 # or with the latest version
 $ nimble install markdown@#head

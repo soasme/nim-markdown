@@ -40,7 +40,8 @@
 ## :patreon: https://www.patreon.com/join/enqueuezero
 ## :license: MIT.
 
-import re, strutils, strformat, tables, sequtils, math, uri, htmlparser, lists, unicode
+import re, strutils, strformat, tables, sequtils, math, uri, htmlparser, lists
+from unicode import runeAt, isWhiteSpace
 
 const MARKDOWN_VERSION* = "0.5.1"
 

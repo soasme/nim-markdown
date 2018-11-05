@@ -121,6 +121,7 @@ Features:
 
 Released:
 
+* v0.5.2, 5 Nov 2018, bugfix: ambiguous call.
 * v0.5.1, 4 Nov 2018, inline email support; bugfix: \u00a0 causing build error [#16](https://github.com/soasme/nim-markdown/issues/16), etc.
 * v0.5.0, 3 Nov 2018, bugfix: links in lists not working (#14), etc.
 * v0.4.0, 27 Oct 2018, support `~~~` as fence mark, etc. [#12](https://github.com/soasme/nim-markdown/pull/12).

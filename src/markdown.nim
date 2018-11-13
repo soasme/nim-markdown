@@ -148,6 +148,7 @@ type
     Paragraph,
     Text,
     ListItem,
+    UnorderedList,
     ListBlock,
     BlockQuote,
     DefineLink,
@@ -189,6 +190,7 @@ type
     of MarkdownTokenType.AutoLink: autoLinkVal*: Link
     of MarkdownTokenType.InlineText: inlineTextVal*: string
     of MarkdownTokenType.InlineEscape: inlineEscapeVal*: string
+    of MarkdownTokenType.UnorderedList: unorderListVal*: ListBlock
     of MarkdownTokenType.ListBlock: listBlockVal*: ListBlock
     of MarkdownTokenType.ListItem: listItemVal*: ListItem
     of MarkdownTokenType.DefineLink: defineLinkVal*: DefineLink
@@ -299,6 +301,14 @@ let RE_BLOCKQUOTE = (
   r"( {0,3}> ?([^\n]*(?:\n[^\n]+)*\n*)(?:\n|$))+"
 )
 
+let RE_UNORDERED_LIST_ITEM_CONTENT = r"(?:(?P<padding> +)[^\n]*\n*(?:(?P=leading) (?P=padding)[^\n]*\n*)*)"
+let RE_UNORDERED_REST_ITEM_CONTENT = r"(?:(?P=padding)[^\n]*\n*(?:(?P=leading) (?P=padding)[^\n]*\n*)*)"
+let RE_UNORDERED_LIST_ITEM = r"(?:(?P<leading> {0,3})(?P<ul>[\-+*])" & RE_UNORDERED_LIST_ITEM_CONTENT & ")"
+let RE_UNORDERED_LIST_REST = r"(?:(?P=leading)(?P=ul)" & RE_UNORDERED_REST_ITEM_CONTENT & ")*"
+let RE_UNORDERED_LIST = (
+  r"^(" & RE_UNORDERED_LIST_ITEM & RE_UNORDERED_LIST_REST & ")"
+)
+
 var blockRules = @{
   MarkdownTokenType.ATXHeading: re("^" & RE_ATX_HEADING),
   MarkdownTokenType.SetextHeading: re"^(((?:(?:[^\n]+)\n)+) {0,3}(=|-)+ *(?:\n+|$))",
@@ -312,6 +322,7 @@ var blockRules = @{
   MarkdownTokenType.ListBlock: re(
     r"^(" & LIST & ")"
   ),
+  MarkdownTokenType.UnorderedList: re("^" & RE_UNORDERED_LIST),
   MarkdownTokenType.ListItem: re(
     r"^( *(?:[*+-]|\d+\.) [^\n]*" &
     r"(?:\n(?! *(?:[*+-]|\d+\.) )[^\n]*)*)",
@@ -390,6 +401,7 @@ let blockParsingOrder = @[
   MarkdownTokenType.BlockQuote,
   MarkdownTokenType.ThematicBreak,
   MarkdownTokenType.ATXHeading,
+  MarkdownTokenType.UnorderedList,
   MarkdownTokenType.ListBlock,
   MarkdownTokenType.SetextHeading,
   
@@ -406,6 +418,7 @@ let listParsingOrder = @[
   MarkdownTokenType.ATXHeading,
   MarkdownTokenType.ThematicBreak,
   MarkdownTokenType.BlockQuote,
+  MarkdownTokenType.UnorderedList,
   MarkdownTokenType.ListBlock,
   MarkdownTokenType.HTMLBlock,
   MarkdownTokenType.InlineEscape,
@@ -625,6 +638,31 @@ iterator parseListTokens(doc: string): MarkdownTokenRef =
     val.blocks = toSeq(parseTokens(text, listParsingOrder))
     yield MarkdownTokenRef(len: 1, type: MarkdownTokenType.ListItem, listItemVal: val)
 
+proc genUnorderedListItem(doc: string): seq[MarkdownTokenRef] =
+  var pos = 0
+  while pos < doc.len:
+    let size = doc[pos ..< doc.len].matchLen(
+      re(RE_UNORDERED_LIST_ITEM)
+    )
+    var listItemDoc = doc[pos ..< pos + size].replace(re"^ *(?:[*+-]|\d+\.) +", "").strip
+    var val: ListItem
+    val.blocks = toSeq(parseTokens(listItemDoc, listParsingOrder))
+    var token = MarkdownTokenRef(
+      type: MarkdownTokenType.ListItem,
+      listItemVal: val
+    )
+    result.add(token)
+    pos += size
+
+proc genUnorderedList(matches: openArray[string]): MarkdownTokenRef =
+  var val: ListBlock
+  val.ordered = false
+  val.blocks = genUnorderedListItem(matches[0])
+  result = MarkdownTokenRef(
+    type: MarkdownTokenType.ListBlock,
+    listBlockVal: val
+  )
+
 proc genListBlock(matches: openArray[string]): MarkdownTokenRef =
   var val: ListBlock
   let doc = matches[0]
@@ -789,7 +827,6 @@ proc genInlineStrikethrough(matches: openArray[string]): MarkdownTokenRef =
 proc genInlineFootnote(matches: openArray[string]): MarkdownTokenRef =
   let footnote = RefFootnote(anchor: matches[1])
   result = MarkdownTokenRef(type: MarkdownTokenType.InlineFootnote, inlineFootnoteVal: footnote)
-
 
 const ENTITY = r"&(?:#x[a-f0-9]{1,6}|#[0-9]{1,7}|[a-z][a-z0-9]{1,31});"
 
@@ -1196,6 +1233,7 @@ proc findToken(doc: string, start: var int, ruleType: MarkdownTokenType): Markdo
   of MarkdownTokenType.DefineFootnote: result = genDefineFootnote(matches)
   of MarkdownTokenType.HTMLBlock: result = genHTMLBlock(matches)
   of MarkdownTokenType.HTMLTable: result = genHTMLTable(matches)
+  of MarkdownTokenType.UnorderedList: result = genUnorderedList(matches)
   of MarkdownTokenType.ListBlock: result = genListBlock(matches)
   of MarkdownTokenType.Paragraph: result = genParagraph(matches)
   of MarkdownTokenType.Text: result = genText(matches)

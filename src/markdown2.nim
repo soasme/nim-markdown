@@ -76,6 +76,7 @@ var simpleRuleSet = RuleSet(
 
 proc parse(state: var State);
 proc parseLeafBlockInlines(state: var State, token: var Token);
+proc parseLinkInlines*(state: var State, token: var Token);
 
 proc preProcessing(state: var State) =
   discard
@@ -405,6 +406,8 @@ proc getLinkLabelSlice*(doc: string, start: int, slice: var Slice[int]): int =
     # if < and doc[start+i ..< doc.len].match(AUTO_LINK): abort
     if level == 0:
       # TODO: if contains other links: abort
+      # if doc[start .. start+i].match(re"\[[^\]]\]\(.*\)"):
+      #   return -1
       slice = (start .. start+i)
       return i+1
   return -1
@@ -468,7 +471,7 @@ proc parseInlineLink(state: var State, token: var Token, start: int, labelSlice:
       title: title,
     )
   )
-  parseLeafBlockInlines(state, link)
+  parseLinkInlines(state, link)
   token.children.append(link)
   result = pos - start + 1
 
@@ -544,7 +547,6 @@ proc processEmphasis*(state: var State, token: var Token, delimeterStack: var Do
   # *opener and closer*
   #                   ^
   closer = delimeterStack.head
-
   # move forward, looking for closers, and handling each
   while closer != nil:
     # find the first closing delimeter.
@@ -555,6 +557,7 @@ proc processEmphasis*(state: var State, token: var Token, delimeterStack: var Do
     if not closer.value.canClose:
       closer = closer.next
       continue
+
     # found emphasis closer. now look back for first matching opener.
     opener = closer.prev
     openerFound = false
@@ -653,6 +656,27 @@ proc processEmphasis*(state: var State, token: var Token, delimeterStack: var Do
   while delimeterStack.head != nil:
     removeDelimeter(delimeterStack.head)
 
+proc parseLinkInlines*(state: var State, token: var Token) =
+  var delimeters: DoublyLinkedList[Delimeter]
+  var pos = token.slice.a + 1
+  for index, ch in state.doc[pos ..< pos+token.linkVal.text.len]:
+    if token.slice.a+1+index < pos:
+      continue
+    var ok = false
+    var size = -1
+    for rule in state.ruleSet.inlineRules:
+      if rule == LinkToken:
+        continue
+      size = findInlineToken(state, token, rule, pos, delimeters)
+      if size != -1:
+        pos += size
+        break
+    if size == -1:
+      token.children.append(Token(type: TextToken, slice: (index .. index+1), textVal: fmt"{ch}"))
+      pos += 1
+
+  processEmphasis(state, token, delimeters)
+
 proc parseLeafBlockInlines(state: var State, token: var Token) =
   var pos = token.slice.a
   var delimeters: DoublyLinkedList[Delimeter]
@@ -723,12 +747,12 @@ proc renderToken(token: Token): string =
   of LinkToken:
     if token.linkVal.title == "": a(
       href=token.linkVal.url.escapeBackslash.escapeLinkUrl,
-      token.linkVal.text.escapeBackslash
+      token.renderInline
     )
     else: a(
       href=token.linkVal.url.escapeBackslash.escapeLinkUrl,
       title=token.linkVal.title.escapeBackslash.escapeAmpersandSeq.escapeQuote,
-      token.linkVal.text.escapeBackslash
+      token.renderInline
     )
   of AutoLinkToken: a(href=token.autoLinkVal.url.escapeLinkUrl, token.autoLinkVal.text)
   of TextToken: token.textVal

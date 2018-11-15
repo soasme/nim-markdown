@@ -14,7 +14,7 @@ Install via `nimble` in your project root.
 $ nimble install markdown
 
 # or with current stable version
-$ nimble install markdown@">= 0.5.0"
+$ nimble install markdown@">= 0.5.2"
 
 # or with the latest version
 $ nimble install markdown@#head
@@ -121,6 +121,8 @@ Features:
 
 Released:
 
+* v0.5.2, 5 Nov 2018, bugfix: ambiguous call.
+* v0.5.1, 4 Nov 2018, inline email support; bugfix: \u00a0 causing build error [#16](https://github.com/soasme/nim-markdown/issues/16), etc.
 * v0.5.0, 3 Nov 2018, bugfix: links in lists not working (#14), etc.
 * v0.4.0, 27 Oct 2018, support `~~~` as fence mark, etc. [#12](https://github.com/soasme/nim-markdown/pull/12).
 * v0.3.4, 24 Oct 2018, support hard line breaks (gfm 6.12).

@@ -400,14 +400,17 @@ proc getLinkLabelSlice*(doc: string, start: int, slice: var Slice[int]): int =
       level += 1
     elif ch == ']':
       level -= 1
-    # TODO: the precedence of HTML tags, code spans, and autolinks over link grouping
-    # if < and doc[start+i ..< doc.len].match(HTML_TAG): abort
-    # if ` and doc[start+i ..< doc.len].match(CODE_SPAN): abort
-    # if < and doc[start+i ..< doc.len].match(AUTO_LINK): abort
+    elif ch == '<':
+      # abort if it's an HTML tag or autolink.
+      if doc[start+i ..< doc.len].matchLen(re"^<\w+[^>]*>") != -1:
+        return -1
+    elif ch == '`':
+      if doc[start+i ..< doc.len].matchLen(re"^`[^`]+`") != -1:
+        return -1
     if level == 0:
-      # TODO: if contains other links: abort
-      # if doc[start .. start+i].match(re"\[[^\]]\]\(.*\)"):
-      #   return -1
+      # if contains other links: abort
+      if doc[start .. start+i].find(re"[^!]\[[^\]]+\]\(.*\)") != -1:
+        return -1
       slice = (start .. start+i)
       return i+1
   return -1

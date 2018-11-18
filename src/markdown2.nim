@@ -58,6 +58,7 @@ type
     ReferenceImageToken,
     EmphasisToken,
     StrongToken,
+    EscapeToken,
     SoftLineBreakToken,
     DummyToken
 
@@ -71,6 +72,7 @@ type
     of EmphasisToken: emphasisVal*: string
     of AutoLinkToken: autoLinkVal*: AutoLink
     of LinkToken: linkVal*: Link
+    of EscapeToken: escapeVal*: string
     of ReferenceLinkToken: referenceLinkVal*: ReferenceLink
     of ReferenceImageToken: referenceImageVal*: ReferenceLink
     of ImageToken: imageVal*: Image
@@ -95,6 +97,7 @@ var simpleRuleSet = RuleSet(
     ImageToken,
     AutoLinkToken,
     LinkToken,
+    EscapeToken,
     SoftLineBreakToken,
     TextToken,
   ],
@@ -831,12 +834,29 @@ proc parseImage*(state: var State, token: var Token, start: int): int =
   else:
     return parseShortcutReferenceImage(state, token, start, labelSlice)
 
+proc parseEscape*(state: var State, token: var Token, start: int): int =
+  if state.doc[start] != '\\':
+    return -1
+
+  let regex = re"^\\([\\`*{}\[\]()#+\-.!_<>~|""$%&',/:;=?@^])"
+  let size = state.doc[start ..< state.doc.len].matchLen(regex)
+  if size == -1:
+    return -1
+
+  token.children.append(Token(
+    type: EscapeToken,
+    slice: (start ..< start + 2),
+    escapeVal: fmt"{state.doc[start+1]}"
+  ))
+  return 2
+
 proc findInlineToken(state: var State, token: var Token, rule: TokenType, start: int, delimeters: var DoublyLinkedList[Delimeter]): int =
   case rule
   of EmphasisToken: result = parseDelimeter(state, token, start, delimeters)
   of AutoLinkToken: result = parseAutoLink(state, token, start)
   of LinkToken: result = parseLink(state, token, start)
   of ImageToken: result = parseImage(state, token, start)
+  of EscapeToken: result = parseEscape(state, token, start)
   of SoftLineBreakToken: result = parseSoftLineBreak(state, token, start)
   of TextToken: result = parseText(state, token, start)
   else: raise newException(MarkdownError, fmt"{token.type} has no inline rule.")
@@ -1145,7 +1165,8 @@ proc renderToken(state: State, token: Token): string =
   of AutoLinkToken: a(href=token.autoLinkVal.url.escapeLinkUrl, token.autoLinkVal.text)
   of ReferenceLinkToken: renderReferenceLink(state, token)
   of ReferenceImageToken: renderReferenceImage(state, token)
-  of TextToken: token.textVal
+  of TextToken: token.textVal.escapeAmpersandSeq.escapeTag.escapeQuote
+  of EscapeToken: token.escapeVal.escapeAmpersandSeq.escapeTag.escapeQuote
   of EmphasisToken: em(state.renderInline(token))
   of StrongToken: strong(state.renderInline(token))
   of SoftLineBreakToken: token.softLineBreakVal

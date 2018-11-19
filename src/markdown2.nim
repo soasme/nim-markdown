@@ -60,6 +60,7 @@ type
     StrongToken,
     EscapeToken,
     SoftLineBreakToken,
+    HardLineBreakToken,
     DummyToken
 
   Token* = ref object
@@ -78,6 +79,7 @@ type
     of HTMLEntityToken: htmlEntityVal*: string
     of StrongToken: strongVal*: string
     of SoftLineBreakToken: softLineBreakVal*: string
+    of HardLineBreakToken: hardLineBreakVal*: string
     of DummyToken: dummyVal*: string
 
   State* = ref object
@@ -100,6 +102,7 @@ var simpleRuleSet = RuleSet(
     HTMLEntityToken,
     InlineHTMLToken,
     EscapeToken,
+    HardLineBreakToken,
     SoftLineBreakToken,
     TextToken,
   ],
@@ -1023,6 +1026,22 @@ proc parseInlineHTML*(state: var State, token: var Token, start: int): int =
   ))
   return size
 
+proc parseHardLineBreak*(state: var State, token: var Token, start: int): int =
+  if state.doc[start] != ' ' and state.doc[start] != '\\':
+    return -1
+
+  let size = state.doc[start ..< state.doc.len].matchLen(re"^((?: {2,}\n|\\\n)\s*)")
+
+  if size == -1:
+    return -1
+
+  token.children.append(Token(
+    type: HardLineBreakToken,
+    slice: (start ..< start+size),
+    hardLineBreakVal: ""
+  ))
+  return size
+
 proc findInlineToken(state: var State, token: var Token, rule: TokenType, start: int, delimeters: var DoublyLinkedList[Delimeter]): int =
   case rule
   of EmphasisToken: result = parseDelimeter(state, token, start, delimeters)
@@ -1032,6 +1051,7 @@ proc findInlineToken(state: var State, token: var Token, rule: TokenType, start:
   of HTMLEntityToken: result = parseHTMLEntity(state, token, start)
   of InlineHTMLToken: result = parseInlineHTML(state, token, start)
   of EscapeToken: result = parseEscape(state, token, start)
+  of HardLineBreakToken: result = parseHardLineBreak(state, token, start)
   of SoftLineBreakToken: result = parseSoftLineBreak(state, token, start)
   of TextToken: result = parseText(state, token, start)
   else: raise newException(MarkdownError, fmt"{token.type} has no inline rule.")
@@ -1304,6 +1324,7 @@ proc renderToken(state: State, token: Token): string =
   of EscapeToken: token.escapeVal.escapeAmpersandSeq.escapeTag.escapeQuote
   of EmphasisToken: em(state.renderInline(token))
   of StrongToken: strong(state.renderInline(token))
+  of HardLineBreakToken: br() & "\n"
   of SoftLineBreakToken: token.softLineBreakVal
   of DummyToken: ""
   else: raise newException(MarkdownError, fmt"{token.type} rendering not impleted.")

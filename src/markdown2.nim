@@ -1,7 +1,7 @@
 import re, strutils, strformat, tables, sequtils, math, uri, htmlparser, lists, unicode
 from sequtils import map
 from lists import DoublyLinkedList, prepend, append
-from htmlgen import nil, p, br, em, strong, a, img, code
+from htmlgen import nil, p, br, em, strong, a, img, code, del
 
 type
   MarkdownError* = object of Exception ## The error object for markdown parsing and rendering.
@@ -60,6 +60,7 @@ type
     CodeSpanToken,
     StrongToken,
     EscapeToken,
+    StrikethroughToken
     SoftLineBreakToken,
     HardLineBreakToken,
     DummyToken
@@ -80,6 +81,7 @@ type
     of HTMLEntityToken: htmlEntityVal*: string
     of CodeSpanToken: codeSpanVal*: string
     of StrongToken: strongVal*: string
+    of StrikethroughToken: strikethroughVal*: string
     of SoftLineBreakToken: softLineBreakVal*: string
     of HardLineBreakToken: hardLineBreakVal*: string
     of DummyToken: dummyVal*: string
@@ -105,6 +107,7 @@ var simpleRuleSet = RuleSet(
     InlineHTMLToken,
     EscapeToken,
     CodeSpanToken,
+    StrikethroughToken,
     HardLineBreakToken,
     SoftLineBreakToken,
     TextToken,
@@ -1049,10 +1052,10 @@ proc parseCodeSpan*(state: var State, token: var Token, start: int): int =
     return -1
 
   var matches: array[5, string]
-  var size = state.doc[start ..< state.doc.len].matchLen(re"^((`+)([^`]|[^`][\s\S]*?[^`])\2(?!`))", matches=matches)
+  var size = state.doc[start ..< token.slice.b].matchLen(re"^((`+)([^`]|[^`][\s\S]*?[^`])\2(?!`))", matches=matches)
 
   if size == -1:
-    size = state.doc[start ..< state.doc.len].matchLen(re"^`+(?!`)")
+    size = state.doc[start ..< token.slice.b].matchLen(re"^`+(?!`)")
     if size == -1:
       return -1
     token.children.append(Token(
@@ -1070,6 +1073,23 @@ proc parseCodeSpan*(state: var State, token: var Token, start: int): int =
   ))
   return size
 
+proc parseStrikethrough*(state: var State, token: var Token, start: int): int =
+  if state.doc[start] != '~':
+    return -1
+
+  var matches: array[5, string]
+  var size = state.doc[start ..< token.slice.b].matchLen(re"^(~~(?=\S)([\s\S]*?\S)~~)", matches=matches)
+
+  if size == -1:
+    return -1
+
+  token.children.append(Token(
+    type: StrikethroughToken,
+    slice: (start ..< start+size),
+    strikethroughVal: matches[1]
+  ))
+  return size
+
 proc findInlineToken(state: var State, token: var Token, rule: TokenType, start: int, delimeters: var DoublyLinkedList[Delimeter]): int =
   case rule
   of EmphasisToken: result = parseDelimeter(state, token, start, delimeters)
@@ -1080,6 +1100,7 @@ proc findInlineToken(state: var State, token: var Token, rule: TokenType, start:
   of InlineHTMLToken: result = parseInlineHTML(state, token, start)
   of EscapeToken: result = parseEscape(state, token, start)
   of CodeSpanToken: result = parseCodeSpan(state, token, start)
+  of StrikethroughToken: result = parseStrikethrough(state, token, start)
   of HardLineBreakToken: result = parseHardLineBreak(state, token, start)
   of SoftLineBreakToken: result = parseSoftLineBreak(state, token, start)
   of TextToken: result = parseText(state, token, start)
@@ -1353,6 +1374,7 @@ proc renderToken(state: State, token: Token): string =
   of EscapeToken: token.escapeVal.escapeAmpersandSeq.escapeTag.escapeQuote
   of EmphasisToken: em(state.renderInline(token))
   of StrongToken: strong(state.renderInline(token))
+  of StrikethroughToken: del(token.strikethroughVal)
   of HardLineBreakToken: br() & "\n"
   of CodeSpanToken: code(token.codeSpanVal.escapeAmpersandChar.escapeTag.escapeQuote)
   of SoftLineBreakToken: token.softLineBreakVal

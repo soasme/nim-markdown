@@ -1,7 +1,7 @@
 import re, strutils, strformat, tables, sequtils, math, uri, htmlparser, lists, unicode
 from sequtils import map
 from lists import DoublyLinkedList, prepend, append
-from htmlgen import nil, p, br, em, strong, a, img
+from htmlgen import nil, p, br, em, strong, a, img, code
 
 type
   MarkdownError* = object of Exception ## The error object for markdown parsing and rendering.
@@ -57,6 +57,7 @@ type
     EmphasisToken,
     HTMLEntityToken,
     InlineHTMLToken,
+    CodeSpanToken,
     StrongToken,
     EscapeToken,
     SoftLineBreakToken,
@@ -77,6 +78,7 @@ type
     of InlineHTMLToken: inlineHTMLVal*: string
     of ImageToken: imageVal*: Image
     of HTMLEntityToken: htmlEntityVal*: string
+    of CodeSpanToken: codeSpanVal*: string
     of StrongToken: strongVal*: string
     of SoftLineBreakToken: softLineBreakVal*: string
     of HardLineBreakToken: hardLineBreakVal*: string
@@ -102,6 +104,7 @@ var simpleRuleSet = RuleSet(
     HTMLEntityToken,
     InlineHTMLToken,
     EscapeToken,
+    CodeSpanToken,
     HardLineBreakToken,
     SoftLineBreakToken,
     TextToken,
@@ -1042,6 +1045,23 @@ proc parseHardLineBreak*(state: var State, token: var Token, start: int): int =
   ))
   return size
 
+proc parseCodeSpan*(state: var State, token: var Token, start: int): int =
+  if state.doc[start] != '`':
+    return -1
+
+  var matches: array[5, string]
+  let size = state.doc[start ..< state.doc.len].matchLen(re"^((`+)([^`]|[^`][\s\S]*?[^`])\2(?!`))", matches=matches)
+
+  if size == -1:
+    return -1
+
+  token.children.append(Token(
+    type: CodeSpanToken,
+    slice: (start ..< start+size),
+    codeSpanVal: matches[2].strip.replace(re"[ \n]+", " ")
+  ))
+  return size
+
 proc findInlineToken(state: var State, token: var Token, rule: TokenType, start: int, delimeters: var DoublyLinkedList[Delimeter]): int =
   case rule
   of EmphasisToken: result = parseDelimeter(state, token, start, delimeters)
@@ -1051,6 +1071,7 @@ proc findInlineToken(state: var State, token: var Token, rule: TokenType, start:
   of HTMLEntityToken: result = parseHTMLEntity(state, token, start)
   of InlineHTMLToken: result = parseInlineHTML(state, token, start)
   of EscapeToken: result = parseEscape(state, token, start)
+  of CodeSpanToken: result = parseCodeSpan(state, token, start)
   of HardLineBreakToken: result = parseHardLineBreak(state, token, start)
   of SoftLineBreakToken: result = parseSoftLineBreak(state, token, start)
   of TextToken: result = parseText(state, token, start)
@@ -1325,6 +1346,7 @@ proc renderToken(state: State, token: Token): string =
   of EmphasisToken: em(state.renderInline(token))
   of StrongToken: strong(state.renderInline(token))
   of HardLineBreakToken: br() & "\n"
+  of CodeSpanToken: code(token.codeSpanVal.escapeTag.escapeQuote)
   of SoftLineBreakToken: token.softLineBreakVal
   of DummyToken: ""
   else: raise newException(MarkdownError, fmt"{token.type} rendering not impleted.")

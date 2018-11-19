@@ -56,6 +56,7 @@ type
     ImageToken,
     EmphasisToken,
     HTMLEntityToken,
+    InlineHTMLToken,
     StrongToken,
     EscapeToken,
     SoftLineBreakToken,
@@ -72,6 +73,7 @@ type
     of AutoLinkToken: autoLinkVal*: AutoLink
     of LinkToken: linkVal*: Link
     of EscapeToken: escapeVal*: string
+    of InlineHTMLToken: inlineHTMLVal*: string
     of ImageToken: imageVal*: Image
     of HTMLEntityToken: htmlEntityVal*: string
     of StrongToken: strongVal*: string
@@ -96,11 +98,37 @@ var simpleRuleSet = RuleSet(
     AutoLinkToken,
     LinkToken,
     HTMLEntityToken,
+    InlineHTMLToken,
     EscapeToken,
     SoftLineBreakToken,
     TextToken,
   ],
   postProcessingRules: @[],
+)
+
+let TAGNAME = r"[A-Za-z][A-Za-z0-9-]*"
+let ATTRIBUTENAME = r"[a-zA-Z_:][a-zA-Z0-9:._-]*"
+let UNQUOTEDVALUE = r"[^""'=<>`\x00-\x20]+"
+let DOUBLEQUOTEDVALUE = """"[^"]*""""
+let SINGLEQUOTEDVALUE = r"'[^']*'"
+let ATTRIBUTEVALUE = "(?:" & UNQUOTEDVALUE & "|" & SINGLEQUOTEDVALUE & "|" & DOUBLEQUOTEDVALUE & ")"
+let ATTRIBUTEVALUESPEC = r"(?:\s*=" & r"\s*" & ATTRIBUTEVALUE & r")"
+let ATTRIBUTE = r"(?:\s+" & ATTRIBUTENAME & ATTRIBUTEVALUESPEC & r"?)"
+let OPEN_TAG = r"<" & TAGNAME & ATTRIBUTE & r"*" & r"\s*/?>"
+let CLOSE_TAG = r"</" & TAGNAME & r"\s*[>]"
+let HTML_COMMENT = r"<!---->|<!--(?:-?[^>-])(?:-?[^-])*-->"
+let PROCESSING_INSTRUCTION = r"[<][?].*?[?][>]"
+let DECLARATION = r"<![A-Z]+\s+[^>]*>"
+let CDATA_SECTION = r"<!\[CDATA\[[\s\S]*?\]\]>"
+let HTML_TAG = (
+  r"(?:" &
+  OPEN_TAG & "|" &
+  CLOSE_TAG & "|" &
+  HTML_COMMENT & "|" &
+  PROCESSING_INSTRUCTION & "|" &
+  DECLARATION & "|" &
+  CDATA_SECTION &
+  & r")"
 )
 
 proc parse(state: var State);
@@ -147,6 +175,12 @@ proc escapeAmpersandSeq*(doc: string): string =
 proc escapeCode*(doc: string): string =
   ## Make code block in markdown document HTML-safe.
   result = doc.escapeAmpersandChar.escapeTag
+
+proc escapeInvalidHTMLTag(doc: string): string =
+  doc.replacef(
+    re(r"<(title|textarea|style|xmp|iframe|noembed|noframes|script|plaintext)>",
+      {RegexFlag.reIgnoreCase}),
+    "&lt;$1>")
 
 const IGNORED_HTML_ENTITY = ["&lt;", "&gt;", "&amp;"]
 
@@ -951,7 +985,7 @@ proc parseHTMLEntity*(state: var State, token: var Token, start: int): int =
 
   token.children.append(Token(
     type: HTMLEntityToken,
-    slice: (start .. start+size-1),
+    slice: (start ..< start+size),
     htmlEntityVal: entity
   ))
   return size
@@ -972,6 +1006,23 @@ proc parseEscape*(state: var State, token: var Token, start: int): int =
   ))
   return 2
 
+proc parseInlineHTML*(state: var State, token: var Token, start: int): int =
+  if state.doc[start] != '<':
+    return -1
+  let regex = re("^(" & HTML_TAG & ")", {RegexFlag.reIgnoreCase})
+  var matches: array[5, string]
+  var size = state.doc[start ..< state.doc.len].matchLen(regex, matches=matches)
+
+  if size == -1:
+    return -1
+
+  token.children.append(Token(
+    type: InlineHTMLToken,
+    slice: (start ..< start+size),
+    inlineHTMLVal: matches[0]
+  ))
+  return size
+
 proc findInlineToken(state: var State, token: var Token, rule: TokenType, start: int, delimeters: var DoublyLinkedList[Delimeter]): int =
   case rule
   of EmphasisToken: result = parseDelimeter(state, token, start, delimeters)
@@ -979,6 +1030,7 @@ proc findInlineToken(state: var State, token: var Token, rule: TokenType, start:
   of LinkToken: result = parseLink(state, token, start)
   of ImageToken: result = parseImage(state, token, start)
   of HTMLEntityToken: result = parseHTMLEntity(state, token, start)
+  of InlineHTMLToken: result = parseInlineHTML(state, token, start)
   of EscapeToken: result = parseEscape(state, token, start)
   of SoftLineBreakToken: result = parseSoftLineBreak(state, token, start)
   of TextToken: result = parseText(state, token, start)
@@ -1248,6 +1300,7 @@ proc renderToken(state: State, token: Token): string =
   of AutoLinkToken: a(href=token.autoLinkVal.url.escapeLinkUrl, token.autoLinkVal.text)
   of TextToken: token.textVal.escapeAmpersandSeq.escapeTag.escapeQuote
   of HTMLEntityToken: token.htmlEntityVal.escapeHTMLEntity.escapeQuote
+  of InlineHTMLToken: token.inlineHTMLVal.escapeInvalidHTMLTag
   of EscapeToken: token.escapeVal.escapeAmpersandSeq.escapeTag.escapeQuote
   of EmphasisToken: em(state.renderInline(token))
   of StrongToken: strong(state.renderInline(token))

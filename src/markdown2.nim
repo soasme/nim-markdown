@@ -346,7 +346,6 @@ proc parseBlock(state: var State) =
 
 proc parseText(state: var State, token: var Token, start: int): int =
   let slice = token.slice
-
   var text = Token(
     type: TextToken,
     slice: (start .. start+1),
@@ -1050,10 +1049,19 @@ proc parseCodeSpan*(state: var State, token: var Token, start: int): int =
     return -1
 
   var matches: array[5, string]
-  let size = state.doc[start ..< state.doc.len].matchLen(re"^((`+)([^`]|[^`][\s\S]*?[^`])\2(?!`))", matches=matches)
+  var size = state.doc[start ..< state.doc.len].matchLen(re"^((`+)([^`]|[^`][\s\S]*?[^`])\2(?!`))", matches=matches)
 
   if size == -1:
-    return -1
+    size = state.doc[start ..< state.doc.len].matchLen(re"^`+(?!`)")
+    if size == -1:
+      return -1
+    token.children.append(Token(
+      type: TextToken,
+      slice: (start ..< start+size),
+      textVal: state.doc[start ..< start+size]
+    ))
+    return size
+
 
   token.children.append(Token(
     type: CodeSpanToken,
@@ -1338,7 +1346,7 @@ proc renderToken(state: State, token: Token): string =
       alt=state.renderImageAlt(token),
       title=token.imageVal.title.escapeBackslash.escapeHTMLEntity.escapeAmpersandSeq.escapeQuote,
     )
-  of AutoLinkToken: a(href=token.autoLinkVal.url.escapeLinkUrl, token.autoLinkVal.text)
+  of AutoLinkToken: a(href=token.autoLinkVal.url.escapeLinkUrl.escapeAmpersandSeq, token.autoLinkVal.text.escapeAmpersandSeq)
   of TextToken: token.textVal.escapeAmpersandSeq.escapeTag.escapeQuote
   of HTMLEntityToken: token.htmlEntityVal.escapeHTMLEntity.escapeQuote
   of InlineHTMLToken: token.inlineHTMLVal.escapeInvalidHTMLTag
@@ -1346,7 +1354,7 @@ proc renderToken(state: State, token: Token): string =
   of EmphasisToken: em(state.renderInline(token))
   of StrongToken: strong(state.renderInline(token))
   of HardLineBreakToken: br() & "\n"
-  of CodeSpanToken: code(token.codeSpanVal.escapeTag.escapeQuote)
+  of CodeSpanToken: code(token.codeSpanVal.escapeAmpersandChar.escapeTag.escapeQuote)
   of SoftLineBreakToken: token.softLineBreakVal
   of DummyToken: ""
   else: raise newException(MarkdownError, fmt"{token.type} rendering not impleted.")

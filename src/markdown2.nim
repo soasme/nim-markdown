@@ -53,9 +53,7 @@ type
     TextToken,
     AutoLinkToken,
     LinkToken,
-    ReferenceLinkToken,
     ImageToken,
-    ReferenceImageToken,
     EmphasisToken,
     StrongToken,
     EscapeToken,
@@ -73,8 +71,6 @@ type
     of AutoLinkToken: autoLinkVal*: AutoLink
     of LinkToken: linkVal*: Link
     of EscapeToken: escapeVal*: string
-    of ReferenceLinkToken: referenceLinkVal*: ReferenceLink
-    of ReferenceImageToken: referenceImageVal*: ReferenceLink
     of ImageToken: imageVal*: Image
     of StrongToken: strongVal*: string
     of SoftLineBreakToken: softLineBreakVal*: string
@@ -108,6 +104,7 @@ proc parse(state: var State);
 proc parseLeafBlockInlines(state: var State, token: var Token);
 proc parseLinkInlines*(state: var State, token: var Token, allowNested: bool = false);
 proc getLinkText*(doc: string, start: int, slice: var Slice[int], allowNested: bool = false): int;
+proc getLinkLabel*(doc: string, start: int, label: var string): int;
 proc getLinkDestination*(doc: string, start: int, slice: var Slice[int]): int;
 proc getLinkTitle*(doc: string, start: int, slice: var Slice[int]): int;
 
@@ -184,9 +181,7 @@ proc getBlockStart(state: var State): int =
 
 proc parseParagraph(state: var State): bool =
   let start = state.getBlockStart
-  
   let size = state.doc[start..<state.doc.len].matchLen(re(r"^([^\n]+\n?)+\n*"))
-  #echo(start, " ",state.doc[start..<state.doc.len], "<-", "p", size,)
   if size == -1:
     return false
 
@@ -194,7 +189,7 @@ proc parseParagraph(state: var State): bool =
     type: ParagraphToken,
     slice: (start .. start+size),
     paragraphVal: Paragraph(
-      doc: state.doc[start ..< start+size],
+      doc: state.doc[start ..< start+size].replace(re"\n\s*", "\n")
     )
   )
 
@@ -213,19 +208,19 @@ proc parseReference*(state: var State): bool =
 
   pos += markStart - 1
 
-  var labelSlice: Slice[int]
-  var labelSize = getLinkText(state.doc, pos, labelSlice)
+  var label: string
+  var labelSize = getLinkLabel(state.doc, pos, label)
 
   # Link should have matching ] for [.
   if labelSize == -1:
     return false
 
   # A link label must contain at least one non-whitespace character.
-  if state.doc[labelSlice].match(re"\[\s*\]"):
+  if label.find(re"\S") == -1:
     return false
 
   # An inline link consists of a link text followed immediately by a left parenthesis (
-  pos = labelSlice.b + 1 # [link]:
+  pos += labelSize # [link]
 
   if pos >= state.doc.len or state.doc[pos] != ':':
     return false
@@ -274,25 +269,21 @@ proc parseReference*(state: var State): bool =
     title = state.doc[titleSlice]
 
   var url = state.doc[destinationSlice]
-  var text = state.doc[labelSlice.a+1 ..< labelSlice.b]
 
   var reference = Token(
     type: ReferenceToken,
     slice: (start .. pos),
     referenceVal: Reference(
-      text: text,
+      text: label,
       url: url,
       title: title,
     )
   )
 
-  #no inline parse for reference
   state.tokens.append(reference)
-  # register to state.references
 
-  var id = reference.referenceVal.text.toLower.replace(re"\s+", " ")
-  if not state.references.contains(id):
-    state.references[id] = reference.referenceVal
+  if not state.references.contains(label):
+    state.references[label] = reference.referenceVal
   return true
 
 proc parseBlock(state: var State) =
@@ -517,6 +508,46 @@ proc getLinkTitle*(doc: string, start: int, slice: var Slice[int]): int =
       return i+2
   return -1
 
+proc normalizeLabel*(label: string): string =
+  # One label matches another just in case their normalized forms are equal.
+  # To normalize a label, strip off the opening and closing brackets,
+  # perform the Unicode case fold, strip leading and trailing whitespace
+  # and collapse consecutive internal whitespace to a single space.
+  label.toLower.strip.replace(re"\s+", " ")
+
+proc getLinkLabel*(doc: string, start: int, label: var string): int =
+  if doc[start] != '[':
+    raise newException(MarkdownError, fmt"{doc[start]} cannot be the start of link label.")
+
+  if start+1 >= doc.len:
+    return -1
+
+  var isEscaping = false
+  var size = 0
+  for i, ch in doc[start+1 ..< doc.len]:
+    size += 1
+
+    # A link label begins with a left bracket ([) and ends with the first right bracket (]) that is not backslash-escaped.
+    if isEscaping:
+      isEscaping = false
+      continue
+    elif ch == '\\':
+      isEscaping = true
+    elif ch == ']':
+      break
+
+    # Unescaped square bracket characters are not allowed inside the opening and closing square brackets of link labels
+    elif ch == '[':
+      return -1
+
+    # A link label can have at most 999 characters inside the square brackets.
+    if size > 999:
+      return -1
+
+  label = doc[start+1 ..< start+size].normalizeLabel
+  return size + 1
+
+
 proc getLinkText*(doc: string, start: int, slice: var Slice[int], allowNested: bool = false): int =
   # based on assumption: state.doc[start] = '['
   if doc[start] != '[':
@@ -559,6 +590,8 @@ proc getLinkText*(doc: string, start: int, slice: var Slice[int], allowNested: b
     # Links may not contain other links, at any level of nesting.
     # Image description may contain links.
     if level == 0 and not allowNested and doc[start .. start+i].find(re"[^!]\[[^]]*\]\([^)]*\)") > -1:
+        return -1
+    if level == 0 and not allowNested and doc[start .. start+i].find(re"[^!]\[[^]]*\]\[[^]]*\]") > -1:
         return -1
 
     if level == 0:
@@ -633,54 +666,74 @@ proc parseInlineLink(state: var State, token: var Token, start: int, labelSlice:
   token.children.append(link)
   result = pos - start + 1
 
-proc parseFullReferenceLink(state: var State, token: var Token, start: int, label: Slice[int]): int =
-  var pos = label.b + 1
-  var labelSlice: Slice[int]
-  var labelSize = getLinkText(state.doc, pos, labelSlice)
+proc parseFullReferenceLink(state: var State, token: var Token, start: int, textSlice: Slice[int]): int =
+  var pos = textSlice.b + 1
+  var label: string
+  var labelSize = getLinkLabel(state.doc, pos, label)
 
   if labelSize == -1:
     return -1
 
+  if not state.references.contains(label):
+    return -1
+
   pos += labelSize
 
-  var refLink = Token(
-    type: ReferenceLinkToken,
+  var text = state.doc[textSlice.a+1 ..< textSlice.b]
+  var reference = state.references[label]
+  var link = Token(
+    type: LinkToken,
     slice: (start ..< pos),
-    referenceLinkVal: ReferenceLink(
-      id: state.doc[labelSlice.a+1 ..< labelSlice.b].toLower,
-      text: state.doc[label.a+1 ..< label.b],
+    linkVal: Link(
+      url: reference.url,
+      title: reference.title,
+      text: text
     )
   )
-  #echo(refLink.referenceLinkVal.id, refLink.referenceLinkVal.text)
-  parseLinkInlines(state, refLink)
-  token.children.append(refLink)
-  return pos - start + 1
+  parseLinkInlines(state, link)
+  token.children.append(link)
+  return pos - start
 
 proc parseCollapsedReferenceLink(state: var State, token: var Token, start: int, label: Slice[int]): int =
-  var refLink = Token(
-    type: ReferenceLinkToken,
+  var id = state.doc[label.a+1 ..< label.b].toLower.replace(re"\s+", " ")
+  var text = state.doc[label.a+1 ..< label.b]
+  if not state.references.contains(id):
+    return -1
+
+  var reference = state.references[id]
+  var link = Token(
+    type: LinkToken,
     slice: (start ..< label.b + 1),
-    referenceLinkVal: ReferenceLink(
-      id: state.doc[label.a+1 ..< label.b].toLower,
-      text: state.doc[label.a+1 ..< label.b],
+    linkVal: Link(
+      url: reference.url,
+      title: reference.title,
+      text: text
     )
   )
-  parseLinkInlines(state, refLink)
-  token.children.append(refLink)
+  parseLinkInlines(state, link)
+  token.children.append(link)
   return label.b - start + 3
 
 proc parseShortcutReferenceLink(state: var State, token: var Token, start: int, label: Slice[int]): int =
-  var refLink = Token(
-    type: ReferenceLinkToken,
+  var id = state.doc[label.a+1 ..< label.b].toLower.replace(re"\s+", " ")
+  var text = state.doc[label.a+1 ..< label.b]
+  if not state.references.contains(id):
+    return -1
+
+  var reference = state.references[id]
+  var link = Token(
+    type: LinkToken,
     slice: (start ..< label.b + 1),
-    referenceLinkVal: ReferenceLink(
-      id: state.doc[label.a+1 ..< label.b].toLower,
-      text: state.doc[label.a+1 ..< label.b],
+    linkVal: Link(
+      url: reference.url,
+      title: reference.title,
+      text: text
     )
   )
-  parseLinkInlines(state, refLink)
-  token.children.append(refLink)
+  parseLinkInlines(state, link)
+  token.children.append(link)
   return label.b - start + 1
+
 
 proc parseLink*(state: var State, token: var Token, start: int): int =
   # Link should start with [
@@ -695,12 +748,16 @@ proc parseLink*(state: var State, token: var Token, start: int): int =
 
   # An inline link consists of a link text followed immediately by a left parenthesis (
   if labelSlice.b + 1 < state.doc.len and state.doc[labelSlice.b + 1] == '(':
-    return parseInlineLink(state, token, start, labelSlice)
+    var size = parseInlineLink(state, token, start, labelSlice)
+    if size != -1:
+      return size
 
   # A collapsed reference link consists of a link label that matches a link reference 
   # definition elsewhere in the document, followed by the string []. 
-  elif labelSlice.b + 2 < state.doc.len and state.doc[labelSlice.b+1 .. labelSlice.b+2] == "[]":
-    return parseCollapsedReferenceLink(state, token, start, labelSlice)
+  if labelSlice.b + 2 < state.doc.len and state.doc[labelSlice.b+1 .. labelSlice.b+2] == "[]":
+    var size = parseCollapsedReferenceLink(state, token, start, labelSlice)
+    if size != -1:
+      return size
 
   # A full reference link consists of a link text immediately followed by a link label 
   # that matches a link reference definition elsewhere in the document.
@@ -709,8 +766,7 @@ proc parseLink*(state: var State, token: var Token, start: int): int =
 
   # A shortcut reference link consists of a link label that matches a link reference 
   # definition elsewhere in the document and is not followed by [] or a link label.
-  else:
-    return parseShortcutReferenceLink(state, token, start, labelSlice)
+  return parseShortcutReferenceLink(state, token, start, labelSlice)
 
 proc parseInlineImage(state: var State, token: var Token, start: int, labelSlice: Slice[int]): int =
   var pos = labelSlice.b + 2 # ![link](
@@ -771,54 +827,74 @@ proc parseInlineImage(state: var State, token: var Token, start: int, labelSlice
   token.children.append(image)
   result = pos - start + 2
 
-proc parseFullReferenceImage(state: var State, token: var Token, start: int, label: Slice[int]): int =
-  var pos = label.b + 1
-  var labelSlice: Slice[int]
-  var labelSize = getLinkText(state.doc, pos, labelSlice)
+proc parseFullReferenceImage(state: var State, token: var Token, start: int, altSlice: Slice[int]): int =
+  var pos = altSlice.b + 1
+  var label: string
+  var labelSize = getLinkLabel(state.doc, pos, label)
 
   if labelSize == -1:
     return -1
 
   pos += labelSize
 
-  var refImage = Token(
-    type: ReferenceImageToken,
-    slice: (start ..< pos),
-    referenceImageVal: ReferenceLink(
-      id: state.doc[labelSlice.a+1 ..< labelSlice.b].toLower,
-      text: state.doc[label.a+1 ..< label.b],
-    )
-  )
+  var alt = state.doc[altSlice.a+1 ..< altSlice.b]
+  if not state.references.contains(label):
+    return -1
 
-  parseLinkInlines(state, refImage)
-  token.children.append(refImage)
-  return pos - start + 1
-  
-proc parseCollapsedReferenceImage(state: var State, token: var Token, start: int, label: Slice[int]): int =
-  var refLink = Token(
-    type: ReferenceImageToken,
-    slice: (start ..< label.b + 3),
-    referenceImageVal: ReferenceLink(
-      id: state.doc[label.a+1 ..< label.b].toLower,
-      text: state.doc[label.a+1 ..< label.b],
+  var reference = state.references[label]
+  var image = Token(
+    type: ImageToken,
+    slice: (start ..< pos),
+    imageVal: Image(
+      url: reference.url,
+      title: reference.title,
+      alt: alt
     )
   )
-  parseLinkInlines(state, refLink)
-  token.children.append(refLink)
+  parseLinkInlines(state, image, allowNested=true)
+  token.children.append(image)
+  return pos - start + 1
+
+proc parseCollapsedReferenceImage(state: var State, token: var Token, start: int, label: Slice[int]): int =
+  var id = state.doc[label.a+1 ..< label.b].toLower.replace(re"\s+", " ")
+  var alt = state.doc[label.a+1 ..< label.b]
+  if not state.references.contains(id):
+    return -1
+
+  var reference = state.references[id]
+  var image = Token(
+    type: ImageToken,
+    slice: (start ..< label.b + 3),
+    imageVal: Image(
+      url: reference.url,
+      title: reference.title,
+      alt: alt
+    )
+  )
+  parseLinkInlines(state, image)
+  token.children.append(image)
   return label.b - start + 3
 
 proc parseShortcutReferenceImage(state: var State, token: var Token, start: int, label: Slice[int]): int =
-  var refLink = Token(
-    type: ReferenceImageToken,
+  var id = state.doc[label.a+1 ..< label.b].toLower.replace(re"\s+", " ")
+  var alt = state.doc[label.a+1 ..< label.b]
+  if not state.references.contains(id):
+    return -1
+
+  var reference = state.references[id]
+  var image = Token(
+    type: ImageToken,
     slice: (start ..< label.b + 1),
-    referenceImageVal: ReferenceLink(
-      id: state.doc[label.a+1 ..< label.b].toLower,
-      text: state.doc[label.a+1 ..< label.b],
+    imageVal: Image(
+      url: reference.url,
+      title: reference.title,
+      alt: alt
     )
   )
-  parseLinkInlines(state, refLink)
-  token.children.append(refLink)
+  parseLinkInlines(state, image)
+  token.children.append(image)
   return label.b - start + 1
+
 
 proc parseImage*(state: var State, token: var Token, start: int): int =
   # Image should start with ![
@@ -1021,12 +1097,6 @@ proc parseLinkInlines*(state: var State, token: var Token, allowNested: bool = f
   elif token.type == ImageToken:
     pos = token.slice.a + 2
     size = token.imageVal.alt.len
-  elif token.type == ReferenceLinkToken:
-    pos = token.slice.a + 1
-    size = token.referenceLinkVal.text.len - 1
-  elif token.type == ReferenceImageToken:
-    pos = token.slice.a + 2
-    size = token.referenceImageVal.text.len
   else:
     raise newException(MarkdownError, fmt"{token.type} has no link inlines.")
   for index, ch in state.doc[pos .. pos+size]:
@@ -1050,7 +1120,7 @@ proc parseLinkInlines*(state: var State, token: var Token, allowNested: bool = f
 proc parseLeafBlockInlines(state: var State, token: var Token) =
   var pos = token.slice.a
   var delimeters: DoublyLinkedList[Delimeter]
-  
+
   for index, ch in state.doc[token.slice.a ..< token.slice.b].strip:
     #echo(token.slice, index, " ", pos)
     if token.slice.a + index < pos:
@@ -1122,40 +1192,6 @@ proc renderImageAlt*(state: State, token: Token): string =
       else: renderToken(state, x)
   ).join("")
 
-proc renderReferenceLink(state: State, token: Token): string =
-  if state.references.contains(token.referenceLinkVal.id):
-    var reference = state.references[token.referenceLinkVal.id]
-    if reference.title != "":
-      return a(
-        href=reference.url.escapeBackslash.escapeLinkUrl,
-        title=reference.title.escapeBackslash.escapeAmpersandSeq.escapeQuote,
-        state.renderInline(token)
-      )
-    else:
-      return a(
-        href=reference.url.escapeBackslash.escapeLinkUrl,
-        state.renderInline(token)
-      )
-  else:
-    return state.doc[token.slice]
-
-proc renderReferenceImage(state: State, token: Token): string =
-  if state.references.contains(token.referenceImageVal.id):
-    var reference = state.references[token.referenceImageVal.id]
-    if reference.title != "":
-      return img(
-        src=reference.url.escapeBackslash.escapeLinkUrl,
-        alt=state.renderImageAlt(token),
-        title=reference.title.escapeBackslash.escapeAmpersandSeq.escapeQuote,
-      )
-    else:
-      return img(
-        src=reference.url.escapeBackslash.escapeLinkUrl,
-        alt=state.renderImageAlt(token)
-      )
-  else:
-    return state.doc[token.slice]
-
 proc renderToken(state: State, token: Token): string =
   case token.type
   of ReferenceToken: ""
@@ -1172,17 +1208,15 @@ proc renderToken(state: State, token: Token): string =
     )
   of ImageToken:
     if token.imageVal.title == "": img(
-      src=token.imageVal.url,
+      src=token.imageVal.url.escapeBackslash.escapeLinkUrl,
       alt=state.renderImageAlt(token)
     )
     else: img(
-      src=token.imageVal.url,
+      src=token.imageVal.url.escapeBackslash.escapeLinkUrl,
       alt=state.renderImageAlt(token),
-      title=token.imageVal.title
+      title=token.imageVal.title.escapeBackslash.escapeAmpersandSeq.escapeQuote,
     )
   of AutoLinkToken: a(href=token.autoLinkVal.url.escapeLinkUrl, token.autoLinkVal.text)
-  of ReferenceLinkToken: renderReferenceLink(state, token)
-  of ReferenceImageToken: renderReferenceImage(state, token)
   of TextToken: token.textVal.escapeAmpersandSeq.escapeTag.escapeQuote
   of EscapeToken: token.escapeVal.escapeAmpersandSeq.escapeTag.escapeQuote
   of EmphasisToken: em(state.renderInline(token))
@@ -1265,3 +1299,8 @@ when isMainModule:
   check getLinkTitle("/url 'title'", 5, slice) == 7; check "/url 'title'"[slice] == "title"
   check getLinkTitle("/url (title)", 5, slice) == 7; check "/url (title)"[slice] == "title"
   check getLinkTitle(""""title \"&quot;"""", 0, slice) == 16; check """"title \"&quot;""""[slice] == "title \"&quot;"
+
+  var label = ""
+  check getLinkLabel("[a]", 0, label) == 3; check label == "a"
+  check getLinkLabel("[a]]", 0, label) == 3; check label == "a"
+  check getLinkLabel("[a[]", 0, label) == -1

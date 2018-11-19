@@ -107,7 +107,7 @@ var simpleRuleSet = RuleSet(
 proc parse(state: var State);
 proc parseLeafBlockInlines(state: var State, token: var Token);
 proc parseLinkInlines*(state: var State, token: var Token, allowNested: bool = false);
-proc getLinkLabelSlice*(doc: string, start: int, slice: var Slice[int], allowNested: bool = false): int;
+proc getLinkText*(doc: string, start: int, slice: var Slice[int], allowNested: bool = false): int;
 proc getLinkDestination*(doc: string, start: int, slice: var Slice[int]): int;
 proc getLinkTitle*(doc: string, start: int, slice: var Slice[int]): int;
 
@@ -214,7 +214,7 @@ proc parseReference*(state: var State): bool =
   pos += markStart - 1
 
   var labelSlice: Slice[int]
-  var labelSize = getLinkLabelSlice(state.doc, pos, labelSlice)
+  var labelSize = getLinkText(state.doc, pos, labelSlice)
 
   # Link should have matching ] for [.
   if labelSize == -1:
@@ -517,36 +517,54 @@ proc getLinkTitle*(doc: string, start: int, slice: var Slice[int]): int =
       return i+2
   return -1
 
-proc getLinkLabelSlice*(doc: string, start: int, slice: var Slice[int], allowNested: bool = false): int =
+proc getLinkText*(doc: string, start: int, slice: var Slice[int], allowNested: bool = false): int =
   # based on assumption: state.doc[start] = '['
   if doc[start] != '[':
     raise newException(MarkdownError, fmt"{start} is not [.")
+
+  # A link text consists of a sequence of zero or more inline elements enclosed by square brackets ([ and ]).
   var level = 0
   var isEscaping = false
+  var skip = 0
   for i, ch in doc[start ..< doc.len]:
+    # Skip ahead for higher precedent matches like code spans, autolinks, and raw HTML tags.
+    if skip > 0:
+      skip -= 1
+      continue
+
+    # Brackets are allowed in the link text only if (a) they are backslash-escaped
     if isEscaping:
       isEscaping = false
       continue
     elif ch == '\\':
       isEscaping = true
+
+    # or (b) they appear as a matched pair of brackets, with an open bracket [,
+    # a sequence of zero or more inlines, and a close bracket ].
     elif ch == '[':
       level += 1
     elif ch == ']':
       level -= 1
-    elif ch == '<':
-      # abort if it's an HTML tag or autolink.
-      if doc[start+i ..< doc.len].matchLen(re"^<\w+[^>]*>") != -1:
-        return -1
+
+    # Backtick: code spans bind more tightly than the brackets in link text.
+    # Skip the tokens in code.
     elif ch == '`':
-      # if doc[start+i ..< doc.len].matchLen(re"^`[^`]+`") != -1:
-      #   return -1
-      discard
-    if level == 0:
-      # if not allow but detect nested, abort.
-      if not allowNested and doc[start .. start+i].find(re"[^!]\[[^\]]+\]\(.*\)") != -1:
+      # FIXME: it's better to extract to a code span helper function
+      skip = doc[start+i ..< doc.len].matchLen(re"^((`+)\s*([\s\S]*?[^`])\s*\2(?!`))") - 1
+
+    # autolinks, and raw HTML tags bind more tightly than the brackets in link text.
+    elif ch == '<':
+      skip = doc[start+i ..< doc.len].matchLen(re"^<[^>]*>") - 1
+
+    # Links may not contain other links, at any level of nesting.
+    # Image description may contain links.
+    if level == 0 and not allowNested and doc[start .. start+i].find(re"[^!]\[[^]]*\]\([^)]*\)") > -1:
         return -1
+
+    if level == 0:
       slice = (start .. start+i)
       return i+1
+
   return -1
 
 
@@ -618,7 +636,7 @@ proc parseInlineLink(state: var State, token: var Token, start: int, labelSlice:
 proc parseFullReferenceLink(state: var State, token: var Token, start: int, label: Slice[int]): int =
   var pos = label.b + 1
   var labelSlice: Slice[int]
-  var labelSize = getLinkLabelSlice(state.doc, pos, labelSlice)
+  var labelSize = getLinkText(state.doc, pos, labelSlice)
 
   if labelSize == -1:
     return -1
@@ -670,7 +688,7 @@ proc parseLink*(state: var State, token: var Token, start: int): int =
     return -1
 
   var labelSlice: Slice[int]
-  result = getLinkLabelSlice(state.doc, start, labelSlice)
+  result = getLinkText(state.doc, start, labelSlice)
   # Link should have matching ] for [.
   if result == -1:
     return -1
@@ -756,7 +774,7 @@ proc parseInlineImage(state: var State, token: var Token, start: int, labelSlice
 proc parseFullReferenceImage(state: var State, token: var Token, start: int, label: Slice[int]): int =
   var pos = label.b + 1
   var labelSlice: Slice[int]
-  var labelSize = getLinkLabelSlice(state.doc, pos, labelSlice)
+  var labelSize = getLinkText(state.doc, pos, labelSlice)
 
   if labelSize == -1:
     return -1
@@ -809,7 +827,7 @@ proc parseImage*(state: var State, token: var Token, start: int): int =
     return -1
 
   var labelSlice: Slice[int]
-  var labelSize = getLinkLabelSlice(state.doc, start+1, labelSlice, allowNested=true)
+  var labelSize = getLinkText(state.doc, start+1, labelSlice, allowNested=true)
 
   # Image should have matching ] for [.
   if labelSize == -1:
@@ -1201,21 +1219,26 @@ when isMainModule:
   check markdown("*a* **b** ***c***") == "<p><em>a</em> <strong>b</strong> <em><strong>c</strong></em></p>\n"
 
   var slice: Slice[int]
-  check getLinkLabelSlice("[a]", 0, slice) == 3; check slice == (0 .. 2)
-  check getLinkLabelSlice("[[a]", 0, slice) == -1;
-  check getLinkLabelSlice("[[a]", 1, slice) == 3; check slice == (1 .. 3)
-  check getLinkLabelSlice("[[a]]", 0, slice) == 5; check slice == (0 .. 4)
-  check getLinkLabelSlice("[a]]", 0, slice) == 3; check slice == (0 .. 2)
-  check getLinkLabelSlice(r"[a\]]", 0, slice) == 5; check slice == (0 .. 4)
-  check getLinkLabelSlice("[link]", 0, slice) == 6; check slice == (0 .. 5)
-  check getLinkLabelSlice("[link [foo [bar]]]", 0, slice) == 18; check slice == (0 .. 17)
-  check getLinkLabelSlice("[link] bar]", 0, slice) == 6; check slice == (0 .. 5)
-  check getLinkLabelSlice("[link [bar]", 0, slice) == -1;
-  check getLinkLabelSlice(r"[link \[bar]", 0, slice) == 12; check slice == (0 .. 11)
-  check getLinkLabelSlice("[foo [bar](/uri)]", 0, slice) == 17; check slice == (0 .. 16)
-  check getLinkLabelSlice("[foo *[bar [baz](/uri)](/uri)*]", 0, slice) == 31; check slice == (0 .. 30)
-  check getLinkLabelSlice("![[[foo](uri1)](uri2)]", 1, slice) == 21; check slice == (1 .. 21)
-  check getLinkLabelSlice("*[foo*]", 1, slice) == 6; check slice == (1 .. 6)
+  check getLinkText("[a]", 0, slice) == 3; check slice == (0 .. 2)
+  check getLinkText("[[a]", 0, slice) == -1;
+  check getLinkText("[[a]", 1, slice) == 3; check slice == (1 .. 3)
+  check getLinkText("[[a]]", 0, slice) == 5; check slice == (0 .. 4)
+  check getLinkText("[a]]", 0, slice) == 3; check slice == (0 .. 2)
+  check getLinkText(r"[a\]]", 0, slice) == 5; check slice == (0 .. 4)
+  check getLinkText("[link]", 0, slice) == 6; check slice == (0 .. 5)
+  check getLinkText("[link [foo [bar]]]", 0, slice) == 18; check slice == (0 .. 17)
+  check getLinkText("[link] bar]", 0, slice) == 6; check slice == (0 .. 5)
+  check getLinkText("[link [bar]", 0, slice) == -1;
+  check getLinkText(r"[link \[bar]", 0, slice) == 12; check slice == (0 .. 11)
+  check getLinkText("[foo [bar](/uri)]", 0, slice) == -1
+  check getLinkText("[foo *[bar [baz](/uri)](/uri)*]", 0, slice) == -1
+  check getLinkText("![[[foo](uri1)](uri2)]", 1, slice, allowNested=true) == 21; check slice == (1 .. 21)
+  check getLinkText("*[foo*]", 1, slice) == 6; check slice == (1 .. 6)
+  check getLinkText("[foo`]`", 0, slice) == -1;
+  check getLinkText("[foo`]`]", 0, slice) == 8; check slice == (0 .. 7);
+  check getLinkText("[foo <a href=]>]", 0, slice) == 16; check slice == (0 .. 15);
+  check getLinkText("[[foo](/uri)]", 0, slice) == -1
+  check getLinkText("[![foo](/uri)]", 0, slice) == 14; check slice == (0 .. 13)
 
   
   var doc = ""

@@ -55,6 +55,7 @@ type
     LinkToken,
     ImageToken,
     EmphasisToken,
+    HTMLEntityToken,
     StrongToken,
     EscapeToken,
     SoftLineBreakToken,
@@ -72,6 +73,7 @@ type
     of LinkToken: linkVal*: Link
     of EscapeToken: escapeVal*: string
     of ImageToken: imageVal*: Image
+    of HTMLEntityToken: htmlEntityVal*: string
     of StrongToken: strongVal*: string
     of SoftLineBreakToken: softLineBreakVal*: string
     of DummyToken: dummyVal*: string
@@ -93,6 +95,7 @@ var simpleRuleSet = RuleSet(
     ImageToken,
     AutoLinkToken,
     LinkToken,
+    HTMLEntityToken,
     EscapeToken,
     SoftLineBreakToken,
     TextToken,
@@ -928,6 +931,31 @@ proc parseImage*(state: var State, token: var Token, start: int): int =
   else:
     return parseShortcutReferenceImage(state, token, start, labelSlice)
 
+const ENTITY = r"&(?:#x[a-f0-9]{1,6}|#[0-9]{1,7}|[a-z][a-z0-9]{1,31});"
+proc parseHTMLEntity*(state: var State, token: var Token, start: int): int =
+  if state.doc[start] != '&':
+    return -1
+
+  let regex = re(r"^(" & ENTITY & ")", {RegexFlag.reIgnoreCase})
+  var matches: array[1, string]
+
+  var size = state.doc[start .. state.doc.len - 1].matchLen(regex, matches)
+  if size == -1:
+    return -1
+
+  var entity: string
+  if matches[0] == "&#0;":
+    entity = "\uFFFD"
+  else:
+    entity = escapeHTMLEntity(matches[0])
+
+  token.children.append(Token(
+    type: HTMLEntityToken,
+    slice: (start .. start+size-1),
+    htmlEntityVal: entity
+  ))
+  return size
+
 proc parseEscape*(state: var State, token: var Token, start: int): int =
   if state.doc[start] != '\\':
     return -1
@@ -950,6 +978,7 @@ proc findInlineToken(state: var State, token: var Token, rule: TokenType, start:
   of AutoLinkToken: result = parseAutoLink(state, token, start)
   of LinkToken: result = parseLink(state, token, start)
   of ImageToken: result = parseImage(state, token, start)
+  of HTMLEntityToken: result = parseHTMLEntity(state, token, start)
   of EscapeToken: result = parseEscape(state, token, start)
   of SoftLineBreakToken: result = parseSoftLineBreak(state, token, start)
   of TextToken: result = parseText(state, token, start)
@@ -1203,7 +1232,7 @@ proc renderToken(state: State, token: Token): string =
     )
     else: a(
       href=token.linkVal.url.escapeBackslash.escapeLinkUrl,
-      title=token.linkVal.title.escapeBackslash.escapeAmpersandSeq.escapeQuote,
+      title=token.linkVal.title.escapeBackslash.escapeHTMLEntity.escapeAmpersandSeq.escapeQuote,
       state.renderInline(token)
     )
   of ImageToken:
@@ -1214,10 +1243,11 @@ proc renderToken(state: State, token: Token): string =
     else: img(
       src=token.imageVal.url.escapeBackslash.escapeLinkUrl,
       alt=state.renderImageAlt(token),
-      title=token.imageVal.title.escapeBackslash.escapeAmpersandSeq.escapeQuote,
+      title=token.imageVal.title.escapeBackslash.escapeHTMLEntity.escapeAmpersandSeq.escapeQuote,
     )
   of AutoLinkToken: a(href=token.autoLinkVal.url.escapeLinkUrl, token.autoLinkVal.text)
   of TextToken: token.textVal.escapeAmpersandSeq.escapeTag.escapeQuote
+  of HTMLEntityToken: token.htmlEntityVal.escapeHTMLEntity.escapeQuote
   of EscapeToken: token.escapeVal.escapeAmpersandSeq.escapeTag.escapeQuote
   of EmphasisToken: em(state.renderInline(token))
   of StrongToken: strong(state.renderInline(token))

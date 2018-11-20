@@ -1,7 +1,7 @@
 import re, strutils, strformat, tables, sequtils, math, uri, htmlparser, lists, unicode
 from sequtils import map
 from lists import DoublyLinkedList, prepend, append
-from htmlgen import nil, p, br, em, strong, a, img, code, del
+from htmlgen import nil, p, br, em, strong, a, img, code, del, blockquote
 
 type
   MarkdownError* = object of Exception ## The error object for markdown parsing and rendering.
@@ -47,8 +47,13 @@ type
     text: string
     url: string
 
+  Blockquote = object
+    doc: string
+
   TokenType* {.pure.} = enum
     ParagraphToken,
+    BlockquoteToken,
+    BlankLineToken,
     ReferenceToken,
     TextToken,
     AutoLinkToken,
@@ -70,6 +75,8 @@ type
     children: DoublyLinkedList[Token]
     case type*: TokenType
     of ParagraphToken: paragraphVal*: Paragraph
+    of BlankLineToken: blankLineVal*: string
+    of BlockquoteToken: blockquoteVal*: Blockquote
     of ReferenceToken: referenceVal*: Reference
     of TextToken: textVal*: string
     of EmphasisToken: emphasisVal*: string
@@ -96,6 +103,8 @@ var simpleRuleSet = RuleSet(
   preProcessingRules: @[],
   blockRules: @[
     ReferenceToken,
+    BlockquoteToken,
+    BlankLineToken,
     ParagraphToken,
   ],
   inlineRules: @[
@@ -228,6 +237,7 @@ proc getBlockStart(state: var State): int =
 proc parseParagraph(state: var State): bool =
   let start = state.getBlockStart
   let size = state.doc[start..<state.doc.len].matchLen(re(r"^([^\n]+\n?)+\n*"))
+
   if size == -1:
     return false
 
@@ -240,6 +250,77 @@ proc parseParagraph(state: var State): bool =
   )
 
   state.tokens.append(token)
+  return true
+
+proc parseBlankLine(state: var State): bool =
+  let start = state.getBlockStart
+  let size = state.doc[start..<state.doc.len].matchLen(re(r"^((?:\s*\n)+)"))
+
+  if size == -1:
+    return false
+
+  var token = Token(
+    type: BlankLineToken,
+    slice: (start .. start+size),
+    blankLineVal: state.doc[start ..< start+size]
+  )
+
+  state.tokens.append(token)
+  return true
+
+let LAZINESS_TEXT = re"^((?:(?! {0,3}>| {0,3}\* | {0,3}- | {0,3}\d+\. | {0,3}#| {0,3}`{3,}| {0,3}\*{3}| {0,3}-{3}| {0,3}_{3})[^\n]+(?:\n|$))+)"
+
+proc parseBlockquote(state: var State): bool =
+  let markerContent = re(r"^(( {0,3}>([^\n]*(?:\n|$)))+)")
+  var matches: array[3, string]
+  let start = state.getBlockStart
+  var pos = start
+  var size = -1
+  var document = ""
+  var found = false
+  
+  while pos < state.doc.len:
+    size = state.doc[pos ..< state.doc.len].matchLen(markerContent, matches=matches)
+
+    if size == -1:
+      break
+
+    found = true
+    pos += size
+    # extract content with blockquote mark
+    document &= matches[0].replacef(re"(^|\n) {0,3}> ?", "$1")
+
+    # blank line in non-lazy content always breaks the blockquote.
+    if matches[2].strip == "":
+      document = document.strip(leading=false, trailing=true)
+      break
+
+    # find the empty line in lazy content
+    if state.doc[pos ..< state.doc.len].matchLen(re"^\n|$") > -1:
+      break
+
+    # find the laziness text
+    size = state.doc[pos ..< state.doc.len].matchLen(LAZINESS_TEXT, matches=matches)
+
+    # blank line in laziness text always breaks the blockquote
+    if size == -1:
+      break
+
+    # concat the laziness text
+    pos += size
+    document &= matches[0]
+
+  if not found:
+    return false
+
+  var blockquote = Token(
+    type: BlockquoteToken,
+    slice: (start .. pos),
+    blockquoteVal: Blockquote(
+      doc: document
+    )
+  )
+  state.tokens.append(blockquote)
   return true
 
 proc parseReference*(state: var State): bool =
@@ -339,6 +420,8 @@ proc parseBlock(state: var State) =
     for rule in state.ruleSet.blockRules:
       case rule
       of ReferenceToken: ok = parseReference(state)
+      of BlockquoteToken: ok = parseBlockquote(state)
+      of BlankLineToken: ok = parseBlankLine(state)
       of ParagraphToken: ok = parseParagraph(state)
       else:
         raise newException(MarkdownError, fmt"unknown rule. {state.tokens.tail.value.slice.b}")
@@ -1294,15 +1377,17 @@ proc parseLeafBlockInlines(state: var State, token: var Token) =
 proc isContainerToken(token: Token): bool =
   # TODO: return true for list, list item, blockquote, and task list items
   case token.type
-  of ParagraphToken: false
+  of BlockquoteToken: true
   else: false
 
-proc parseContainerInlines(state: var State, token: var Token): untyped =
+proc parseContainerInlines(state: var State, token: var Token) =
   # TODO: recursively iterate list, list item, bloclquote and task list items
   case token.type
-  of ParagraphToken: parseLeafBlockInlines(state, token)
+  of BlockquoteToken:
+    for childToken in token.children.mitems:
+      parseContainerInlines(state, childToken)
   else:
-    raise newException(MarkdownError, fmt"{token.type} walking inlines unsupported.")
+    parseLeafBlockInlines(state, token)
 
 proc parseInline(state: var State) =
   for blockToken in state.tokens.mitems:
@@ -1368,6 +1453,8 @@ proc renderToken(state: State, token: Token): string =
       title=token.imageVal.title.escapeBackslash.escapeHTMLEntity.escapeAmpersandSeq.escapeQuote,
     )
   of AutoLinkToken: a(href=token.autoLinkVal.url.escapeLinkUrl.escapeAmpersandSeq, token.autoLinkVal.text.escapeAmpersandSeq)
+  of BlankLineToken: ""
+  of BlockquoteToken: blockquote(token.blockquoteVal.doc)
   of TextToken: token.textVal.escapeAmpersandSeq.escapeTag.escapeQuote
   of HTMLEntityToken: token.htmlEntityVal.escapeHTMLEntity.escapeQuote
   of InlineHTMLToken: token.inlineHTMLVal.escapeInvalidHTMLTag
@@ -1391,7 +1478,7 @@ proc renderState(state: State): string =
 
 proc markdown*(doc: string): string =
   var tokens: DoublyLinkedList[Token]
-  var state = State(doc: doc.strip, tokens: tokens, ruleSet: simpleRuleSet, references: initTable[string, Reference]())
+  var state = State(doc: doc.strip(chars={'\n'}), tokens: tokens, ruleSet: simpleRuleSet, references: initTable[string, Reference]())
   state.tokens.append(Token(type: DummyToken, slice: (0..0), dummyVal: ""))
   parse(state)
   renderState(state)

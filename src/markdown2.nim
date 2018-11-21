@@ -240,9 +240,11 @@ proc getBlockStart(token: Token): int =
   else:
     token.children.tail.value.slice.b
 
+let LAZINESS_TEXT = r"(?:(?! {0,3}>| {0,3}\* | {0,3}- | {0,3}\d+\. | {0,3}#| {0,3}`{3,}| {0,3}\*{3}| {0,3}-{3}| {0,3}_{3})[^\n]+(?:\n|$))+"
+
 proc parseParagraph(state: var State, token: var Token): bool =
   let start = token.getBlockStart
-  let size = token.doc[start..<token.doc.len].matchLen(re(r"^([^\n]+\n?)+\n*"))
+  let size = token.doc[start..<token.doc.len].matchLen(re(r"^((?:[^\n]+\n?)(" & LAZINESS_TEXT & "|\n*))"))
 
   if size == -1:
     return false
@@ -250,7 +252,7 @@ proc parseParagraph(state: var State, token: var Token): bool =
   var paragraph = Token(
     type: ParagraphToken,
     slice: (start .. start+size),
-    doc: token.doc[start ..< start+size],
+    doc: token.doc[start ..< start+size].replace(re"\n\s*", "\n"),
     paragraphVal: Paragraph(
       doc: token.doc[start ..< start+size].replace(re"\n\s*", "\n")
     )
@@ -275,8 +277,6 @@ proc parseBlankLine(state: var State, token: var Token): bool =
 
   token.children.append(blankLine)
   return true
-
-let LAZINESS_TEXT = re"^((?:(?! {0,3}>| {0,3}\* | {0,3}- | {0,3}\d+\. | {0,3}#| {0,3}`{3,}| {0,3}\*{3}| {0,3}-{3}| {0,3}_{3})[^\n]+(?:\n|$))+)"
 
 proc parseBlockquote(state: var State, token: var Token): bool =
   let markerContent = re(r"^(( {0,3}>([^\n]*(?:\n|$)))+)")
@@ -308,7 +308,7 @@ proc parseBlockquote(state: var State, token: var Token): bool =
       break
 
     # find the laziness text
-    size = token.doc[pos ..< token.doc.len].matchLen(LAZINESS_TEXT, matches=matches)
+    size = token.doc[pos ..< token.doc.len].matchLen(re("^(" & LAZINESS_TEXT & ")"), matches=matches)
 
     # blank line in laziness text always breaks the blockquote
     if size == -1:
@@ -958,6 +958,7 @@ proc parseInlineImage(state: var State, token: var Token, start: int, labelSlice
   #echo(destinationLen, destinationSlice)
   var url = token.doc[destinationSlice]
   var text = token.doc[labelSlice.a+1 ..< labelSlice.b]
+
   #echo((start .. pos + 1))
   var image = Token(
     type: ImageToken,
@@ -969,6 +970,7 @@ proc parseInlineImage(state: var State, token: var Token, start: int, labelSlice
       title: title,
     )
   )
+
   parseLinkInlines(state, image, allowNested=true)
   token.children.append(image)
   result = pos - start + 2
@@ -1353,9 +1355,9 @@ proc parseLinkInlines*(state: var State, token: var Token, allowNested: bool = f
     size = token.imageVal.alt.len
   else:
     raise newException(MarkdownError, fmt"{token.type} has no link inlines.")
-  echo(token.doc, pos, " ", size)
+
   for index, ch in token.doc[pos .. pos+size]:
-    if token.slice.a+1+index < pos:
+    if 1+index < pos:
       continue
     var ok = false
     var size = -1

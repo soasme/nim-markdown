@@ -151,12 +151,14 @@ let HTML_TAG = (
 )
 
 proc parse(state: var State, token: var Token);
+proc parseBlock(state: var State, token: var Token);
 proc parseLeafBlockInlines(state: var State, token: var Token);
 proc parseLinkInlines*(state: var State, token: var Token, allowNested: bool = false);
 proc getLinkText*(doc: string, start: int, slice: var Slice[int], allowNested: bool = false): int;
 proc getLinkLabel*(doc: string, start: int, label: var string): int;
 proc getLinkDestination*(doc: string, start: int, slice: var Slice[int]): int;
 proc getLinkTitle*(doc: string, start: int, slice: var Slice[int]): int;
+proc render(state: State, token: Token): string;
 
 proc preProcessing(state: var State, token: var Token) =
   discard
@@ -322,11 +324,13 @@ proc parseBlockquote(state: var State, token: var Token): bool =
   var blockquote = Token(
     type: BlockquoteToken,
     slice: (start .. pos),
-    doc: token.doc[start ..< pos],
+    doc: document,
     blockquoteVal: Blockquote(
       doc: document
     )
   )
+  if document.strip != "":
+    parseBlock(state, blockquote)
   token.children.append(blockquote)
   return true
 
@@ -424,7 +428,7 @@ proc parseReference*(state: var State, token: var Token): bool =
 proc parseBlock(state: var State, token: var Token) =
   let doc = token.doc
   var ok: bool
-  while token.children.tail == nil or token.children.tail.value.slice.b < doc.len:
+  while token.children.tail == nil or token.getBlockStart < doc.len:
     ok = false
     for rule in state.ruleSet.blockRules:
       case rule
@@ -1470,7 +1474,7 @@ proc renderToken(state: State, token: Token): string =
     )
   of AutoLinkToken: a(href=token.autoLinkVal.url.escapeLinkUrl.escapeAmpersandSeq, token.autoLinkVal.text.escapeAmpersandSeq)
   of BlankLineToken: ""
-  of BlockquoteToken: blockquote(token.blockquoteVal.doc)
+  of BlockquoteToken: blockquote("\n", state.render(token))
   of TextToken: token.textVal.escapeAmpersandSeq.escapeTag.escapeQuote
   of HTMLEntityToken: token.htmlEntityVal.escapeHTMLEntity.escapeQuote
   of InlineHTMLToken: token.inlineHTMLVal.escapeInvalidHTMLTag

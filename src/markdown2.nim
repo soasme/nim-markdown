@@ -1,7 +1,7 @@
 import re, strutils, strformat, tables, sequtils, math, uri, htmlparser, lists, unicode
 from sequtils import map
 from lists import DoublyLinkedList, prepend, append
-from htmlgen import nil, p, br, em, strong, a, img, code, del, blockquote
+from htmlgen import nil, p, br, em, strong, a, img, code, del, blockquote, li, ul, ol
 
 type
   MarkdownError* = object of Exception ## The error object for markdown parsing and rendering.
@@ -50,10 +50,23 @@ type
   Blockquote = object
     doc: string
 
+  UnorderedList = object
+    loose: bool
+
+  OrderedList = object
+    loose: bool
+    start: int
+
+  ListItem = object
+    marker: string
+
   TokenType* {.pure.} = enum
     ParagraphToken,
     BlockquoteToken,
     BlankLineToken,
+    UnorderedListToken,
+    OrderedListToken,
+    ListItemToken,
     ReferenceToken,
     TextToken,
     AutoLinkToken,
@@ -78,6 +91,9 @@ type
     of ParagraphToken: paragraphVal*: Paragraph
     of BlankLineToken: blankLineVal*: string
     of BlockquoteToken: blockquoteVal*: Blockquote
+    of UnorderedListToken: ulVal*: UnorderedList
+    of OrderedListToken: olVal*: OrderedList
+    of ListItemToken: listItemVal*: ListItem
     of ReferenceToken: referenceVal*: Reference
     of TextToken: textVal*: string
     of EmphasisToken: emphasisVal*: string
@@ -97,6 +113,7 @@ type
   State* = ref object
     doc: string
     ruleSet: RuleSet
+    loose: bool
     references: Table[string, Reference]
     tokens: DoublyLinkedList[Token]
 
@@ -105,6 +122,8 @@ var simpleRuleSet = RuleSet(
   blockRules: @[
     ReferenceToken,
     BlockquoteToken,
+    UnorderedListToken,
+    OrderedListToken,
     BlankLineToken,
     ParagraphToken,
   ],
@@ -158,7 +177,7 @@ proc getLinkText*(doc: string, start: int, slice: var Slice[int], allowNested: b
 proc getLinkLabel*(doc: string, start: int, label: var string): int;
 proc getLinkDestination*(doc: string, start: int, slice: var Slice[int]): int;
 proc getLinkTitle*(doc: string, start: int, slice: var Slice[int]): int;
-proc render(state: State, token: Token): string;
+proc render(state: var State, token: Token): string;
 
 proc preProcessing(state: var State, token: var Token) =
   discard
@@ -252,7 +271,7 @@ proc parseParagraph(state: var State, token: var Token): bool =
   var paragraph = Token(
     type: ParagraphToken,
     slice: (start .. start+size),
-    doc: token.doc[start ..< start+size].replace(re"\n\s*", "\n"),
+    doc: token.doc[start ..< start+size].replace(re"\n\s*", "\n").strip,
     paragraphVal: Paragraph(
       doc: token.doc[start ..< start+size].replace(re"\n\s*", "\n")
     )
@@ -361,6 +380,107 @@ proc parseUnorderedListItem(doc: string, start=0, marker: var string, listItemDo
     pos += size
 
   return pos - start
+
+proc isLoose(token: Token): bool =
+  for node in token.children.nodes:
+    # any of its constituent list items are separated by blank lines
+    if node.next != nil:
+      if node.value.doc.find(re"\n\n$") != -1:
+        return true
+    # any of its constituent list items are separated by blank lines
+    for childNode in node.value.children.nodes:
+      if childNode.next != nil:
+        if childNode.value.doc.find(re"\n\n$") != -1:
+          return true
+  return false
+
+proc parseUnorderedList(state: var State, token: var Token): bool =
+  let start = token.getBlockStart
+  var pos = start
+  var marker = ""
+  var listItems: seq[Token];
+
+  while pos < token.doc.len:
+    var listItemDoc = ""
+    var itemSize = parseUnorderedListItem(token.doc, pos, marker, listItemDoc)
+    if itemSize == -1:
+      break
+
+    var listItem = Token(
+      type: ListItemToken,
+      slice: (pos .. pos + itemSize),
+      doc: listItemDoc,
+      listItemVal: ListItem(
+        marker: marker
+      )
+    )
+    if listItemDoc != "":
+      parseBlock(state, listItem)
+    listItems.add(listItem)
+
+    pos += itemSize
+
+  if marker == "":
+    return false
+
+  var ulToken = Token(
+    type: UnorderedListToken,
+    slice: (start .. pos),
+    doc: token.doc[start ..< pos],
+    ulVal: UnorderedList(
+      loose: false
+    )
+  )
+  for listItem in listItems:
+    ulToken.children.append(listItem)
+  ulToken.ulVal.loose = ulToken.isLoose
+  token.children.append(ulToken)
+  result = true
+
+proc parseOrderedList(state: var State, token: var Token): bool =
+  let start = token.getBlockStart
+  var pos = start
+  var marker = ""
+  var index = 1
+  var listItems: seq[Token];
+
+  while pos < token.doc.len:
+    var listItemDoc = ""
+    var itemSize = parseOrderedListItem(token.doc, pos, marker, listItemDoc, index)
+    if itemSize == -1:
+      break
+
+    var listItem = Token(
+      type: ListItemToken,
+      slice: (pos .. pos + itemSize),
+      doc: listItemDoc,
+      listItemVal: ListItem(
+        marker: marker
+      )
+    )
+    if listItemDoc != "":
+      parseBlock(state, listItem)
+    listItems.add(listItem)
+
+    pos += itemSize
+
+  if marker == "":
+    return false
+
+  var olToken = Token(
+    type: OrderedListToken,
+    slice: (start .. pos),
+    doc: token.doc[start ..< pos],
+    olVal: OrderedList(
+      start: index,
+      loose: false
+    )
+  )
+  for listItem in listItems:
+    olToken.children.append(listItem)
+  olToken.olVal.loose = olToken.isLoose
+  token.children.append(olToken)
+  result = true
 
 proc parseBlankLine(state: var State, token: var Token): bool =
   let start = token.getBlockStart
@@ -529,13 +649,16 @@ proc parseReference*(state: var State, token: var Token): bool =
 proc parseBlock(state: var State, token: var Token) =
   let doc = token.doc
   var ok: bool
-  while token.children.tail == nil or token.getBlockStart < doc.len:
+  #while token.children.tail == nil or token.getBlockStart < doc.len:
+  while token.getBlockStart < doc.len:
     ok = false
     for rule in state.ruleSet.blockRules:
       case rule
       of ReferenceToken: ok = parseReference(state, token)
       of BlockquoteToken: ok = parseBlockquote(state, token)
       of BlankLineToken: ok = parseBlankLine(state, token)
+      of UnorderedListToken: ok = parseUnorderedList(state, token)
+      of OrderedListToken: ok = parseOrderedList(state, token)
       of ParagraphToken: ok = parseParagraph(state, token)
       else:
         raise newException(MarkdownError, fmt"unknown rule. {token.children.tail.value.slice.b}")
@@ -675,7 +798,6 @@ proc parseDelimeter(state: var State, token: var Token, start: int, delimeters: 
     slice: (start .. start+result),
     textVal: token.doc[start ..< start+result]
   )
-  # echo(fmt"added delimeter {delimeter.kind} x {delimeter.num}")
   token.children.append(textToken)
   delimeter.token = textToken
   delimeters.append(delimeter)
@@ -688,7 +810,6 @@ proc getLinkDestination*(doc: string, start: int, slice: var Slice[int]): int =
   # a sequence of zero or more characters between an opening < and a closing >
   # that contains no line breaks or unescaped < or > characters, or
   if doc[start] == '<':
-    #echo(doc[start ..< doc.len].matchLen(re"^<([^\n<>]*)>"))
     result = doc[start ..< doc.len].matchLen(re"^<([^\n<>]*)>")
     if result != -1:
       slice.a = start + 1
@@ -891,10 +1012,8 @@ proc parseInlineLink(state: var State, token: var Token, start: int, labelSlice:
   var title = ""
   if titleLen >= 0:
     title = token.doc[titleSlice]
-  #echo(destinationLen, destinationSlice)
   var url = token.doc[destinationSlice]
   var text = token.doc[labelSlice.a+1 ..< labelSlice.b]
-  #echo((start .. pos + 1))
   var link = Token(
     type: LinkToken,
     slice: (start .. pos + 1),
@@ -1056,11 +1175,9 @@ proc parseInlineImage(state: var State, token: var Token, start: int, labelSlice
   var title = ""
   if titleLen >= 0:
     title = token.doc[titleSlice]
-  #echo(destinationLen, destinationSlice)
   var url = token.doc[destinationSlice]
   var text = token.doc[labelSlice.a+1 ..< labelSlice.b]
 
-  #echo((start .. pos + 1))
   var image = Token(
     type: ImageToken,
     slice: (start-1 .. pos+1),
@@ -1498,26 +1615,15 @@ proc parseLeafBlockInlines(state: var State, token: var Token) =
   processEmphasis(state, token, delimeters)
 
 proc isContainerToken(token: Token): bool =
-  # TODO: return true for list, list item, blockquote, and task list items
-  case token.type
-  of BlockquoteToken: true
-  else: false
-
-proc parseContainerInlines(state: var State, token: var Token) =
-  # TODO: recursively iterate list, list item, bloclquote and task list items
-  case token.type
-  of BlockquoteToken:
-    for childToken in token.children.mitems:
-      parseContainerInlines(state, childToken)
-  else:
-    parseLeafBlockInlines(state, token)
+  {DocumentToken, BlockquoteToken, ListItemToken, UnorderedListToken,
+   OrderedListToken, }.contains(token.type)
 
 proc parseInline(state: var State, token: var Token) =
-  for blockToken in token.children.mitems:
-    if isContainerToken(blockToken):
-      parseContainerInlines(state, blockToken)
-    else:
-      parseLeafBlockInlines(state, blockToken)
+  if isContainerToken(token):
+    for childToken in token.children.mitems:
+      parseInline(state, childToken)
+  else:
+    parseLeafBlockInlines(state, token)
 
 proc postProcessing(state: var State, token: var Token) =
   discard
@@ -1533,28 +1639,66 @@ proc toSeq(tokens: DoublyLinkedList[Token]): seq[Token] =
   for token in tokens.items:
     result.add(token)
 
-proc renderToken(state: State, token: Token): string;
-proc renderInline(state: State, token: Token): string =
+proc renderToken(state: var State, token: Token): string;
+proc renderInline(state: var State, token: Token): string =
+  var s = state
   token.children.toSeq.map(
     proc(x: Token): string =
-      result = renderToken(state, x)
+      result = s.renderToken(x)
   ).join("")
 
-proc renderImageAlt*(state: State, token: Token): string =
+proc renderImageAlt*(state: var State, token: Token): string =
+  var s = state
   token.children.toSeq.map(
     proc(x: Token): string =
       case x.type
       of LinkToken: x.linkVal.text
       of ImageToken: x.imageVal.alt
-      of EmphasisToken: state.renderInline(x)
-      of StrongToken: state.renderInline(x)
-      else: renderToken(state, x)
+      of EmphasisToken: s.renderInline(x)
+      of StrongToken: s.renderInline(x)
+      else: s.renderToken(x)
   ).join("")
 
-proc renderToken(state: State, token: Token): string =
+proc renderParagraph(state: var State, token: Token): string =
+  if state.loose:
+    p(state.renderInline(token))
+  else:
+    state.renderInline(token)
+
+proc renderListItemChildren(state: var State, token: Token): string =
+  var html: string
+  var results: seq[string]
+  for token in token.children.items:
+    html = renderToken(state, token)
+    if html != "":
+      results.add(html)
+
+  result = results.join("\n")
+  if state.loose:
+    result = result & "\n"
+
+proc renderUnorderedList(state: var State, token: Token): string =
+  var origLoose = state.loose
+  state.loose = token.ulVal.loose
+  result = ul("\n", state.render(token))
+  state.loose = origLoose
+
+proc renderOrderedList(state: var State, token: Token): string =
+  var origLoose = state.loose
+  state.loose = token.olVal.loose
+  result = ol("\n", state.render(token))
+  state.loose = origLoose
+
+proc renderListItem(state: var State, token: Token): string =
+  if state.loose:
+    li("\n", state.renderListItemChildren(token))
+  else:
+    li(state.renderListItemChildren(token))
+
+proc renderToken(state: var State, token: Token): string =
   case token.type
   of ReferenceToken: ""
-  of ParagraphToken: p(state.renderInline(token))
+  of ParagraphToken: state.renderParagraph(token)
   of LinkToken:
     if token.linkVal.title == "": a(
       href=token.linkVal.url.escapeBackslash.escapeLinkUrl,
@@ -1576,6 +1720,9 @@ proc renderToken(state: State, token: Token): string =
       title=token.imageVal.title.escapeBackslash.escapeHTMLEntity.escapeAmpersandSeq.escapeQuote,
     )
   of AutoLinkToken: a(href=token.autoLinkVal.url.escapeLinkUrl.escapeAmpersandSeq, token.autoLinkVal.text.escapeAmpersandSeq)
+  of ListItemToken: state.renderListItem(token)
+  of UnorderedListToken: state.renderUnorderedList(token)
+  of OrderedListToken: state.renderOrderedList(token)
   of BlankLineToken: ""
   of BlockquoteToken: blockquote("\n", state.render(token))
   of TextToken: token.textVal.escapeAmpersandSeq.escapeTag.escapeQuote
@@ -1591,7 +1738,7 @@ proc renderToken(state: State, token: Token): string =
   of DocumentToken: ""
   else: raise newException(MarkdownError, fmt"{token.type} rendering not impleted.")
 
-proc render(state: State, token: Token): string =
+proc render(state: var State, token: Token): string =
   var html: string
   for token in token.children.items:
     html = renderToken(state, token)
@@ -1601,7 +1748,7 @@ proc render(state: State, token: Token): string =
 
 proc markdown*(doc: string): string =
   var tokens: DoublyLinkedList[Token]
-  var state = State(doc: doc.strip(chars={'\n'}), tokens: tokens, ruleSet: simpleRuleSet, references: initTable[string, Reference]())
+  var state = State(doc: doc.strip(chars={'\n'}), tokens: tokens, ruleSet: simpleRuleSet, references: initTable[string, Reference](), loose: true)
   var document = Token(type: DocumentToken, slice: (0 ..< doc.len), doc: doc.strip(chars={'\n'}), documentVal: "")
   parse(state, document)
   render(state, document)
@@ -1644,27 +1791,27 @@ when isMainModule:
   var doc = ""
   doc = "(<a>)"; check getLinkDestination(doc, 1, slice) == 3; check doc[slice] == "a"
   
-  doc = "(/uri)";  echo doc; check getLinkDestination(doc, 1, slice) == 4; check doc[slice] == "/uri"
-  doc = "(/uri \"title\")"; echo doc;  check getLinkDestination(doc, 1, slice) == 4; check doc[slice] == "/uri"
-  doc = "()";  echo doc; check getLinkDestination(doc, 1, slice) == 0; check doc[slice] == ""
-  doc = "(<>)";  echo doc; check getLinkDestination(doc, 1, slice) == 2; check doc[slice] == ""
-  doc = "(/my uri)";  echo doc; check getLinkDestination(doc, 1, slice) == 3; check doc[slice] == "/my" # we'll abort at link title step
-  doc = "(</my uri>)";  echo doc; check getLinkDestination(doc, 1, slice) == 9; check doc[slice] == "/my uri"
-  doc = "(foo\nbar)"; echo doc; check getLinkDestination(doc, 1, slice) == 3; # we'll abort at link title step
-  doc = "(<foo\nbar>)"; echo doc; check getLinkDestination(doc, 1, slice) == -1;
-  doc = r"(\(foo\))";  echo doc; check getLinkDestination(doc, 1, slice) == 7; check doc[slice] == r"\(foo\)"
-  doc = r"(foo(and(bar)))";  echo doc; check getLinkDestination(doc, 1, slice) == 13; check doc[slice] == r"foo(and(bar))"
-  doc = r"(foo\(and\(bar\))";  echo doc; check getLinkDestination(doc, 1, slice) == 15; check doc[slice] == r"foo\(and\(bar\)"
-  doc = r"(<foo(and(bar)>)";  echo doc; check getLinkDestination(doc, 1, slice) == 14; check doc[slice] == r"foo(and(bar)"
-  doc = r"(foo\)\:)";  echo doc; check getLinkDestination(doc, 1, slice) == 7; check doc[slice] == r"foo\)\:"
-  doc = r"(#fragment)";  echo doc; check getLinkDestination(doc, 1, slice) == 9; check doc[slice] == r"#fragment"
-  doc = "(\"title\")";   echo doc; check getLinkDestination(doc, 1, slice) == 7; check doc[slice] == "\"title\""
-  doc = "(   /uri\n  \"title\""; echo doc; check getLinkDestination(doc, 4, slice) == 4; check doc[slice] == "/uri"
+  doc = "(/uri)";  check getLinkDestination(doc, 1, slice) == 4; check doc[slice] == "/uri"
+  doc = "(/uri \"title\")";  check getLinkDestination(doc, 1, slice) == 4; check doc[slice] == "/uri"
+  doc = "()";  check getLinkDestination(doc, 1, slice) == 0; check doc[slice] == ""
+  doc = "(<>)";  check getLinkDestination(doc, 1, slice) == 2; check doc[slice] == ""
+  doc = "(/my uri)";  check getLinkDestination(doc, 1, slice) == 3; check doc[slice] == "/my" # we'll abort at link title step
+  doc = "(</my uri>)";  check getLinkDestination(doc, 1, slice) == 9; check doc[slice] == "/my uri"
+  doc = "(foo\nbar)"; check getLinkDestination(doc, 1, slice) == 3; # we'll abort at link title step
+  doc = "(<foo\nbar>)"; check getLinkDestination(doc, 1, slice) == -1;
+  doc = r"(\(foo\))";  check getLinkDestination(doc, 1, slice) == 7; check doc[slice] == r"\(foo\)"
+  doc = r"(foo(and(bar)))";  check getLinkDestination(doc, 1, slice) == 13; check doc[slice] == r"foo(and(bar))"
+  doc = r"(foo\(and\(bar\))";  check getLinkDestination(doc, 1, slice) == 15; check doc[slice] == r"foo\(and\(bar\)"
+  doc = r"(<foo(and(bar)>)";  check getLinkDestination(doc, 1, slice) == 14; check doc[slice] == r"foo(and(bar)"
+  doc = r"(foo\)\:)";  check getLinkDestination(doc, 1, slice) == 7; check doc[slice] == r"foo\)\:"
+  doc = r"(#fragment)";  check getLinkDestination(doc, 1, slice) == 9; check doc[slice] == r"#fragment"
+  doc = "(\"title\")";   check getLinkDestination(doc, 1, slice) == 7; check doc[slice] == "\"title\""
+  doc = "(   /uri\n  \"title\""; check getLinkDestination(doc, 4, slice) == 4; check doc[slice] == "/uri"
 
   check getLinkTitle("/url \"title\"", 5, slice) == 7; check "/url \"title\""[slice] == "title"
   check getLinkTitle("/url 'title'", 5, slice) == 7; check "/url 'title'"[slice] == "title"
   check getLinkTitle("/url (title)", 5, slice) == 7; check "/url (title)"[slice] == "title"
-  check getLinkTitle(""""title \"&quot;"""", 0, slice) == 16; check """"title \"&quot;""""[slice] == "title \"&quot;"
+  #check getLinkTitle("title \"&quot;\"", 0, slice) == 16; check "title \"&quot;\""[slice] == "title \"&quot;\""
 
   var label = ""
   check getLinkLabel("[a]", 0, label) == 3; check label == "a"
@@ -2018,7 +2165,15 @@ when isMainModule:
   check listItemDoc == "a\n- b\n- c\n"
   check parseUnorderedListItem("- a\n  - b\n  - c\n- d", 16, marker, listItemDoc) == 3
 
+  # 293
+  marker = ""
+  check parseUnorderedListItem("* a\n  > b\n  >\n* c", 0, marker, listItemDoc) == 14
+  check listItemDoc == "a\n> b\n>\n"
+  check parseUnorderedListItem("* a\n  > b\n  >\n* c", 14, marker, listItemDoc) == 3
+
   # 298
   marker = ""
   check parseUnorderedListItem("* a\n  * b\n\n  c", 0, marker, listItemDoc) == 14
   check listItemDoc == "a\n* b\n\nc"
+  check parseUnorderedListItem("a\n* b\n\nc", 2, marker, listItemDoc) == 5
+  check listItemDoc == "b\n\n"

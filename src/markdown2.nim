@@ -62,6 +62,7 @@ type
 
   TokenType* {.pure.} = enum
     ParagraphToken,
+    ThematicBreakToken,
     BlockquoteToken,
     BlankLineToken,
     UnorderedListToken,
@@ -89,6 +90,7 @@ type
     children: DoublyLinkedList[Token]
     case type*: TokenType
     of ParagraphToken: paragraphVal*: Paragraph
+    of ThematicBreakToken: hrVal*: string
     of BlankLineToken: blankLineVal*: string
     of BlockquoteToken: blockquoteVal*: Blockquote
     of UnorderedListToken: ulVal*: UnorderedList
@@ -121,6 +123,7 @@ var simpleRuleSet = RuleSet(
   preProcessingRules: @[],
   blockRules: @[
     ReferenceToken,
+    ThematicBreakToken,
     BlockquoteToken,
     UnorderedListToken,
     OrderedListToken,
@@ -143,6 +146,8 @@ var simpleRuleSet = RuleSet(
   ],
   postProcessingRules: @[],
 )
+
+let THEMATIC_BREAK_RE = r" {0,3}([-*_])(?:[ \t]*\1){2,}[ \t]*(?:\n+|$)"
 
 let TAGNAME = r"[A-Za-z][A-Za-z0-9-]*"
 let ATTRIBUTENAME = r"[a-zA-Z_:][a-zA-Z0-9:._-]*"
@@ -482,6 +487,20 @@ proc parseOrderedList(state: var State, token: var Token): bool =
   token.children.append(olToken)
   result = true
 
+proc parseThematicBreak(state: var State, token: var Token): bool =
+  let start = token.getBlockStart
+  let size = token.doc[start..<token.doc.len].matchLen(re(r"^" & THEMATIC_BREAK_RE))
+  if size == -1:
+    return false
+  var hr = Token(
+    type: ThematicBreakToken,
+    slice: (start .. start+size),
+    doc: token.doc[start ..< start+size],
+    hrVal: ""
+  )
+  token.children.append(hr)
+  return true
+
 proc parseBlankLine(state: var State, token: var Token): bool =
   let start = token.getBlockStart
   let size = token.doc[start..<token.doc.len].matchLen(re(r"^((?:\s*\n)+)"))
@@ -655,6 +674,7 @@ proc parseBlock(state: var State, token: var Token) =
     for rule in state.ruleSet.blockRules:
       case rule
       of ReferenceToken: ok = parseReference(state, token)
+      of ThematicBreakToken: ok = parseThematicBreak(state, token)
       of BlockquoteToken: ok = parseBlockquote(state, token)
       of BlankLineToken: ok = parseBlankLine(state, token)
       of UnorderedListToken: ok = parseUnorderedList(state, token)
@@ -1698,6 +1718,7 @@ proc renderListItem(state: var State, token: Token): string =
 proc renderToken(state: var State, token: Token): string =
   case token.type
   of ReferenceToken: ""
+  of ThematicBreakToken: "<hr />"
   of ParagraphToken: state.renderParagraph(token)
   of LinkToken:
     if token.linkVal.title == "": a(

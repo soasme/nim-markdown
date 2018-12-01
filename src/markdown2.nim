@@ -1,7 +1,7 @@
 import re, strutils, strformat, tables, sequtils, math, uri, htmlparser, lists, unicode
 from sequtils import map
 from lists import DoublyLinkedList, prepend, append
-from htmlgen import nil, p, br, em, strong, a
+from htmlgen import nil, p, br, em, strong, a, img, code, del, blockquote
 
 type
   MarkdownError* = object of Exception ## The error object for markdown parsing and rendering.
@@ -24,60 +24,143 @@ type
   Paragraph = object
     doc: string
 
+  Reference = object
+    text: string
+    title: string
+    url: string
+
   Link = object 
     text: string ## A link contains link text (the visible text).
     url: string ## A link contains destination (the URI that is the link destination).
     title: string ## A link contains a optional title.
 
+  ReferenceLink = object
+    id: string
+    text: string
+
+  Image = object
+    url: string
+    alt: string
+    title: string
+
   AutoLink = object
     text: string
     url: string
 
+  Blockquote = object
+    doc: string
+
   TokenType* {.pure.} = enum
     ParagraphToken,
+    BlockquoteToken,
+    BlankLineToken,
+    ReferenceToken,
     TextToken,
     AutoLinkToken,
     LinkToken,
+    ImageToken,
     EmphasisToken,
+    HTMLEntityToken,
+    InlineHTMLToken,
+    CodeSpanToken,
     StrongToken,
+    EscapeToken,
+    StrikethroughToken
     SoftLineBreakToken,
-    DummyToken
+    HardLineBreakToken,
+    DocumentToken
 
   Token* = ref object
     slice: Slice[int]
+    doc: string
     children: DoublyLinkedList[Token]
     case type*: TokenType
     of ParagraphToken: paragraphVal*: Paragraph
+    of BlankLineToken: blankLineVal*: string
+    of BlockquoteToken: blockquoteVal*: Blockquote
+    of ReferenceToken: referenceVal*: Reference
     of TextToken: textVal*: string
     of EmphasisToken: emphasisVal*: string
     of AutoLinkToken: autoLinkVal*: AutoLink
     of LinkToken: linkVal*: Link
+    of EscapeToken: escapeVal*: string
+    of InlineHTMLToken: inlineHTMLVal*: string
+    of ImageToken: imageVal*: Image
+    of HTMLEntityToken: htmlEntityVal*: string
+    of CodeSpanToken: codeSpanVal*: string
     of StrongToken: strongVal*: string
+    of StrikethroughToken: strikethroughVal*: string
     of SoftLineBreakToken: softLineBreakVal*: string
-    of DummyToken: dummyVal*: string
+    of HardLineBreakToken: hardLineBreakVal*: string
+    of DocumentToken: documentVal*: string
 
   State* = ref object
     doc: string
     ruleSet: RuleSet
+    references: Table[string, Reference]
     tokens: DoublyLinkedList[Token]
 
 var simpleRuleSet = RuleSet(
   preProcessingRules: @[],
-  blockRules: @[ParagraphToken],
+  blockRules: @[
+    ReferenceToken,
+    BlockquoteToken,
+    BlankLineToken,
+    ParagraphToken,
+  ],
   inlineRules: @[
     EmphasisToken, # including strong.
+    ImageToken,
     AutoLinkToken,
     LinkToken,
+    HTMLEntityToken,
+    InlineHTMLToken,
+    EscapeToken,
+    CodeSpanToken,
+    StrikethroughToken,
+    HardLineBreakToken,
     SoftLineBreakToken,
     TextToken,
   ],
   postProcessingRules: @[],
 )
 
-proc parse(state: var State);
-proc parseLeafBlockInlines(state: var State, token: var Token);
+let TAGNAME = r"[A-Za-z][A-Za-z0-9-]*"
+let ATTRIBUTENAME = r"[a-zA-Z_:][a-zA-Z0-9:._-]*"
+let UNQUOTEDVALUE = r"[^""'=<>`\x00-\x20]+"
+let DOUBLEQUOTEDVALUE = """"[^"]*""""
+let SINGLEQUOTEDVALUE = r"'[^']*'"
+let ATTRIBUTEVALUE = "(?:" & UNQUOTEDVALUE & "|" & SINGLEQUOTEDVALUE & "|" & DOUBLEQUOTEDVALUE & ")"
+let ATTRIBUTEVALUESPEC = r"(?:\s*=" & r"\s*" & ATTRIBUTEVALUE & r")"
+let ATTRIBUTE = r"(?:\s+" & ATTRIBUTENAME & ATTRIBUTEVALUESPEC & r"?)"
+let OPEN_TAG = r"<" & TAGNAME & ATTRIBUTE & r"*" & r"\s*/?>"
+let CLOSE_TAG = r"</" & TAGNAME & r"\s*[>]"
+let HTML_COMMENT = r"<!---->|<!--(?:-?[^>-])(?:-?[^-])*-->"
+let PROCESSING_INSTRUCTION = r"[<][?].*?[?][>]"
+let DECLARATION = r"<![A-Z]+\s+[^>]*>"
+let CDATA_SECTION = r"<!\[CDATA\[[\s\S]*?\]\]>"
+let HTML_TAG = (
+  r"(?:" &
+  OPEN_TAG & "|" &
+  CLOSE_TAG & "|" &
+  HTML_COMMENT & "|" &
+  PROCESSING_INSTRUCTION & "|" &
+  DECLARATION & "|" &
+  CDATA_SECTION &
+  & r")"
+)
 
-proc preProcessing(state: var State) =
+proc parse(state: var State, token: var Token);
+proc parseBlock(state: var State, token: var Token);
+proc parseLeafBlockInlines(state: var State, token: var Token);
+proc parseLinkInlines*(state: var State, token: var Token, allowNested: bool = false);
+proc getLinkText*(doc: string, start: int, slice: var Slice[int], allowNested: bool = false): int;
+proc getLinkLabel*(doc: string, start: int, label: var string): int;
+proc getLinkDestination*(doc: string, start: int, slice: var Slice[int]): int;
+proc getLinkTitle*(doc: string, start: int, slice: var Slice[int]): int;
+proc render(state: State, token: Token): string;
+
+proc preProcessing(state: var State, token: var Token) =
   discard
 
 proc escapeTag*(doc: string): string =
@@ -114,6 +197,12 @@ proc escapeCode*(doc: string): string =
   ## Make code block in markdown document HTML-safe.
   result = doc.escapeAmpersandChar.escapeTag
 
+proc escapeInvalidHTMLTag(doc: string): string =
+  doc.replacef(
+    re(r"<(title|textarea|style|xmp|iframe|noembed|noframes|script|plaintext)>",
+      {RegexFlag.reIgnoreCase}),
+    "&lt;$1>")
+
 const IGNORED_HTML_ENTITY = ["&lt;", "&gt;", "&amp;"]
 
 proc escapeHTMLEntity*(doc: string): string =
@@ -145,51 +234,328 @@ proc escapeLinkUrl*(url: string): string =
 proc escapeBackslash*(doc: string): string =
   doc.replacef(re"\\([\\`*{}\[\]()#+\-.!_<>~|""$%&',/:;=?@^])", "$1")
 
-proc parseParagraph(state: var State): bool =
-  let slice = state.tokens.tail.value.slice
-  let size = state.doc[slice.b..<state.doc.len].matchLen(re(r"([^\n]+\n?)+\n*"))
+proc getBlockStart(token: Token): int =
+  if token.children.tail == nil:
+    0
+  else:
+    token.children.tail.value.slice.b
+
+let LAZINESS_TEXT = r"(?:(?! {0,3}>| {0,3}(?:\*|\+|-)(?: |\n|$)| {0,3}\d+(?:\.|\))(?: |\n|$)| {0,3}#| {0,3}`{3,}| {0,3}\*{3}| {0,3}-{3}| {0,3}_{3})[^\n]+(?:\n|$))+"
+
+proc parseParagraph(state: var State, token: var Token): bool =
+  let start = token.getBlockStart
+  let size = token.doc[start..<token.doc.len].matchLen(re(r"^((?:[^\n]+\n?)(" & LAZINESS_TEXT & "|\n*))"))
 
   if size == -1:
     return false
 
-  var token = Token(
+  var paragraph = Token(
     type: ParagraphToken,
-    slice: (slice.b .. slice.b+size),
+    slice: (start .. start+size),
+    doc: token.doc[start ..< start+size].replace(re"\n\s*", "\n"),
     paragraphVal: Paragraph(
-      doc: state.doc[slice.b ..< slice.b+size],
+      doc: token.doc[start ..< start+size].replace(re"\n\s*", "\n")
     )
   )
 
-  state.tokens.append(token)
+  token.children.append(paragraph)
   return true
 
-proc parseBlock(state: var State) =
+proc parseOrderedListItem(doc: string, start=0, marker: var string, listItemDoc: var string, index: var int = 1): int =
+  let markerRegex = re"^(?P<leading> {0,3})(?<index>\d{1,9})(?P<marker>\.|\))(?: *$| *\n|(?P<indent> +)([^\n]+(?:\n|$)))"
+  var matches: array[5, string]
+  var pos = start
+
+  var firstLineSize = doc[pos ..< doc.len].matchLen(markerRegex, matches=matches)
+  if firstLineSize == -1:
+    return -1
+
+  pos += firstLineSize
+
+  var leading = matches[0]
+  if marker == "":
+    marker = matches[2]
+  if marker != matches[2]:
+    return -1
+
+  var indexString = matches[1]
+  index = indexString.parseInt
+
+  listItemDoc = matches[4]
+
+  var indent = 1
+  if matches[3].len > 1 and matches[3].len <= 4:
+    indent = matches[3].len
+  elif matches[3].len > 4:
+    listItemDoc = matches[3][1 ..< matches[3].len] & listItemDoc
+
+  var padding = indexString.len + marker.len + leading.len + indent
+
+  var size = 0
+  while pos < doc.len:
+    size = doc[pos ..< doc.len].matchLen(re(r"^(?:\s*| {" & fmt"{padding}" & r"}([^\n]*))(\n|$)"), matches=matches)
+    if size != -1:
+      listItemDoc &= matches[0]
+      listItemDoc &= matches[1]
+      if listItemDoc.startswith("\n") and matches[0] == "":
+        pos += size
+        break
+    elif listItemDoc.find(re"\n{2,}$") == -1:
+      size = doc[pos ..< doc.len].matchLen(re("^(" & LAZINESS_TEXT & ")"), matches=matches)
+      if size != -1:
+        listItemDoc &= matches[0]
+      else:
+          break
+    else:
+      break
+
+    pos += size
+
+  return pos - start
+
+proc parseUnorderedListItem(doc: string, start=0, marker: var string, listItemDoc: var string): int =
+  let markerRegex = re"^(?P<leading> {0,3})(?P<marker>[*\-+])(?: *$| *\n|(?<indent> +)([^\n]+(?:\n|$)))"
+  var matches: array[5, string]
+  var pos = start
+
+  var firstLineSize = doc[pos ..< doc.len].matchLen(markerRegex, matches=matches)
+  if firstLineSize == -1:
+    return -1
+
+  pos += firstLineSize
+
+  var leading = matches[0]
+  if marker == "":
+    marker = matches[1]
+  if marker != matches[1]:
+    return -1
+
+  listItemDoc = matches[3]
+
+  var indent = 1
+  if matches[2].len > 1 and matches[2].len <= 4:
+    indent = matches[2].len
+  elif matches[2].len > 4: # code block indent is still 1.
+    listItemDoc = matches[2][1 ..< matches[2].len] & listItemDoc
+
+  var padding = marker.len + leading.len + indent
+
+  var size = 0
+  while pos < doc.len:
+    size = doc[pos ..< doc.len].matchLen(re(r"^(?:\s*| {" & fmt"{padding}" & r"}([^\n]*))(\n|$)"), matches=matches)
+    if size != -1:
+      listItemDoc &= matches[0]
+      listItemDoc &= matches[1]
+      if listItemDoc.startswith("\n") and matches[0] == "":
+        pos += size
+        break
+    elif listItemDoc.find(re"\n{2,}$") == -1:
+      size = doc[pos ..< doc.len].matchLen(re("^(" & LAZINESS_TEXT & ")"), matches=matches)
+      if size != -1:
+        listItemDoc &= matches[0]
+      else:
+          break
+    else:
+      break
+
+    pos += size
+
+  return pos - start
+
+proc parseBlankLine(state: var State, token: var Token): bool =
+  let start = token.getBlockStart
+  let size = token.doc[start..<token.doc.len].matchLen(re(r"^((?:\s*\n)+)"))
+
+  if size == -1:
+    return false
+
+  var blankLine = Token(
+    type: BlankLineToken,
+    slice: (start .. start+size),
+    doc: token.doc[start ..< start+size],
+    blankLineVal: token.doc[start ..< start+size]
+  )
+
+  token.children.append(blankLine)
+  return true
+
+proc parseBlockquote(state: var State, token: var Token): bool =
+  let markerContent = re(r"^(( {0,3}>([^\n]*(?:\n|$)))+)")
+  var matches: array[3, string]
+  let start = token.getBlockStart
+  var pos = start
+  var size = -1
+  var document = ""
+  var found = false
+  
+  while pos < token.doc.len:
+    size = token.doc[pos ..< token.doc.len].matchLen(markerContent, matches=matches)
+
+    if size == -1:
+      break
+
+    found = true
+    pos += size
+    # extract content with blockquote mark
+    document &= matches[0].replacef(re"(^|\n) {0,3}> ?", "$1")
+
+    # blank line in non-lazy content always breaks the blockquote.
+    if matches[2].strip == "":
+      document = document.strip(leading=false, trailing=true)
+      break
+
+    # find the empty line in lazy content
+    if token.doc[pos ..< token.doc.len].matchLen(re"^\n|$") > -1:
+      break
+
+    # find the laziness text
+    size = token.doc[pos ..< token.doc.len].matchLen(re("^(" & LAZINESS_TEXT & ")"), matches=matches)
+
+    # blank line in laziness text always breaks the blockquote
+    if size == -1:
+      break
+
+    # concat the laziness text
+    pos += size
+    document &= matches[0]
+
+  if not found:
+    return false
+
+  var blockquote = Token(
+    type: BlockquoteToken,
+    slice: (start .. pos),
+    doc: document,
+    blockquoteVal: Blockquote(
+      doc: document
+    )
+  )
+  if document.strip != "":
+    parseBlock(state, blockquote)
+  token.children.append(blockquote)
+  return true
+
+proc parseReference*(state: var State, token: var Token): bool =
+  var pos = token.getBlockStart
+  var start = pos
+  let lastSlice = token.getBlockStart
+  let doc = token.doc[pos ..< token.doc.len]
+
+  var markStart = doc.matchLen(re"^ {0,3}\[")
+  if markStart == -1:
+    return false
+
+  pos += markStart - 1
+
+  var label: string
+  var labelSize = getLinkLabel(token.doc, pos, label)
+
+  # Link should have matching ] for [.
+  if labelSize == -1:
+    return false
+
+  # A link label must contain at least one non-whitespace character.
+  if label.find(re"\S") == -1:
+    return false
+
+  # An inline link consists of a link text followed immediately by a left parenthesis (
+  pos += labelSize # [link]
+
+  if pos >= token.doc.len or token.doc[pos] != ':':
+    return false
+  pos += 1
+
+  # parse whitespace
+  var whitespaceLen = token.doc[pos ..< token.doc.len].matchLen(re"^[ \t]*\n?[ \t]*")
+  if whitespaceLen != -1:
+    pos += whitespaceLen
+
+  # parse destination
+  var destinationSlice: Slice[int]
+  var destinationLen = getLinkDestination(token.doc, pos, destinationslice)
+
+  if destinationLen <= 0:
+    return false
+
+  pos += destinationLen
+
+  # parse whitespace
+  whitespaceLen = token.doc[pos ..< token.doc.len].matchLen(re"^[ \t]*\n?[ \t]*")
+  if whitespaceLen != -1:
+    pos += whitespaceLen
+
+  # parse title (optional)
+  var titleSlice: Slice[int]
+  var titleLen = 0;
+  if pos<token.doc.len and( token.doc[pos] == '(' or token.doc[pos] == '\'' or token.doc[pos] == '"'):
+    # TODO: validate at least one whitespace before the optional title.
+
+    titleLen = getLinkTitle(token.doc, pos, titleSlice)
+    if titleLen >= 0:
+      pos += titleLen
+      # link title may not contain a blank line
+      if token.doc[titleSlice].match(re"\n{2,}"):
+        return false
+
+  # parse whitespace, no more non-whitespace is allowed from now.
+  whitespaceLen = token.doc[pos ..< token.doc.len].matchLen(re"^\s*\n+")
+  if whitespaceLen != -1:
+    pos += whitespaceLen
+
+  # construct token
+  var title = ""
+  if titleLen > 0:
+    title = token.doc[titleSlice]
+
+  var url = token.doc[destinationSlice]
+
+  var reference = Token(
+    type: ReferenceToken,
+    slice: (start .. pos),
+    doc: token.doc[start ..< pos],
+    referenceVal: Reference(
+      text: label,
+      url: url,
+      title: title,
+    )
+  )
+
+  token.children.append(reference)
+
+  if not state.references.contains(label):
+    state.references[label] = reference.referenceVal
+  return true
+
+proc parseBlock(state: var State, token: var Token) =
+  let doc = token.doc
   var ok: bool
-  while state.tokens.tail.value.slice.b < state.doc.len:
+  while token.children.tail == nil or token.getBlockStart < doc.len:
     ok = false
     for rule in state.ruleSet.blockRules:
       case rule
-      of ParagraphToken: ok = parseParagraph(state)
+      of ReferenceToken: ok = parseReference(state, token)
+      of BlockquoteToken: ok = parseBlockquote(state, token)
+      of BlankLineToken: ok = parseBlankLine(state, token)
+      of ParagraphToken: ok = parseParagraph(state, token)
       else:
-        raise newException(MarkdownError, fmt"unknown rule. {state.tokens.tail.value.slice.b}")
+        raise newException(MarkdownError, fmt"unknown rule. {token.children.tail.value.slice.b}")
       if ok:
         break
     if not ok:
-      raise newException(MarkdownError, fmt"unknown rule. {state.tokens.tail.value.slice.b}")
+      raise newException(MarkdownError, fmt"unknown rule. {token.children.tail.value.slice.b}")
 
 proc parseText(state: var State, token: var Token, start: int): int =
   let slice = token.slice
-  #echo(fmt"text: {start} {state.doc}")
   var text = Token(
     type: TextToken,
     slice: (start .. start+1),
-    textVal: state.doc[start..start],
+    textVal: token.doc[start ..< start+1],
   )
   token.children.append(text)
   result = 1 # FIXME: should match aggresively.
 
 proc parseSoftLineBreak(state: var State, token: var Token, start: int): int =
-  result = state.doc[start ..< state.doc.len].matchLen(re"^ \n *")
+  result = token.doc[start ..< token.doc.len].matchLen(re"^ \n *")
   if result != -1:
     token.children.append(Token(
       type: SoftLineBreakToken,
@@ -199,12 +565,12 @@ proc parseSoftLineBreak(state: var State, token: var Token, start: int): int =
 
 proc parseAutoLink(state: var State, token: var Token, start: int): int =
   let slice = token.slice
-  if state.doc[start] != '<':
+  if token.doc[start] != '<':
     return -1
 
   let EMAIL_RE = r"^<([a-zA-Z0-9.!#$%&'*+\/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*)>"
   var emailMatches: array[1, string]
-  result = state.doc[start ..< state.doc.len].matchLen(re(EMAIL_RE, {RegexFlag.reIgnoreCase}), matches=emailMatches)
+  result = token.doc[start ..< token.doc.len].matchLen(re(EMAIL_RE, {RegexFlag.reIgnoreCase}), matches=emailMatches)
 
   if result != -1:
     var url = emailMatches[0]
@@ -221,7 +587,7 @@ proc parseAutoLink(state: var State, token: var Token, start: int): int =
   
   let LINK_RE = r"^<([a-zA-Z][a-zA-Z0-9+.\-]{1,31}):([^<>\x00-\x20]*)>"
   var linkMatches: array[2, string]
-  result = state.doc[start ..< state.doc.len].matchLen(re(LINK_RE, {RegexFlag.reIgnoreCase}), matches=linkMatches)
+  result = token.doc[start ..< token.doc.len].matchLen(re(LINK_RE, {RegexFlag.reIgnoreCase}), matches=linkMatches)
 
   if result != -1:
     var schema = linkMatches[0]
@@ -285,12 +651,12 @@ proc scanInlineDelimeters*(doc: string, start: int, delimeter: var Delimeter) =
     delimeter.canClose = isRightFlanking
 
 proc parseDelimeter(state: var State, token: var Token, start: int, delimeters: var DoublyLinkedList[Delimeter]): int =
-  if state.doc[start] != '*' and state.doc[start] != '_':
+  if token.doc[start] != '*' and token.doc[start] != '_':
     return -1
 
   var delimeter = Delimeter(
     token: nil,
-    kind: fmt"{state.doc[start]}",
+    kind: fmt"{token.doc[start]}",
     num: 0,
     originalNum: 0,
     isActive: true,
@@ -298,7 +664,7 @@ proc parseDelimeter(state: var State, token: var Token, start: int, delimeters: 
     canClose: false,
   )
 
-  scanInlineDelimeters(state.doc, start, delimeter)
+  scanInlineDelimeters(token.doc, start, delimeter)
   if delimeter.num == 0:
     return -1
 
@@ -307,7 +673,7 @@ proc parseDelimeter(state: var State, token: var Token, start: int, delimeters: 
   var textToken = Token(
     type: TextToken,
     slice: (start .. start+result),
-    textVal: state.doc[start ..< start+result]
+    textVal: token.doc[start ..< start+result]
   )
   # echo(fmt"added delimeter {delimeter.kind} x {delimeter.num}")
   token.children.append(textToken)
@@ -340,7 +706,7 @@ proc getLinkDestination*(doc: string, start: int, slice: var Slice[int]): int =
   var urlLen = 0
   var isEscaping = false
   for i, ch in doc[start ..< doc.len]:
-    urlLen = i
+    urlLen += 1
     if isEscaping:
       isEscaping = false
       continue
@@ -348,19 +714,20 @@ proc getLinkDestination*(doc: string, start: int, slice: var Slice[int]): int =
       isEscaping = true
       continue
     elif ch.int < 0x20 or ch.int == 0x7f or ch == ' ':
+      urlLen -= 1
       break
     elif ch == '(':
       level += 1
     elif ch == ')':
       level -= 1
       if level == 0:
+        urlLen -= 1
         break
-  #echo(fmt"{level} {urlLen}")
   if level > 1:
     return -1
   if urlLen == -1:
      return -1
-  slice = (start .. start+urlLen-1)
+  slice = (start ..< start+urlLen)
   return urlLen
 
 proc getLinkTitle*(doc: string, start: int, slice: var Slice[int]): int =
@@ -383,140 +750,564 @@ proc getLinkTitle*(doc: string, start: int, slice: var Slice[int]): int =
       return i+2
   return -1
 
-proc getLinkLabelSlice*(doc: string, start: int, slice: var Slice[int]): int =
-  # based on assumption: state.doc[start] = '['
+proc normalizeLabel*(label: string): string =
+  # One label matches another just in case their normalized forms are equal.
+  # To normalize a label, strip off the opening and closing brackets,
+  # perform the Unicode case fold, strip leading and trailing whitespace
+  # and collapse consecutive internal whitespace to a single space.
+  label.toLower.strip.replace(re"\s+", " ")
+
+proc getLinkLabel*(doc: string, start: int, label: var string): int =
   if doc[start] != '[':
-    raise newException(MarkdownError, fmt"{start} is not [.")
-  var level = 0
+    raise newException(MarkdownError, fmt"{doc[start]} cannot be the start of link label.")
+
+  if start+1 >= doc.len:
+    return -1
+
   var isEscaping = false
-  for i, ch in doc[start ..< doc.len]:
+  var size = 0
+  for i, ch in doc[start+1 ..< doc.len]:
+    size += 1
+
+    # A link label begins with a left bracket ([) and ends with the first right bracket (]) that is not backslash-escaped.
     if isEscaping:
       isEscaping = false
       continue
     elif ch == '\\':
       isEscaping = true
+    elif ch == ']':
+      break
+
+    # Unescaped square bracket characters are not allowed inside the opening and closing square brackets of link labels
+    elif ch == '[':
+      return -1
+
+    # A link label can have at most 999 characters inside the square brackets.
+    if size > 999:
+      return -1
+
+  label = doc[start+1 ..< start+size].normalizeLabel
+  return size + 1
+
+
+proc getLinkText*(doc: string, start: int, slice: var Slice[int], allowNested: bool = false): int =
+  # based on assumption: token.doc[start] = '['
+  if doc[start] != '[':
+    raise newException(MarkdownError, fmt"{start} is not [.")
+
+  # A link text consists of a sequence of zero or more inline elements enclosed by square brackets ([ and ]).
+  var level = 0
+  var isEscaping = false
+  var skip = 0
+  for i, ch in doc[start ..< doc.len]:
+    # Skip ahead for higher precedent matches like code spans, autolinks, and raw HTML tags.
+    if skip > 0:
+      skip -= 1
+      continue
+
+    # Brackets are allowed in the link text only if (a) they are backslash-escaped
+    if isEscaping:
+      isEscaping = false
+      continue
+    elif ch == '\\':
+      isEscaping = true
+
+    # or (b) they appear as a matched pair of brackets, with an open bracket [,
+    # a sequence of zero or more inlines, and a close bracket ].
     elif ch == '[':
       level += 1
     elif ch == ']':
       level -= 1
-    # TODO: the precedence of HTML tags, code spans, and autolinks over link grouping
-    # if < and doc[start+i ..< doc.len].match(HTML_TAG): abort
-    # if ` and doc[start+i ..< doc.len].match(CODE_SPAN): abort
-    # if < and doc[start+i ..< doc.len].match(AUTO_LINK): abort
+
+    # Backtick: code spans bind more tightly than the brackets in link text.
+    # Skip the tokens in code.
+    elif ch == '`':
+      # FIXME: it's better to extract to a code span helper function
+      skip = doc[start+i ..< doc.len].matchLen(re"^((`+)\s*([\s\S]*?[^`])\s*\2(?!`))") - 1
+
+    # autolinks, and raw HTML tags bind more tightly than the brackets in link text.
+    elif ch == '<':
+      skip = doc[start+i ..< doc.len].matchLen(re"^<[^>]*>") - 1
+
+    # Links may not contain other links, at any level of nesting.
+    # Image description may contain links.
+    if level == 0 and not allowNested and doc[start .. start+i].find(re"[^!]\[[^]]*\]\([^)]*\)") > -1:
+        return -1
+    if level == 0 and not allowNested and doc[start .. start+i].find(re"[^!]\[[^]]*\]\[[^]]*\]") > -1:
+        return -1
+
     if level == 0:
-      # TODO: if contains other links: abort
       slice = (start .. start+i)
       return i+1
+
   return -1
 
 
 proc parseInlineLink(state: var State, token: var Token, start: int, labelSlice: Slice[int]): int =
-  if state.doc[start] != '[':
+  if token.doc[start] != '[':
     return -1
 
   var pos = labelSlice.b + 2 # [link](
 
   # parse whitespace
-  var whitespaceLen = state.doc[pos ..< state.doc.len].matchLen(re"^[ \t\n]*")
-  pos += whitespaceLen
+  var whitespaceLen = token.doc[pos ..< token.doc.len].matchLen(re"^[ \t\n]*")
+  if whitespaceLen != -1:
+    pos += whitespaceLen
 
   # parse destination
   var destinationSlice: Slice[int]
-  var destinationLen = getLinkDestination(state.doc, pos, destinationslice)
+  var destinationLen = getLinkDestination(token.doc, pos, destinationslice)
+
   if destinationLen == -1:
     return -1
 
   pos += destinationLen
 
   # parse whitespace
-  whitespaceLen = state.doc[pos ..< state.doc.len].matchLen(re"^[ \t\n]*")
-  pos += whitespaceLen
+  whitespaceLen = token.doc[pos ..< token.doc.len].matchLen(re"^[ \t\n]*")
+  if whitespaceLen != -1:
+    pos += whitespaceLen
 
   # parse title (optional)
-  if state.doc[pos] != '(' and state.doc[pos] != '\'' and state.doc[pos] != '"' and state.doc[pos] != ')':
+  if token.doc[pos] != '(' and token.doc[pos] != '\'' and token.doc[pos] != '"' and token.doc[pos] != ')':
     return -1
   var titleSlice: Slice[int]
-  var titleLen = getLinkTitle(state.doc, pos, titleSlice)
+  var titleLen = getLinkTitle(token.doc, pos, titleSlice)
 
   if titleLen >= 0:
     pos += titleLen
 
   # parse whitespace
-  whitespaceLen = state.doc[pos ..< state.doc.len].matchLen(re"^[ \t\n]*")
+  whitespaceLen = token.doc[pos ..< token.doc.len].matchLen(re"^[ \t\n]*")
   pos += whitespaceLen
 
   # require )
-  if pos >= state.doc.len:
+  if pos >= token.doc.len:
     return -1
-  if state.doc[pos] != ')':
+  if token.doc[pos] != ')':
     return -1
 
   # construct token
   var title = ""
   if titleLen >= 0:
-    title = state.doc[titleSlice]
+    title = token.doc[titleSlice]
   #echo(destinationLen, destinationSlice)
-  var url = state.doc[destinationSlice]
-  var text = state.doc[labelSlice.a+1 ..< labelSlice.b]
+  var url = token.doc[destinationSlice]
+  var text = token.doc[labelSlice.a+1 ..< labelSlice.b]
   #echo((start .. pos + 1))
   var link = Token(
     type: LinkToken,
     slice: (start .. pos + 1),
+    doc: token.doc[start .. pos],
     linkVal: Link(
       text: text,
       url: url,
       title: title,
     )
   )
-  parseLeafBlockInlines(state, link)
+  parseLinkInlines(state, link)
   token.children.append(link)
   result = pos - start + 1
 
-proc parseFullReferenceLink(state: var State, token: var Token, start: int, label: Slice[int]): int =
-  -1
+proc parseFullReferenceLink(state: var State, token: var Token, start: int, textSlice: Slice[int]): int =
+  var pos = textSlice.b + 1
+  var label: string
+  var labelSize = getLinkLabel(token.doc, pos, label)
+
+  if labelSize == -1:
+    return -1
+
+  if not state.references.contains(label):
+    return -1
+
+  pos += labelSize
+
+  var text = token.doc[textSlice.a+1 ..< textSlice.b]
+  var reference = state.references[label]
+  var link = Token(
+    type: LinkToken,
+    slice: (start ..< pos),
+    doc: token.doc[start ..< pos],
+    linkVal: Link(
+      url: reference.url,
+      title: reference.title,
+      text: text
+    )
+  )
+  parseLinkInlines(state, link)
+  token.children.append(link)
+  return pos - start
 
 proc parseCollapsedReferenceLink(state: var State, token: var Token, start: int, label: Slice[int]): int =
-  -1
+  var id = token.doc[label.a+1 ..< label.b].toLower.replace(re"\s+", " ")
+  var text = token.doc[label.a+1 ..< label.b]
+  if not state.references.contains(id):
+    return -1
+
+  var reference = state.references[id]
+  var link = Token(
+    type: LinkToken,
+    slice: (start ..< label.b + 1),
+    doc: token.doc[start ..< label.b+1],
+    linkVal: Link(
+      url: reference.url,
+      title: reference.title,
+      text: text
+    )
+  )
+  parseLinkInlines(state, link)
+  token.children.append(link)
+  return label.b - start + 3
 
 proc parseShortcutReferenceLink(state: var State, token: var Token, start: int, label: Slice[int]): int =
-  -1
+  var id = token.doc[label.a+1 ..< label.b].toLower.replace(re"\s+", " ")
+  var text = token.doc[label.a+1 ..< label.b]
+  if not state.references.contains(id):
+    return -1
+
+  var reference = state.references[id]
+  var link = Token(
+    type: LinkToken,
+    slice: (start ..< label.b + 1),
+    doc: token.doc[start ..< label.b+1],
+    linkVal: Link(
+      url: reference.url,
+      title: reference.title,
+      text: text
+    )
+  )
+  parseLinkInlines(state, link)
+  token.children.append(link)
+  return label.b - start + 1
+
 
 proc parseLink*(state: var State, token: var Token, start: int): int =
   # Link should start with [
-  if state.doc[start] != '[':
+  if token.doc[start] != '[':
     return -1
 
   var labelSlice: Slice[int]
-  result = getLinkLabelSlice(state.doc, start, labelSlice)
-
+  result = getLinkText(token.doc, start, labelSlice)
   # Link should have matching ] for [.
   if result == -1:
     return -1
 
   # An inline link consists of a link text followed immediately by a left parenthesis (
-  if labelSlice.b + 1 < state.doc.len and state.doc[labelSlice.b + 1] == '(':
-    return parseInlineLink(state, token, start, labelSlice)
+  if labelSlice.b + 1 < token.doc.len and token.doc[labelSlice.b + 1] == '(':
+    var size = parseInlineLink(state, token, start, labelSlice)
+    if size != -1:
+      return size
 
   # A collapsed reference link consists of a link label that matches a link reference 
   # definition elsewhere in the document, followed by the string []. 
-  elif labelSlice.b + 2 < state.doc.len and state.doc[labelSlice.b .. labelSlice.b+2] == "[]":
-    return parseCollapsedReferenceLink(state, token, start, labelSlice)
+  if labelSlice.b + 2 < token.doc.len and token.doc[labelSlice.b+1 .. labelSlice.b+2] == "[]":
+    var size = parseCollapsedReferenceLink(state, token, start, labelSlice)
+    if size != -1:
+      return size
 
   # A full reference link consists of a link text immediately followed by a link label 
   # that matches a link reference definition elsewhere in the document.
-  if labelSlice.b + 1 < state.doc.len and state.doc[labelSlice.b + 1] == '[':
+  elif labelSlice.b + 1 < token.doc.len and token.doc[labelSlice.b + 1] == '[':
     return parseFullReferenceLink(state, token, start, labelSlice)
 
   # A shortcut reference link consists of a link label that matches a link reference 
   # definition elsewhere in the document and is not followed by [] or a link label.
+  return parseShortcutReferenceLink(state, token, start, labelSlice)
+
+proc parseInlineImage(state: var State, token: var Token, start: int, labelSlice: Slice[int]): int =
+  var pos = labelSlice.b + 2 # ![link](
+
+  # parse whitespace
+  var whitespaceLen = token.doc[pos ..< token.doc.len].matchLen(re"^[ \t\n]*")
+  pos += whitespaceLen
+
+  # parse destination
+  var destinationSlice: Slice[int]
+  var destinationLen = getLinkDestination(token.doc, pos, destinationslice)
+  if destinationLen == -1:
+    return -1
+
+  pos += destinationLen
+
+  # parse whitespace
+  whitespaceLen = token.doc[pos ..< token.doc.len].matchLen(re"^[ \t\n]*")
+  pos += whitespaceLen
+
+  # parse title (optional)
+  if token.doc[pos] != '(' and token.doc[pos] != '\'' and token.doc[pos] != '"' and token.doc[pos] != ')':
+    return -1
+  var titleSlice: Slice[int]
+  var titleLen = getLinkTitle(token.doc, pos, titleSlice)
+
+  if titleLen >= 0:
+    pos += titleLen
+
+  # parse whitespace
+  whitespaceLen = token.doc[pos ..< token.doc.len].matchLen(re"^[ \t\n]*")
+  pos += whitespaceLen
+
+  # require )
+  if pos >= token.doc.len:
+    return -1
+  if token.doc[pos] != ')':
+    return -1
+
+  # construct token
+  var title = ""
+  if titleLen >= 0:
+    title = token.doc[titleSlice]
+  #echo(destinationLen, destinationSlice)
+  var url = token.doc[destinationSlice]
+  var text = token.doc[labelSlice.a+1 ..< labelSlice.b]
+
+  #echo((start .. pos + 1))
+  var image = Token(
+    type: ImageToken,
+    slice: (start-1 .. pos+1),
+    doc: token.doc[start-1 ..< pos+1],
+    imageVal: Image(
+      alt: text,
+      url: url,
+      title: title,
+    )
+  )
+
+  parseLinkInlines(state, image, allowNested=true)
+  token.children.append(image)
+  result = pos - start + 2
+
+proc parseFullReferenceImage(state: var State, token: var Token, start: int, altSlice: Slice[int]): int =
+  var pos = altSlice.b + 1
+  var label: string
+  var labelSize = getLinkLabel(token.doc, pos, label)
+
+  if labelSize == -1:
+    return -1
+
+  pos += labelSize
+
+  var alt = token.doc[altSlice.a+1 ..< altSlice.b]
+  if not state.references.contains(label):
+    return -1
+
+  var reference = state.references[label]
+  var image = Token(
+    type: ImageToken,
+    slice: (start ..< pos),
+    doc: token.doc[start ..< pos-1],
+    imageVal: Image(
+      url: reference.url,
+      title: reference.title,
+      alt: alt
+    )
+  )
+  parseLinkInlines(state, image, allowNested=true)
+  token.children.append(image)
+  return pos - start + 1
+
+proc parseCollapsedReferenceImage(state: var State, token: var Token, start: int, label: Slice[int]): int =
+  var id = token.doc[label.a+1 ..< label.b].toLower.replace(re"\s+", " ")
+  var alt = token.doc[label.a+1 ..< label.b]
+  if not state.references.contains(id):
+    return -1
+
+  var reference = state.references[id]
+  var image = Token(
+    type: ImageToken,
+    slice: (start ..< label.b + 3),
+    doc: token.doc[start ..< label.b+2],
+    imageVal: Image(
+      url: reference.url,
+      title: reference.title,
+      alt: alt
+    )
+  )
+  parseLinkInlines(state, image)
+  token.children.append(image)
+  return label.b - start + 3
+
+proc parseShortcutReferenceImage(state: var State, token: var Token, start: int, label: Slice[int]): int =
+  var id = token.doc[label.a+1 ..< label.b].toLower.replace(re"\s+", " ")
+  var alt = token.doc[label.a+1 ..< label.b]
+  if not state.references.contains(id):
+    return -1
+
+  var reference = state.references[id]
+  var image = Token(
+    type: ImageToken,
+    slice: (start ..< label.b + 1),
+    doc: token.doc[start ..< label.b+1],
+    imageVal: Image(
+      url: reference.url,
+      title: reference.title,
+      alt: alt
+    )
+  )
+  parseLinkInlines(state, image)
+  token.children.append(image)
+  return label.b - start + 1
+
+
+proc parseImage*(state: var State, token: var Token, start: int): int =
+  # Image should start with ![
+  if not token.doc[start ..< token.doc.len].match(re"^!\["):
+    return -1
+
+  var labelSlice: Slice[int]
+  var labelSize = getLinkText(token.doc, start+1, labelSlice, allowNested=true)
+
+  # Image should have matching ] for [.
+  if labelSize == -1:
+    return -1
+
+  # An inline image consists of a link text followed immediately by a left parenthesis (
+  if labelSlice.b + 1 < token.doc.len and token.doc[labelSlice.b + 1] == '(':
+    return parseInlineImage(state, token, start+1, labelSlice)
+
+  # A collapsed reference link consists of a link label that matches a link reference 
+  # definition elsewhere in the document, followed by the string []. 
+  elif labelSlice.b + 2 < token.doc.len and token.doc[labelSlice.b+1 .. labelSlice.b+2] == "[]":
+    return parseCollapsedReferenceImage(state, token, start, labelSlice)
+
+  # A full reference link consists of a link text immediately followed by a link label 
+  # that matches a link reference definition elsewhere in the document.
+  if labelSlice.b + 1 < token.doc.len and token.doc[labelSlice.b + 1] == '[':
+    return parseFullReferenceImage(state, token, start, labelSlice)
+
+  # A shortcut reference link consists of a link label that matches a link reference 
+  # definition elsewhere in the document and is not followed by [] or a link label.
   else:
-    return parseShortcutReferenceLink(state, token, start, labelSlice)
+    return parseShortcutReferenceImage(state, token, start, labelSlice)
+
+const ENTITY = r"&(?:#x[a-f0-9]{1,6}|#[0-9]{1,7}|[a-z][a-z0-9]{1,31});"
+proc parseHTMLEntity*(state: var State, token: var Token, start: int): int =
+  if token.doc[start] != '&':
+    return -1
+
+  let regex = re(r"^(" & ENTITY & ")", {RegexFlag.reIgnoreCase})
+  var matches: array[1, string]
+
+  var size = token.doc[start .. token.doc.len - 1].matchLen(regex, matches)
+  if size == -1:
+    return -1
+
+  var entity: string
+  if matches[0] == "&#0;":
+    entity = "\uFFFD"
+  else:
+    entity = escapeHTMLEntity(matches[0])
+
+  token.children.append(Token(
+    type: HTMLEntityToken,
+    slice: (start ..< start+size),
+    htmlEntityVal: entity
+  ))
+  return size
+
+proc parseEscape*(state: var State, token: var Token, start: int): int =
+  if token.doc[start] != '\\':
+    return -1
+
+  let regex = re"^\\([\\`*{}\[\]()#+\-.!_<>~|""$%&',/:;=?@^])"
+  let size = token.doc[start ..< token.doc.len].matchLen(regex)
+  if size == -1:
+    return -1
+
+  token.children.append(Token(
+    type: EscapeToken,
+    slice: (start ..< start + 2),
+    escapeVal: fmt"{token.doc[start+1]}"
+  ))
+  return 2
+
+proc parseInlineHTML*(state: var State, token: var Token, start: int): int =
+  if token.doc[start] != '<':
+    return -1
+  let regex = re("^(" & HTML_TAG & ")", {RegexFlag.reIgnoreCase})
+  var matches: array[5, string]
+  var size = token.doc[start ..< token.doc.len].matchLen(regex, matches=matches)
+
+  if size == -1:
+    return -1
+
+  token.children.append(Token(
+    type: InlineHTMLToken,
+    slice: (start ..< start+size),
+    inlineHTMLVal: matches[0]
+  ))
+  return size
+
+proc parseHardLineBreak*(state: var State, token: var Token, start: int): int =
+  if token.doc[start] != ' ' and token.doc[start] != '\\':
+    return -1
+
+  let size = token.doc[start ..< token.doc.len].matchLen(re"^((?: {2,}\n|\\\n)\s*)")
+
+  if size == -1:
+    return -1
+
+  token.children.append(Token(
+    type: HardLineBreakToken,
+    slice: (start ..< start+size),
+    hardLineBreakVal: ""
+  ))
+  return size
+
+proc parseCodeSpan*(state: var State, token: var Token, start: int): int =
+  if token.doc[start] != '`':
+    return -1
+
+  var matches: array[5, string]
+  var size = token.doc[start ..< token.doc.len].matchLen(re"^((`+)([^`]|[^`][\s\S]*?[^`])\2(?!`))", matches=matches)
+
+  if size == -1:
+    size = token.doc[start ..< token.doc.len].matchLen(re"^`+(?!`)")
+    if size == -1:
+      return -1
+    token.children.append(Token(
+      type: TextToken,
+      slice: (start ..< start+size),
+      textVal: token.doc[start ..< start+size]
+    ))
+    return size
+
+
+  token.children.append(Token(
+    type: CodeSpanToken,
+    slice: (start ..< start+size),
+    codeSpanVal: matches[2].strip.replace(re"[ \n]+", " ")
+  ))
+  return size
+
+proc parseStrikethrough*(state: var State, token: var Token, start: int): int =
+  if token.doc[start] != '~':
+    return -1
+
+  var matches: array[5, string]
+  var size = token.doc[start ..< token.doc.len].matchLen(re"^(~~(?=\S)([\s\S]*?\S)~~)", matches=matches)
+
+  if size == -1:
+    return -1
+
+  token.children.append(Token(
+    type: StrikethroughToken,
+    slice: (start ..< start+size),
+    strikethroughVal: matches[1]
+  ))
+  return size
 
 proc findInlineToken(state: var State, token: var Token, rule: TokenType, start: int, delimeters: var DoublyLinkedList[Delimeter]): int =
   case rule
   of EmphasisToken: result = parseDelimeter(state, token, start, delimeters)
   of AutoLinkToken: result = parseAutoLink(state, token, start)
   of LinkToken: result = parseLink(state, token, start)
+  of ImageToken: result = parseImage(state, token, start)
+  of HTMLEntityToken: result = parseHTMLEntity(state, token, start)
+  of InlineHTMLToken: result = parseInlineHTML(state, token, start)
+  of EscapeToken: result = parseEscape(state, token, start)
+  of CodeSpanToken: result = parseCodeSpan(state, token, start)
+  of StrikethroughToken: result = parseStrikethrough(state, token, start)
+  of HardLineBreakToken: result = parseHardLineBreak(state, token, start)
   of SoftLineBreakToken: result = parseSoftLineBreak(state, token, start)
   of TextToken: result = parseText(state, token, start)
   else: raise newException(MarkdownError, fmt"{token.type} has no inline rule.")
@@ -544,7 +1335,6 @@ proc processEmphasis*(state: var State, token: var Token, delimeterStack: var Do
   # *opener and closer*
   #                   ^
   closer = delimeterStack.head
-
   # move forward, looking for closers, and handling each
   while closer != nil:
     # find the first closing delimeter.
@@ -555,6 +1345,7 @@ proc processEmphasis*(state: var State, token: var Token, delimeterStack: var Do
     if not closer.value.canClose:
       closer = closer.next
       continue
+
     # found emphasis closer. now look back for first matching opener.
     opener = closer.prev
     openerFound = false
@@ -653,13 +1444,43 @@ proc processEmphasis*(state: var State, token: var Token, delimeterStack: var Do
   while delimeterStack.head != nil:
     removeDelimeter(delimeterStack.head)
 
-proc parseLeafBlockInlines(state: var State, token: var Token) =
-  var pos = token.slice.a
+proc parseLinkInlines*(state: var State, token: var Token, allowNested: bool = false) =
   var delimeters: DoublyLinkedList[Delimeter]
-  
-  for index, ch in state.doc[token.slice.a ..< token.slice.b].strip:
-    #echo(token.slice, index, " ", pos)
-    if token.slice.a + index < pos:
+  var pos = 0
+  var size = 0
+  if token.type == LinkToken:
+    pos = 1
+    size = token.linkVal.text.len - 1
+  elif token.type == ImageToken:
+    pos = 2
+    size = token.imageVal.alt.len
+  else:
+    raise newException(MarkdownError, fmt"{token.type} has no link inlines.")
+
+  for index, ch in token.doc[pos .. pos+size]:
+    if 1+index < pos:
+      continue
+    var ok = false
+    var size = -1
+    for rule in state.ruleSet.inlineRules:
+      if not allowNested and rule == LinkToken:
+        continue
+      size = findInlineToken(state, token, rule, pos, delimeters)
+      if size != -1:
+        pos += size
+        break
+    if size == -1:
+      token.children.append(Token(type: TextToken, slice: (index .. index+1), textVal: fmt"{ch}"))
+      pos += 1
+
+  processEmphasis(state, token, delimeters)
+
+proc parseLeafBlockInlines(state: var State, token: var Token) =
+  var pos = 0
+  var delimeters: DoublyLinkedList[Delimeter]
+
+  for index, ch in token.doc[0 ..< token.doc.len].strip:
+    if index < pos:
       continue
     var ok = false
     var size = -1
@@ -679,79 +1500,111 @@ proc parseLeafBlockInlines(state: var State, token: var Token) =
 proc isContainerToken(token: Token): bool =
   # TODO: return true for list, list item, blockquote, and task list items
   case token.type
-  of ParagraphToken: false
+  of BlockquoteToken: true
   else: false
 
-proc parseContainerInlines(state: var State, token: var Token): untyped =
+proc parseContainerInlines(state: var State, token: var Token) =
   # TODO: recursively iterate list, list item, bloclquote and task list items
   case token.type
-  of ParagraphToken: parseLeafBlockInlines(state, token)
+  of BlockquoteToken:
+    for childToken in token.children.mitems:
+      parseContainerInlines(state, childToken)
   else:
-    raise newException(MarkdownError, fmt"{token.type} walking inlines unsupported.")
+    parseLeafBlockInlines(state, token)
 
-proc parseInline(state: var State) =
-  for blockToken in state.tokens.mitems:
+proc parseInline(state: var State, token: var Token) =
+  for blockToken in token.children.mitems:
     if isContainerToken(blockToken):
       parseContainerInlines(state, blockToken)
     else:
       parseLeafBlockInlines(state, blockToken)
 
-proc postProcessing(state: var State) =
+proc postProcessing(state: var State, token: var Token) =
   discard
 
-proc parse(state: var State) =
-  preProcessing(state)
-  parseBlock(state)
-  parseInline(state)
-  postProcessing(state)
+proc parse(state: var State, token: var Token) =
+  preProcessing(state, token)
+  parseBlock(state, token)
+  parseInline(state, token)
+  postProcessing(state, token)
 
 proc toSeq(tokens: DoublyLinkedList[Token]): seq[Token] =
   result = newSeq[Token]()
   for token in tokens.items:
     result.add(token)
 
-proc renderToken(token: Token): string;
-proc renderInline(token: Token): string =
+proc renderToken(state: State, token: Token): string;
+proc renderInline(state: State, token: Token): string =
   token.children.toSeq.map(
     proc(x: Token): string =
-      result = renderToken(x)
+      result = renderToken(state, x)
   ).join("")
 
-proc renderToken(token: Token): string =
+proc renderImageAlt*(state: State, token: Token): string =
+  token.children.toSeq.map(
+    proc(x: Token): string =
+      case x.type
+      of LinkToken: x.linkVal.text
+      of ImageToken: x.imageVal.alt
+      of EmphasisToken: state.renderInline(x)
+      of StrongToken: state.renderInline(x)
+      else: renderToken(state, x)
+  ).join("")
+
+proc renderToken(state: State, token: Token): string =
   case token.type
-  of ParagraphToken: p(token.renderInline)
+  of ReferenceToken: ""
+  of ParagraphToken: p(state.renderInline(token))
   of LinkToken:
     if token.linkVal.title == "": a(
       href=token.linkVal.url.escapeBackslash.escapeLinkUrl,
-      token.linkVal.text.escapeBackslash
+      state.renderInline(token)
     )
     else: a(
       href=token.linkVal.url.escapeBackslash.escapeLinkUrl,
-      title=token.linkVal.title.escapeBackslash.escapeAmpersandSeq.escapeQuote,
-      token.linkVal.text.escapeBackslash
+      title=token.linkVal.title.escapeBackslash.escapeHTMLEntity.escapeAmpersandSeq.escapeQuote,
+      state.renderInline(token)
     )
-  of AutoLinkToken: a(href=token.autoLinkVal.url.escapeLinkUrl, token.autoLinkVal.text)
-  of TextToken: token.textVal
-  of EmphasisToken: em(token.renderInline)
-  of StrongToken: strong(token.renderInline)
+  of ImageToken:
+    if token.imageVal.title == "": img(
+      src=token.imageVal.url.escapeBackslash.escapeLinkUrl,
+      alt=state.renderImageAlt(token)
+    )
+    else: img(
+      src=token.imageVal.url.escapeBackslash.escapeLinkUrl,
+      alt=state.renderImageAlt(token),
+      title=token.imageVal.title.escapeBackslash.escapeHTMLEntity.escapeAmpersandSeq.escapeQuote,
+    )
+  of AutoLinkToken: a(href=token.autoLinkVal.url.escapeLinkUrl.escapeAmpersandSeq, token.autoLinkVal.text.escapeAmpersandSeq)
+  of BlankLineToken: ""
+  of BlockquoteToken: blockquote("\n", state.render(token))
+  of TextToken: token.textVal.escapeAmpersandSeq.escapeTag.escapeQuote
+  of HTMLEntityToken: token.htmlEntityVal.escapeHTMLEntity.escapeQuote
+  of InlineHTMLToken: token.inlineHTMLVal.escapeInvalidHTMLTag
+  of EscapeToken: token.escapeVal.escapeAmpersandSeq.escapeTag.escapeQuote
+  of EmphasisToken: em(state.renderInline(token))
+  of StrongToken: strong(state.renderInline(token))
+  of StrikethroughToken: del(token.strikethroughVal)
+  of HardLineBreakToken: br() & "\n"
+  of CodeSpanToken: code(token.codeSpanVal.escapeAmpersandChar.escapeTag.escapeQuote)
   of SoftLineBreakToken: token.softLineBreakVal
-  of DummyToken: ""
+  of DocumentToken: ""
   else: raise newException(MarkdownError, fmt"{token.type} rendering not impleted.")
 
-proc renderState(state: State): string =
+proc render(state: State, token: Token): string =
   var html: string
-  for token in state.tokens.items:
-    html = renderToken(token)
+  for token in token.children.items:
+    html = renderToken(state, token)
     if html != "":
       result &= html
       result &= "\n"
 
 proc markdown*(doc: string): string =
   var tokens: DoublyLinkedList[Token]
-  var state = State(doc: doc.strip, tokens: tokens, ruleSet: simpleRuleSet)
-  state.tokens.append(Token(type: DummyToken, slice: (0..0), dummyVal: ""))
-  parse(state)
-  renderState(state)
+  var state = State(doc: doc.strip(chars={'\n'}), tokens: tokens, ruleSet: simpleRuleSet, references: initTable[string, Reference]())
+  var document = Token(type: DocumentToken, slice: (0 ..< doc.len), doc: doc.strip(chars={'\n'}), documentVal: "")
+  parse(state, document)
+  render(state, document)
 
 when isMainModule:
   from unittest import check
@@ -766,21 +1619,26 @@ when isMainModule:
   check markdown("*a* **b** ***c***") == "<p><em>a</em> <strong>b</strong> <em><strong>c</strong></em></p>\n"
 
   var slice: Slice[int]
-  check getLinkLabelSlice("[a]", 0, slice) == 3; check slice == (0 .. 2)
-  check getLinkLabelSlice("[[a]", 0, slice) == -1;
-  check getLinkLabelSlice("[[a]", 1, slice) == 3; check slice == (1 .. 3)
-  check getLinkLabelSlice("[[a]]", 0, slice) == 5; check slice == (0 .. 4)
-  check getLinkLabelSlice("[a]]", 0, slice) == 3; check slice == (0 .. 2)
-  check getLinkLabelSlice(r"[a\]]", 0, slice) == 5; check slice == (0 .. 4)
-  check getLinkLabelSlice("[link]", 0, slice) == 6; check slice == (0 .. 5)
-  check getLinkLabelSlice("[link [foo [bar]]]", 0, slice) == 18; check slice == (0 .. 17)
-  check getLinkLabelSlice("[link] bar]", 0, slice) == 6; check slice == (0 .. 5)
-  check getLinkLabelSlice("[link [bar]", 0, slice) == -1;
-  check getLinkLabelSlice(r"[link \[bar]", 0, slice) == 12; check slice == (0 .. 11)
-  check getLinkLabelSlice("[foo [bar](/uri)]", 0, slice) == 17; check slice == (0 .. 16)
-  check getLinkLabelSlice("[foo *[bar [baz](/uri)](/uri)*]", 0, slice) == 31; check slice == (0 .. 30)
-  check getLinkLabelSlice("![[[foo](uri1)](uri2)]", 1, slice) == 21; check slice == (1 .. 21)
-  check getLinkLabelSlice("*[foo*]", 1, slice) == 6; check slice == (1 .. 6)
+  check getLinkText("[a]", 0, slice) == 3; check slice == (0 .. 2)
+  check getLinkText("[[a]", 0, slice) == -1;
+  check getLinkText("[[a]", 1, slice) == 3; check slice == (1 .. 3)
+  check getLinkText("[[a]]", 0, slice) == 5; check slice == (0 .. 4)
+  check getLinkText("[a]]", 0, slice) == 3; check slice == (0 .. 2)
+  check getLinkText(r"[a\]]", 0, slice) == 5; check slice == (0 .. 4)
+  check getLinkText("[link]", 0, slice) == 6; check slice == (0 .. 5)
+  check getLinkText("[link [foo [bar]]]", 0, slice) == 18; check slice == (0 .. 17)
+  check getLinkText("[link] bar]", 0, slice) == 6; check slice == (0 .. 5)
+  check getLinkText("[link [bar]", 0, slice) == -1;
+  check getLinkText(r"[link \[bar]", 0, slice) == 12; check slice == (0 .. 11)
+  check getLinkText("[foo [bar](/uri)]", 0, slice) == -1
+  check getLinkText("[foo *[bar [baz](/uri)](/uri)*]", 0, slice) == -1
+  check getLinkText("![[[foo](uri1)](uri2)]", 1, slice, allowNested=true) == 21; check slice == (1 .. 21)
+  check getLinkText("*[foo*]", 1, slice) == 6; check slice == (1 .. 6)
+  check getLinkText("[foo`]`", 0, slice) == -1;
+  check getLinkText("[foo`]`]", 0, slice) == 8; check slice == (0 .. 7);
+  check getLinkText("[foo <a href=]>]", 0, slice) == 16; check slice == (0 .. 15);
+  check getLinkText("[[foo](/uri)]", 0, slice) == -1
+  check getLinkText("[![foo](/uri)]", 0, slice) == 14; check slice == (0 .. 13)
 
   
   var doc = ""
@@ -807,3 +1665,360 @@ when isMainModule:
   check getLinkTitle("/url 'title'", 5, slice) == 7; check "/url 'title'"[slice] == "title"
   check getLinkTitle("/url (title)", 5, slice) == 7; check "/url (title)"[slice] == "title"
   check getLinkTitle(""""title \"&quot;"""", 0, slice) == 16; check """"title \"&quot;""""[slice] == "title \"&quot;"
+
+  var label = ""
+  check getLinkLabel("[a]", 0, label) == 3; check label == "a"
+  check getLinkLabel("[a]]", 0, label) == 3; check label == "a"
+  check getLinkLabel("[a[]", 0, label) == -1
+
+
+  var marker = "*"
+  var listItemDoc = ""
+  var index = 1
+
+  # 255
+  check parseUnorderedListItem("*", 0, marker, listItemDoc) == 1
+  check listItemDoc == ""
+  check marker == "*"
+
+  check parseUnorderedListItem("*a", 0, marker, listItemDoc) == -1
+
+  check parseUnorderedListItem("* a", 0, marker, listItemDoc) == 3
+  check listItemDoc == "a"
+  check marker == "*"
+
+  check parseUnorderedListItem("*  a", 0, marker, listItemDoc) == 4
+  check listItemDoc == "a"
+  check marker == "*"
+
+  check parseUnorderedListItem(" * a", 0, marker, listItemDoc) == 4
+  check listItemDoc == "a"
+  check marker == "*"
+
+  check parseUnorderedListItem("  * a", 0, marker, listItemDoc) == 5
+  check listItemDoc == "a"
+  check marker == "*"
+
+  check parseUnorderedListItem("   * a", 0, marker, listItemDoc) == 6
+  check listItemDoc == "a"
+  check marker == "*"
+
+  check parseUnorderedListItem("    * a", 0, marker, listItemDoc) == -1
+
+  marker = "+"
+  check parseUnorderedListItem("+ a", 0, marker, listItemDoc) == 3
+  check listItemDoc == "a"
+  check marker == "+"
+
+  marker = "-"
+  check parseUnorderedListItem("- a", 0, marker, listItemDoc) == 3
+  check listItemDoc == "a"
+  check marker == "-"
+
+  # 271, A list item can contain a heading
+  marker = "-"
+  check parseUnorderedListItem("- # Foo\n- Bar\n  ---\n  baz", 0, marker, listItemDoc) == 8
+  check listItemDoc == "# Foo\n"
+  check marker == "-"
+  check parseUnorderedListItem("- # Foo\n- Bar\n  ---\n  baz", 8, marker, listItemDoc) == 17
+  check listItemDoc == "Bar\n---\nbaz"
+  check marker == "-"
+
+  # 270, A list may be the first block in a list item.
+  marker = "."
+  check parseOrderedListItem("1. - 2. foo", 0, marker, listItemDoc, index) == 11
+  check listItemDoc == "- 2. foo"
+  check marker == "."
+  check index == 1
+  marker = "-"
+  check parseUnorderedListItem("1. - 2. foo", 3, marker, listItemDoc) == 8
+  check listItemDoc == "2. foo"
+  check marker == "-"
+  marker = "."
+  check parseOrderedListItem("1. - 2. foo", 5, marker, listItemDoc, index) == 6
+  check listItemDoc == "foo"
+  check marker == "."
+  check index == 2
+
+  # 269, A list may be the first block in a list item
+  marker = "-"
+  check parseUnorderedListItem("- - foo", 0, marker, listItemDoc) == 7
+  check listItemDoc == "- foo"
+  check marker == "-"
+  check parseUnorderedListItem("- - foo", 2, marker, listItemDoc) == 5
+  check listItemDoc == "foo"
+  check marker == "-"
+
+  # 268, Three is not enough
+  marker = ")"
+  check parseOrderedListItem("10) foo\n   - bar", 0, marker, listItemDoc, index) == 8
+  check listItemDoc == "foo\n"
+  check marker == ")"
+  check index == 10
+
+  # 267, Here we need four, because the list marker is wider
+  marker = ")"
+  check parseOrderedListItem("10) foo\n    - bar", 0, marker, listItemDoc, index) == 17
+  check listItemDoc == "foo\n- bar"
+  check marker == ")"
+  check index == 10
+
+  # 266, One is not enough
+  marker = "-"
+  check parseUnorderedListItem("- foo\n - bar\n  - baz\n   - boo", 0, marker, listItemDoc) == 6
+  check listItemDoc == "foo\n"
+  check marker == "-"
+  check parseUnorderedListItem("- foo\n - bar\n  - baz\n   - boo", 6, marker, listItemDoc) == 7
+  check listItemDoc == "bar\n"
+  check parseUnorderedListItem("- foo\n - bar\n  - baz\n   - boo", 13, marker, listItemDoc) == 8
+  check listItemDoc == "baz\n"
+  check parseUnorderedListItem("- foo\n - bar\n  - baz\n   - boo", 21, marker, listItemDoc) == 8
+  check listItemDoc == "boo"
+
+  # 265, in this case we need two spaces indent
+  marker = "-"
+  check parseUnorderedListItem("- foo\n  - bar\n    - baz\n      - boo", 0, marker, listItemDoc) == 35
+  check listItemDoc == "foo\n- bar\n  - baz\n    - boo"
+  check parseUnorderedListItem("foo\n- bar\n  - baz\n    - boo", 4, marker, listItemDoc) == 23
+  check listItemDoc == "bar\n- baz\n  - boo"
+  check parseUnorderedListItem("bar\n- baz\n  - boo", 4, marker, listItemDoc) == 13
+  check listItemDoc == "baz\n- boo"
+  check parseUnorderedListItem("baz\n- boo", 4, marker, listItemDoc) == 5
+  check listItemDoc == "boo"
+
+  # 263, Laziness.
+  marker = ""
+  check parseOrderedListItem("1. > Blockquote\ncontinued here.", 0, marker, listItemDoc, index) == 31
+  check listItemDoc == "> Blockquote\ncontinued here."
+  check marker == "."
+  check index == 1
+
+  # 262, Indentation can be partially deleted.
+  marker = ""
+  check parseOrderedListItem("  1. a\n    b.", 0, marker, listItemDoc, index) == 13
+  check listItemDoc == "a\n    b."
+  check marker == "."
+
+  # 261, lazy continuation lines.
+  marker = ""
+  check parseOrderedListItem("  1.  a\n2\n\n          code\n\n      > quote.", 0, marker, listItemDoc, index) == 41
+  check listItemDoc == "a\n2\n\n    code\n\n> quote."
+
+  # 260, Four spaces indent gives a code block
+  marker = ""
+  check parseOrderedListItem("    1. a", 0, marker, listItemDoc, index) == -1
+
+  # 258, Indented two spaces
+  marker = ""
+  check parseOrderedListItem("  1.  A\n      B\n\n          C\n\n      > D", 0, marker, listItemDoc, index) == 39
+  check listItemDoc == "A\nB\n\n    C\n\n> D"
+  check marker == "."
+  check index == 1
+
+
+  # 257, Indented one space
+  marker = ""
+  check parseOrderedListItem(" 1.  A\n     B\n\n         C\n\n     > D", 0, marker, listItemDoc, index) == 35
+  check listItemDoc == "A\nB\n\n    C\n\n> D"
+  check marker == "."
+  check index == 1
+
+  # 254, an empty ordered list item
+  marker = ""
+  check parseOrderedListItem("1. a\n2.\n3. c", 0, marker, listItemDoc, index) == 5
+  check listItemDoc == "a\n"
+  check parseOrderedListItem("1. a\n2.\n3. c", 5, marker, listItemDoc, index) == 3
+  check listItemDoc == ""
+  check parseOrderedListItem("1. a\n2.\n3. c", 8, marker, listItemDoc, index) == 4
+  check listItemDoc == "c"
+
+  # 253, It does not matter whether there are spaces following the list marker
+  check parseOrderedListItem("1. a\n2.   \n3. c", 0, marker, listItemDoc, index) == 5
+  check listItemDoc == "a\n"
+  check parseOrderedListItem("1. a\n2.   \n3. c", 5, marker, listItemDoc, index) == 6
+  check listItemDoc == ""
+  check parseOrderedListItem("1. a\n2.   \n3. c", 11, marker, listItemDoc, index) == 4
+  check listItemDoc == "c"
+
+  # 252 an empty bullet list item
+  marker = ""
+  check parseUnorderedListItem("- a\n-\n- c", 0, marker, listItemDoc) == 4
+  check listItemDoc == "a\n"
+  check parseUnorderedListItem("- a\n-\n- c", 4, marker, listItemDoc) == 2
+  check listItemDoc == ""
+  check parseUnorderedListItem("- a\n-\n- c", 6, marker, listItemDoc) == 3
+  check listItemDoc == "c"
+
+  # 251, A list item can begin with at most one blank line.
+  marker= ""
+  check parseUnorderedListItem("-\n\n  foo", 0, marker, listItemDoc) == 3
+  check listItemDoc == "\n"
+
+  # 250, When the list item starts with a blank line, the number of spaces following the list marker doesn’t change the required indentation
+  marker = ""
+  check parseUnorderedListItem("-   \n  foo", 0, marker, listItemDoc) == 10
+  check listItemDoc == "foo"
+
+  # 249, list items that start with a blank line but are not empty
+  marker = ""
+  check parseUnorderedListItem("-\n  a\n-\n  a\n  b\n  c\n-\n        baz", 0, marker, listItemDoc) == 6
+  check listItemDoc == "a\n"
+  check parseUnorderedListItem("-\n  a\n-\n  a\n  b\n  c\n-\n        baz", 6, marker, listItemDoc) == 14
+  check listItemDoc == "a\nb\nc\n"
+  check parseUnorderedListItem("-\n  a\n-\n  a\n  b\n  c\n-\n      baz", 20, marker, listItemDoc) == 11
+  check listItemDoc == "    baz"
+
+  # 248 when a block begins with 1-3 spaces indent, the indentation can always be removed without a change
+  marker = ""
+  check parseUnorderedListItem("-  foo\n\n   bar", 0, marker, listItemDoc) == 14
+  check listItemDoc == "foo\n\nbar"
+
+  # 247 the first block begins with a three-space indent, 
+  marker = ""
+  check parseUnorderedListItem("-    foo\n\n  bar", 0, marker, listItemDoc) == 10
+  check listItemDoc == "foo\n\n"
+
+  # 244, the first block begins with code block.
+  marker = ""
+  check parseUnorderedListItem("-     foo\n\n  p", 0, marker, listItemDoc) == 14
+  check listItemDoc == "    foo\n\np"
+  marker = ""
+  check parseOrderedListItem("1.     foo\n\n   p", 0, marker, listItemDoc, index) == 16
+  check listItemDoc == "    foo\n\np"
+
+  # 242, code: it is 11 spaces.
+  marker = ""
+  check parseUnorderedListItem("  -  a\n\n         code", 0, marker, listItemDoc) == 21
+  check listItemDoc == "a\n\n    code"
+  marker = ""
+  check parseOrderedListItem("  1.  a\n\n          code", 0, marker, listItemDoc, index) == 23
+  check listItemDoc == "a\n\n    code"
+
+  # 241, code: second block.
+  marker = ""
+  check parseUnorderedListItem("- a\n\n      code", 0, marker, listItemDoc) == 15
+  check listItemDoc == "a\n\n    code"
+  marker = ""
+  check parseOrderedListItem("1.  a\n\n        code", 0, marker, listItemDoc, index) == 19
+  check listItemDoc == "a\n\n    code"
+
+  # 239, start number may start with 0.
+  marker = ""
+  check parseOrderedListItem("003. ok", 0, marker, listItemDoc, index) == 7
+  check index == 3
+  marker = ""
+  check parseOrderedListItem("0. ok", 0, marker, listItemDoc, index) == 5
+  check index == 0
+  check parseOrderedListItem("123456789. ok", 0, marker, listItemDoc, index) == 13
+  check index == 123456789
+  check parseOrderedListItem("0123456789. ok", 0, marker, listItemDoc, index) == -1
+
+  # 235, preserve empty lines within the code block verbatim
+  marker = ""
+  check parseUnorderedListItem("- A\n\n      B\n\n      C", 0, marker, listItemDoc) == 21
+  check listItemDoc == "A\n\n    B\n\n    C"
+  marker = ""
+  check parseOrderedListItem("1. A\n\n       B\n\n       C", 0, marker, listItemDoc, index) == 24
+  check listItemDoc == "A\n\n    B\n\n    C"
+
+  # 274, Changing the bullet or ordered list delimiter starts a new list.
+  marker = ""
+  check parseUnorderedListItem("- a\n- b\n+ c", 0, marker, listItemDoc) == 4
+  check parseUnorderedListItem("- a\n- b\n+ c", 4, marker, listItemDoc) == 4
+  check parseUnorderedListItem("- a\n- b\n+ c", 8, marker, listItemDoc) == -1
+  marker = ""
+  check parseUnorderedListItem("- a\n- b\n+ c", 8, marker, listItemDoc) == 3
+
+  # 275,
+  marker = ""
+  check parseOrderedListItem("1. a\n2. b\n3) c", 0, marker, listItemDoc, index) == 5
+  check parseOrderedListItem("1. a\n2. b\n3) c", 5, marker, listItemDoc, index) == 5
+  check parseOrderedListItem("1. a\n2. b\n3) c", 10, marker, listItemDoc, index) == -1
+
+  # 279 any number of blank lines between items
+  marker = ""
+  check parseUnorderedListItem("- a\n\n- b\n\n\n- c", 0, marker, listItemDoc) == 5
+  check parseUnorderedListItem("- a\n\n- b\n\n\n- c", 5, marker, listItemDoc) == 6
+  check parseUnorderedListItem("- a\n\n- b\n\n\n- c", 11, marker, listItemDoc) == 3
+
+  # 280
+  marker = ""
+  check parseUnorderedListItem("- a\n  - aa\n    - aaa\n\n\n      aab", 0, marker, listItemDoc) == 32
+  check listItemDoc == "a\n- aa\n  - aaa\n\n    aab"
+
+  # 281, separate items
+  marker = ""
+  check parseUnorderedListItem("- a\n- b\n\n<!-- -->", 0, marker, listItemDoc) == 4
+  check parseUnorderedListItem("- a\n- b\n\n<!-- -->", 4, marker, listItemDoc) == 5
+
+  # 282, separate items
+  marker = ""
+  check parseUnorderedListItem("-   a\n\n    a\n\n-   b\n\n<!-- -->", 0, marker, listItemDoc) == 14
+  check parseUnorderedListItem("-   a\n\n    a\n\n-   b\n\n<!-- -->", 14, marker, listItemDoc) == 7
+
+  # 283, List items need not be indented to the same level
+  marker = ""
+  check parseUnorderedListItem("- a\n - b\n  - c\n", 0, marker, listItemDoc) == 4
+  check parseUnorderedListItem("- a\n - b\n  - c\n", 4, marker, listItemDoc) == 5
+  check parseUnorderedListItem("- a\n - b\n  - c\n", 9, marker, listItemDoc) == 6
+  marker = ""
+  check parseOrderedListItem("1. a\n 2. b\n  3. c", 0, marker, listItemDoc, index) == 5
+  check parseOrderedListItem("1. a\n 2. b\n  3. c", 5, marker, listItemDoc, index) == 6
+  check parseOrderedListItem("1. a\n 2. b\n  3. c", 11, marker, listItemDoc, index) == 6
+
+  # 285, list items may not be indented more than three spaces.
+  marker = ""
+  check parseUnorderedListItem("- a\n    - e", 0, marker, listItemDoc) == 11
+  check listItemDoc == "a\n  - e"
+
+  # 286, indented four spaces and preceded by a blank line.
+  marker = ""
+  check parseOrderedListItem("  1. a\n\n    2. b", 0, marker, listItemDoc, index) == 8
+  check parseOrderedListItem("  1. a\n\n    2. b", 8, marker, listItemDoc, index) == -1
+
+  # 287, loose list
+  marker = ""
+  check parseUnorderedListItem("- a\n- b\n\n- c", 0, marker, listItemDoc) == 4
+  check listItemDoc == "a\n"
+  check parseUnorderedListItem("- a\n- b\n\n- c", 4, marker, listItemDoc) == 5
+  check listItemDoc == "b\n\n"
+  check parseUnorderedListItem("- a\n- b\n\n- c", 9, marker, listItemDoc) == 3
+  check listItemDoc == "c"
+
+  # 288,  empty second item
+  marker = ""
+  check parseUnorderedListItem("* a\n*\n\n* c", 0, marker, listItemDoc) == 4
+  check listItemDoc == "a\n"
+  check parseUnorderedListItem("* a\n*\n\n* c", 4, marker, listItemDoc) == 3
+  check listItemDoc == "\n"
+  check parseUnorderedListItem("* a\n*\n\n* c", 7, marker, listItemDoc) == 3
+  check listItemDoc == "c"
+
+  # 289, 
+  marker = ""
+  check parseUnorderedListItem("- a\n- b\n\n  c\n- d", 0, marker, listItemDoc) == 4
+  check listItemDoc == "a\n"
+  check parseUnorderedListItem("- a\n- b\n\n  c\n- d", 4, marker, listItemDoc) == 9
+  check listItemDoc == "b\n\nc\n"
+  check parseUnorderedListItem("- a\n- b\n\n  c\n- d", 13, marker, listItemDoc) == 3
+  check listItemDoc == "d"
+
+  # 291
+  marker = ""
+  check parseUnorderedListItem("- a\n- ```\n  b\n\n  ```\n- c", 0, marker, listItemDoc) == 4
+  check listItemDoc == "a\n"
+  check parseUnorderedListItem("- a\n- ```\n  b\n\n  ```\n- c", 4, marker, listItemDoc) == 17
+  check listItemDoc == "```\nb\n\n```\n"
+  check parseUnorderedListItem("- a\n- ```\n  b\n\n  ```\n- c", 21, marker, listItemDoc) == 3
+  check listItemDoc == "c"
+
+  # 292
+  marker = ""
+  check parseUnorderedListItem("- a\n  - b\n  - c\n- d", 0, marker, listItemDoc) == 16
+  check listItemDoc == "a\n- b\n- c\n"
+  check parseUnorderedListItem("- a\n  - b\n  - c\n- d", 16, marker, listItemDoc) == 3
+
+  # 298
+  marker = ""
+  check parseUnorderedListItem("* a\n  * b\n\n  c", 0, marker, listItemDoc) == 14
+  check listItemDoc == "a\n* b\n\nc"

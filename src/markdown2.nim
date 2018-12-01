@@ -1,7 +1,7 @@
 import re, strutils, strformat, tables, sequtils, math, uri, htmlparser, lists, unicode
 from sequtils import map
 from lists import DoublyLinkedList, prepend, append
-from htmlgen import nil, p, br, em, strong, a, img, code, del, blockquote, li, ul, ol
+from htmlgen import nil, p, br, em, strong, a, img, code, del, blockquote, li, ul, ol, pre, code
 
 type
   MarkdownError* = object of Exception ## The error object for markdown parsing and rendering.
@@ -68,6 +68,7 @@ type
     ATXHeadingToken,
     SetextHeadingToken,
     ThematicBreakToken,
+    IndentedCodeToken,
     BlockquoteToken,
     BlankLineToken,
     UnorderedListToken,
@@ -99,6 +100,7 @@ type
     of SetextHeadingToken: setextHeadingVal*: Heading
     of ThematicBreakToken: hrVal*: string
     of BlankLineToken: blankLineVal*: string
+    of IndentedCodeToken: indentedCodeVal*: string
     of BlockquoteToken: blockquoteVal*: Blockquote
     of UnorderedListToken: ulVal*: UnorderedList
     of OrderedListToken: olVal*: OrderedList
@@ -134,6 +136,7 @@ var simpleRuleSet = RuleSet(
     BlockquoteToken,
     UnorderedListToken,
     OrderedListToken,
+    IndentedCodeToken,
     ATXHeadingToken,
     SetextHeadingToken,
     BlankLineToken,
@@ -159,6 +162,7 @@ var simpleRuleSet = RuleSet(
 let THEMATIC_BREAK_RE = r" {0,3}([-*_])(?:[ \t]*\1){2,}[ \t]*(?:\n+|$)"
 let ATX_HEADING_RE = r" {0,3}(#{1,6})( +)?(?(2)([^\n]*?))( +)?(?(4)#*) *(?:\n+|$)"
 let SETEXT_HEADING_RE = r"((?:(?:[^\n]+)\n)+) {0,3}(=|-)+ *(?:\n+|$)"
+let INDENTED_CODE_RE = r"((?: {4}| {0,3}\t)[^\n]+\n*)+"
 
 let TAGNAME = r"[A-Za-z][A-Za-z0-9-]*"
 let ATTRIBUTENAME = r"[a-zA-Z_:][a-zA-Z0-9:._-]*"
@@ -196,7 +200,13 @@ proc getLinkTitle*(doc: string, start: int, slice: var Slice[int]): int;
 proc render(state: var State, token: Token): string;
 
 proc preProcessing(state: var State, token: var Token) =
-  discard
+  token.doc = token.doc.replace(re"\r\n|\r", "\n")
+  token.doc = token.doc.replace(re"^\t", "    ")
+  token.doc = token.doc.replace(re"^ {1,3}\t", "    ")
+  token.doc = token.doc.replace("\u2424", " ")
+  token.doc = token.doc.replace("\u0000", "\uFFFD")
+  token.doc = token.doc.replace("&#0;", "&#XFFFD;")
+  token.doc = token.doc.replace(re(r"^ +$", {RegexFlag.reMultiLine}), "")
 
 proc escapeTag*(doc: string): string =
   ## Replace `<` and `>` to HTML-safe characters.
@@ -231,6 +241,9 @@ proc escapeAmpersandSeq*(doc: string): string =
 proc escapeCode*(doc: string): string =
   ## Make code block in markdown document HTML-safe.
   result = doc.escapeAmpersandChar.escapeTag
+
+proc removeBlankLines(doc: string): string =
+  doc.replace(re(r"^ {0,3}\n", {re.reMultiLine}), "\n").strip(leading=true, trailing=true, chars={'\n'})
 
 proc escapeInvalidHTMLTag(doc: string): string =
   doc.replacef(
@@ -512,6 +525,26 @@ proc parseThematicBreak(state: var State, token: var Token): bool =
   token.children.append(hr)
   return true
 
+proc parseIndentedCode(state: var State, token: var Token): bool =
+  # FIXME: example 81 failed: 6 spaces were striped earlier.
+  let start = token.getBlockStart
+  var matches: array[5, string]
+  let size = token.doc[start..<token.doc.len].matchLen(
+    re(r"^(" & INDENTED_CODE_RE & ")"),
+    matches=matches
+  )
+  if size == -1:
+    return false
+  var codeContent = matches[0].replace(re(r"^ {4}", {RegexFlag.reMultiLine}), "")
+  var indentedCode = Token(
+    type: IndentedCodeToken,
+    slice: (start .. start+size),
+    doc: codeContent,
+    indentedCodeVal: "",
+  )
+  token.children.append(indentedCode)
+  return true
+
 proc parseSetextHeading(state: var State, token: var Token): bool =
   let start = token.getBlockStart
   var matches: array[5, string]
@@ -734,6 +767,7 @@ proc parseBlock(state: var State, token: var Token) =
       of ThematicBreakToken: ok = parseThematicBreak(state, token)
       of ATXHeadingToken: ok = parseATXHeading(state, token)
       of SetextHeadingToken: ok = parseSetextHeading(state, token)
+      of IndentedCodeToken: ok = parseIndentedCode(state, token)
       of BlockquoteToken: ok = parseBlockquote(state, token)
       of BlankLineToken: ok = parseBlankLine(state, token)
       of UnorderedListToken: ok = parseUnorderedList(state, token)
@@ -1781,6 +1815,7 @@ proc renderToken(state: var State, token: Token): string =
   of ParagraphToken: state.renderParagraph(token)
   of ATXHeadingToken: fmt"<h{token.atxHeadingVal.level}>{state.renderInline(token)}</h{token.atxHeadingVal.level}>"
   of SetextHeadingToken: fmt"<h{token.setextHeadingVal.level}>{state.renderInline(token)}</h{token.setextHeadingVal.level}>"
+  of IndentedCodeToken: pre(code(token.doc.removeBlankLines.escapeCode, "\n"))
   of LinkToken:
     if token.linkVal.title == "": a(
       href=token.linkVal.url.escapeBackslash.escapeLinkUrl,

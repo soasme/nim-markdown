@@ -60,8 +60,13 @@ type
   ListItem = object
     marker: string
 
+  Heading = object
+    level: int
+
   TokenType* {.pure.} = enum
     ParagraphToken,
+    ATXHeadingToken,
+    SetextHeadingToken,
     ThematicBreakToken,
     BlockquoteToken,
     BlankLineToken,
@@ -90,6 +95,8 @@ type
     children: DoublyLinkedList[Token]
     case type*: TokenType
     of ParagraphToken: paragraphVal*: Paragraph
+    of ATXHeadingToken: atxHeadingVal*: Heading
+    of SetextHeadingToken: setextHeadingVal*: Heading
     of ThematicBreakToken: hrVal*: string
     of BlankLineToken: blankLineVal*: string
     of BlockquoteToken: blockquoteVal*: Blockquote
@@ -127,6 +134,8 @@ var simpleRuleSet = RuleSet(
     BlockquoteToken,
     UnorderedListToken,
     OrderedListToken,
+    ATXHeadingToken,
+    SetextHeadingToken,
     BlankLineToken,
     ParagraphToken,
   ],
@@ -148,6 +157,8 @@ var simpleRuleSet = RuleSet(
 )
 
 let THEMATIC_BREAK_RE = r" {0,3}([-*_])(?:[ \t]*\1){2,}[ \t]*(?:\n+|$)"
+let ATX_HEADING_RE = r" {0,3}(#{1,6})( +)?(?(2)([^\n]*?))( +)?(?(4)#*) *(?:\n+|$)"
+let SETEXT_HEADING_RE = r"((?:(?:[^\n]+)\n)+) {0,3}(=|-)+ *(?:\n+|$)"
 
 let TAGNAME = r"[A-Za-z][A-Za-z0-9-]*"
 let ATTRIBUTENAME = r"[a-zA-Z_:][a-zA-Z0-9:._-]*"
@@ -501,6 +512,52 @@ proc parseThematicBreak(state: var State, token: var Token): bool =
   token.children.append(hr)
   return true
 
+proc parseSetextHeading(state: var State, token: var Token): bool =
+  let start = token.getBlockStart
+  var matches: array[5, string]
+  let size = token.doc[start..<token.doc.len].matchLen(re(r"^(" & SETEXT_HEADING_RE & ")"), matches=matches)
+  if size == -1:
+    return false
+  var level = 1
+  if matches[2] == "=":
+    level = 1
+  elif matches[2] == "-":
+    level = 2
+  else:
+    raise newException(MarkdownError, fmt"unknown setext heading mark: {matches[2]}")
+
+  var heading = Token(
+    type: SetextHeadingToken,
+    slice: (start .. start+size),
+    doc: matches[1].strip,
+    setextHeadingVal: Heading(
+      level: level
+    )
+  )
+  token.children.append(heading)
+  return true
+
+
+proc parseATXHeading(state: var State, token: var Token): bool =
+  let start = token.getBlockStart
+  var matches: array[5, string]
+  let size = token.doc[start..<token.doc.len].matchLen(re(r"^" & ATX_HEADING_RE), matches=matches)
+  if size == -1:
+    return false
+  var doc = matches[2]
+  if doc =~ re"#+":
+    doc = ""
+  var heading = Token(
+    type: ATXHeadingToken,
+    slice: (start .. start+size),
+    doc: doc,
+    atxHeadingVal: Heading(
+      level: matches[0].len,
+    )
+  )
+  token.children.append(heading)
+  return true
+
 proc parseBlankLine(state: var State, token: var Token): bool =
   let start = token.getBlockStart
   let size = token.doc[start..<token.doc.len].matchLen(re(r"^((?:\s*\n)+)"))
@@ -675,6 +732,8 @@ proc parseBlock(state: var State, token: var Token) =
       case rule
       of ReferenceToken: ok = parseReference(state, token)
       of ThematicBreakToken: ok = parseThematicBreak(state, token)
+      of ATXHeadingToken: ok = parseATXHeading(state, token)
+      of SetextHeadingToken: ok = parseSetextHeading(state, token)
       of BlockquoteToken: ok = parseBlockquote(state, token)
       of BlankLineToken: ok = parseBlankLine(state, token)
       of UnorderedListToken: ok = parseUnorderedList(state, token)
@@ -1720,6 +1779,8 @@ proc renderToken(state: var State, token: Token): string =
   of ReferenceToken: ""
   of ThematicBreakToken: "<hr />"
   of ParagraphToken: state.renderParagraph(token)
+  of ATXHeadingToken: fmt"<h{token.atxHeadingVal.level}>{state.renderInline(token)}</h{token.atxHeadingVal.level}>"
+  of SetextHeadingToken: fmt"<h{token.setextHeadingVal.level}>{state.renderInline(token)}</h{token.setextHeadingVal.level}>"
   of LinkToken:
     if token.linkVal.title == "": a(
       href=token.linkVal.url.escapeBackslash.escapeLinkUrl,

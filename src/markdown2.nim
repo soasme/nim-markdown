@@ -170,6 +170,20 @@ let ATX_HEADING_RE = r" {0,3}(#{1,6})( +)?(?(2)([^\n]*?))( +)?(?(4)#*) *(?:\n+|$
 let SETEXT_HEADING_RE = r"((?:(?:[^\n]+)\n)+) {0,3}(=|-)+ *(?:\n+|$)"
 let INDENTED_CODE_RE = r"((?: {4}| {0,3}\t)[^\n]+\n*)+"
 
+let HTML_SCRIPT_START = r"^<(script|pre|style)(?=(\s|>|$))"
+let HTML_SCRIPT_END = r"</(script|pre|style)>"
+let HTML_COMMENT_START = r"^<!--"
+let HTML_COMMENT_END = r"-->"
+let HTML_PROCESSING_INSTRUCTION_START = r"^<\?"
+let HTML_PROCESSING_INSTRUCTION_END = r"\?>"
+let HTML_DECLARATION_START = r"^<\![A-Z]"
+let HTML_DECLARATION_END = r">"
+let HTML_CDATA_START = r"<!\[CDATA\["
+let HTML_CDATA_END = r"\]\]>"
+let HTML_VALID_TAGS = ["address", "article", "aside", "base", "basefont", "blockquote", "body", "caption", "center", "col", "colgroup", "dd", "details", "dialog", "dir", "div", "dl", "dt", "fieldset", "figcaption", "figure", "footer", "form", "frame", "frameset", "h1", "h2", "h3", "h4", "h5", "h6", "head", "header", "hr", "html", "iframe", "legend", "li", "link", "main", "menu", "menuitem", "meta", "nav", "noframes", "ol", "optgroup", "option", "p", "param", "section", "source", "summary", "table", "tbody", "td", "tfoot", "th", "thead", "title", "tr", "track", "ul"]
+let HTML_TAG_START = r"^</?(" & HTML_VALID_TAGS.join("\n") & r")(?=(\s|/?>|$))"
+let HTML_TAG_END = r"^$"
+
 let TAGNAME = r"[A-Za-z][A-Za-z0-9-]*"
 let ATTRIBUTENAME = r"[a-zA-Z_:][a-zA-Z0-9:._-]*"
 let UNQUOTEDVALUE = r"[^""'=<>`\x00-\x20]+"
@@ -679,6 +693,16 @@ proc parseBlankLine(state: var State, token: var Token): bool =
 
   token.children.append(blankLine)
   return true
+
+proc parseHTMLBlockContent(doc: string, size: var int): string =
+  # firstLine: detectOpenTag
+  # fail fast.
+  # firstLine: detectCloseTag
+  # success fast.
+  # rest of the lines:
+  #   detectCloseTag
+  #   success fast.
+  discard
 
 proc parseBlockquote(state: var State, token: var Token): bool =
   let markerContent = re(r"^(( {0,3}>([^\n]*(?:\n|$)))+)")
@@ -1896,7 +1920,7 @@ proc renderToken(state: var State, token: Token): string =
     if token.fenceCodeVal.info == "":
       pre(code(codeHTML))
     else:
-      pre(code(class=fmt"language-{token.fenceCodeVal.info}", codeHTML))
+      pre(code(class=fmt"language-{token.fenceCodeVal.info.escapeBackslash.escapeHTMLEntity}", codeHTML))
   of LinkToken:
     if token.linkVal.title == "": a(
       href=token.linkVal.url.escapeBackslash.escapeLinkUrl,

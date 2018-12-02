@@ -63,12 +63,16 @@ type
   Heading = object
     level: int
 
+  Fence = object
+    info: string
+
   TokenType* {.pure.} = enum
     ParagraphToken,
     ATXHeadingToken,
     SetextHeadingToken,
     ThematicBreakToken,
     IndentedCodeToken,
+    FenceCodeToken,
     BlockquoteToken,
     BlankLineToken,
     UnorderedListToken,
@@ -101,6 +105,7 @@ type
     of ThematicBreakToken: hrVal*: string
     of BlankLineToken: blankLineVal*: string
     of IndentedCodeToken: indentedCodeVal*: string
+    of FenceCodeToken: fenceCodeVal*: Fence
     of BlockquoteToken: blockquoteVal*: Blockquote
     of UnorderedListToken: ulVal*: UnorderedList
     of OrderedListToken: olVal*: OrderedList
@@ -137,6 +142,7 @@ var simpleRuleSet = RuleSet(
     UnorderedListToken,
     OrderedListToken,
     IndentedCodeToken,
+    FenceCodeToken,
     ATXHeadingToken,
     SetextHeadingToken,
     BlankLineToken,
@@ -206,6 +212,7 @@ proc preProcessing(state: var State, token: var Token) =
   token.doc = token.doc.replace("\u2424", " ")
   token.doc = token.doc.replace("\u0000", "\uFFFD")
   token.doc = token.doc.replace("&#0;", "&#XFFFD;")
+  # FIXME: it will aggressively clean empty line in code. 98
   token.doc = token.doc.replace(re(r"^ +$", {RegexFlag.reMultiLine}), "")
 
 proc escapeTag*(doc: string): string =
@@ -525,6 +532,71 @@ proc parseThematicBreak(state: var State, token: var Token): bool =
   token.children.append(hr)
   return true
 
+proc parseCodeFence(doc: string, indent: var int, size: var int): string =
+  var matches: array[2, string]
+  size = doc.matchLen(re"((?: {0,3})?)(`{3,}|~{3,})", matches=matches)
+  if size == -1:
+    return ""
+  indent = matches[0].len
+  doc[0 ..< size].strip
+
+proc parseCodeContent(doc: string, indent: int, fence: string, codeContent: var string): int =
+  var closeSize = -1
+  var pos = 0
+  var indentPrefix = ""
+  for i in (0 ..< indent):
+    indentPrefix &= " "
+  let closeRe = re(r"(?: {0,3})" & fence & fmt"{fence[0]}" & "{0,}(?:$|\n)")
+  for line in doc.splitLines:
+    closeSize = line.matchLen(closeRe)
+    if closeSize != -1:
+      pos += closeSize
+      break
+    if line != "":
+      codeContent &= line.replacef(re(r"^ {0," & indent.intToStr & r"}([^\n]*)"), "$1")
+    codeContent &= "\n"
+    pos += (line.len + 1)
+  pos
+
+proc parseCodeInfo(doc: string, size: var int): string =
+  var matches: array[1, string]
+  size = doc.matchLen(re"(?: |\t)*([^`\n]*)?(?:\n|$)", matches=matches)
+  if size == -1:
+    return ""
+  for item in matches[0].splitWhitespace:
+    return item
+  return ""
+
+proc parseFenceCode(state: var State, token: var Token): bool =
+  let start = token.getBlockStart
+  var pos = start
+  var indent = 0
+
+  var fenceSize = -1
+  var fence = parseCodeFence(token.doc[start ..< token.doc.len], indent, fenceSize)
+  if fenceSize == -1:
+    return false
+
+  pos += fenceSize
+  var infoSize = -1
+  var info = parseCodeInfo(token.doc[pos ..< token.doc.len], infoSize)
+  if infoSize == -1:
+    return false
+
+  pos += infoSize
+  var codeContent = ""
+  var codeContentSize = parseCodeContent(token.doc[pos ..< token.doc.len], indent, fence, codeContent)
+  pos += codeContentSize
+
+  var codeToken = Token(
+    type: FenceCodeToken,
+    slice: (start .. pos),
+    doc: codeContent,
+    fenceCodeVal: Fence(info: info),
+  )
+  token.children.append(codeToken)
+  true
+
 proc parseIndentedCode(state: var State, token: var Token): bool =
   # FIXME: example 81 failed: 6 spaces were striped earlier.
   let start = token.getBlockStart
@@ -768,6 +840,7 @@ proc parseBlock(state: var State, token: var Token) =
       of ATXHeadingToken: ok = parseATXHeading(state, token)
       of SetextHeadingToken: ok = parseSetextHeading(state, token)
       of IndentedCodeToken: ok = parseIndentedCode(state, token)
+      of FenceCodeToken: ok = parseFenceCode(state, token)
       of BlockquoteToken: ok = parseBlockquote(state, token)
       of BlankLineToken: ok = parseBlankLine(state, token)
       of UnorderedListToken: ok = parseUnorderedList(state, token)
@@ -1816,6 +1889,14 @@ proc renderToken(state: var State, token: Token): string =
   of ATXHeadingToken: fmt"<h{token.atxHeadingVal.level}>{state.renderInline(token)}</h{token.atxHeadingVal.level}>"
   of SetextHeadingToken: fmt"<h{token.setextHeadingVal.level}>{state.renderInline(token)}</h{token.setextHeadingVal.level}>"
   of IndentedCodeToken: pre(code(token.doc.removeBlankLines.escapeCode, "\n"))
+  of FenceCodeToken:
+    var codeHTML = token.doc.removeBlankLines.escapeCode
+    if codeHTML != "":
+      codeHTML &= "\n"
+    if token.fenceCodeVal.info == "":
+      pre(code(codeHTML))
+    else:
+      pre(code(class=fmt"language-{token.fenceCodeVal.info}", codeHTML))
   of LinkToken:
     if token.linkVal.title == "": a(
       href=token.linkVal.url.escapeBackslash.escapeLinkUrl,
@@ -2294,3 +2375,63 @@ when isMainModule:
   check listItemDoc == "a\n* b\n\nc"
   check parseUnorderedListItem("a\n* b\n\nc", 2, marker, listItemDoc) == 5
   check listItemDoc == "b\n\n"
+
+  var codeIndent = 0
+  var fenceSize = -1
+  check parseCodeFence("`", codeIndent, fenceSize) == ""
+  check parseCodeFence("~", codeIndent, fenceSize) == ""
+  check parseCodeFence("``", codeIndent, fenceSize) == ""
+  check parseCodeFence("~~", codeIndent, fenceSize) == ""
+  check parseCodeFence("```", codeIndent, fenceSize) == "```"
+  check parseCodeFence("~~~", codeIndent, fenceSize) == "~~~"
+  check parseCodeFence("````", codeIndent, fenceSize) == "````"
+  check parseCodeFence("~~~~", codeIndent, fenceSize) == "~~~~"
+  check parseCodeFence("````", codeIndent, fenceSize) == "````"
+  check parseCodeFence("~~~~", codeIndent, fenceSize) == "~~~~"
+  check parseCodeFence("   ```", codeIndent, fenceSize) == "```"
+  check codeIndent == 3
+
+  var codeSize = -1
+  check parseCodeInfo("", codeSize) == ""
+  check codeSize == 0
+  check parseCodeInfo("nim", codeSize) == "nim"
+  check codeSize == 3
+  check parseCodeInfo("nim\n", codeSize) == "nim"
+  check codeSize == 4
+  check parseCodeInfo("nim`", codeSize) == ""
+  check codeSize == -1
+  check parseCodeInfo(";", codeSize) == ";"
+  check codeSize == 1
+  check parseCodeInfo("    ruby startline=3 $%@#$\n", codeSize) == "ruby"
+  check codeSize == 27
+
+  var codeContent = ""
+  check parseCodeContent("a\n```", 0, "```", codeContent) == 5
+  check codeContent == "a\n"
+  codeContent = ""
+  check parseCodeContent(" a\n```", 1, "```", codeContent) == 6
+  check codeContent == "a\n"
+  codeContent = "" # 88
+  check parseCodeContent("<\n >\n```", 0, "```", codeContent) == 8
+  check codeContent == "<\n >\n"
+  codeContent = "" # 89
+  check parseCodeContent("<\n >\n~~~", 0, "~~~", codeContent) == 8
+  check codeContent == "<\n >\n"
+  codeContent = "" # 91
+  check parseCodeContent("a\n~~~\n```", 0, "```", codeContent) == 9
+  check codeContent == "a\n~~~\n"
+  codeContent = "" # 92
+  check parseCodeContent("a\n```\n~~~", 0, "~~~", codeContent) == 9
+  check codeContent == "a\n```\n"
+  codeContent = "" # 93
+  check parseCodeContent("a\n```\n`````", 0, "````", codeContent) == 11
+  check codeContent == "a\n```\n"
+  codeContent = "" # 94
+  check parseCodeContent("a\n~~~\n~~~~", 0, "~~~~", codeContent) == 10
+  check codeContent == "a\n~~~\n"
+  codeContent = "" # 96
+  check parseCodeContent("\n\n```\na", 0, "`````", codeContent) == 8
+  check codeContent == "\n\n```\na\n"
+  codeContent = "" # 101
+  check parseCodeContent("   a\n    a\n  a\n   ```", 3, "```", codeContent) == 21
+  check codeContent == "a\n a\na\n"

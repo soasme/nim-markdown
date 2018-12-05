@@ -1,7 +1,7 @@
 import re, strutils, strformat, tables, sequtils, math, uri, htmlparser, lists, unicode
 from sequtils import map
 from lists import DoublyLinkedList, prepend, append
-from htmlgen import nil, p, br, em, strong, a, img, code, del, blockquote, li, ul, ol, pre, code
+from htmlgen import nil, p, br, em, strong, a, img, code, del, blockquote, li, ul, ol, pre, code, table, thead, tbody, th, tr, td
 
 type
   MarkdownError* = object of Exception ## The error object for markdown parsing and rendering.
@@ -66,6 +66,18 @@ type
   Fence = object
     info: string
 
+  HTMLTableCell = object
+    i: int
+    j: int
+
+  HTMLTableRow = object
+    cells: seq[HTMLTableCell]
+
+  HTMLTable = object
+    head: HTMLTableRow
+    aligns: seq[string]
+    body: seq[HTMLTableRow]
+
   TokenType* {.pure.} = enum
     ParagraphToken,
     ATXHeadingToken,
@@ -75,6 +87,12 @@ type
     FenceCodeToken,
     BlockquoteToken,
     HTMLBlockToken,
+    TableToken,
+    THeadToken,
+    TBodyToken,
+    TableRowToken,
+    THeadCellToken,
+    TBodyCellToken
     BlankLineToken,
     UnorderedListToken,
     OrderedListToken,
@@ -112,6 +130,12 @@ type
     of UnorderedListToken: ulVal*: UnorderedList
     of OrderedListToken: olVal*: OrderedList
     of ListItemToken: listItemVal*: ListItem
+    of TableToken: tableVal*: HTMLTable
+    of THeadToken: theadVal: string
+    of TBodyToken: tbodyVal: string
+    of TableRowToken: tableRowVal: HTMLTableRow
+    of THeadCellToken: theadCellVal*: string
+    of TBodyCellToken: tbodyCellVal*: string
     of ReferenceToken: referenceVal*: Reference
     of TextToken: textVal*: string
     of EmphasisToken: emphasisVal*: string
@@ -148,6 +172,7 @@ var simpleRuleSet = RuleSet(
     HTMLBlockToken,
     ATXHeadingToken,
     SetextHeadingToken,
+    TableToken,
     BlankLineToken,
     ParagraphToken,
   ],
@@ -700,6 +725,92 @@ proc parseBlankLine(state: var State, token: var Token): bool =
   token.children.append(blankLine)
   return true
 
+proc parseTableRow*(doc: string): seq[string] =
+  var pos = 0
+  var max = doc.len
+  var ch: char
+  var escapes = 0
+  var lastPos = 0
+  var backTicked = false
+  var lastBackTick = 0
+
+  if doc == "":
+    return @[]
+
+  ch = doc[pos]
+
+  while pos < max:
+    if ch == '`':
+      if backTicked:
+        backTicked = false
+        lastBackTick = pos
+      elif escapes mod 2 == 0:
+        backTicked = true
+        lastBackTick = pos
+    elif ch == '|' and escapes mod 2 == 0 and not backTicked:
+      result.add(doc[lastPos ..< pos])
+      lastPos = pos + 1
+
+    if ch == '\\':
+      escapes += 1
+    else:
+      escapes = 0
+
+    pos += 1
+
+    if pos == max and backTicked:
+      backTicked = false
+      pos = lastBackTick + 1
+
+    if pos < max:
+      ch = doc[pos]
+
+  result.add(doc[lastPos ..< max])
+
+proc parseTableAligns(doc: string, aligns: var seq[string]): bool =
+  if not doc.match(re"^ {0,3}[-:|][-:|\s]*(?:\n|$)"):
+    return false
+  var columns = doc.split("|")
+  for index, column in columns:
+    var t = column.strip
+    if t == "":
+      if index == 0 or index == columns.len - 1:
+        continue
+      else:
+        return false
+    if not t.match(re"^:?-+:?$"):
+      return false
+    if t[0] == ':':
+      if t[t.len - 1] == ':':
+        aligns.add("center")
+      else:
+        aligns.add("left")
+    elif t[t.len - 1] == ':':
+      aligns.add("right")
+    else:
+      aligns.add("")
+  true
+
+proc parseTable(state: var State, token: var Token): bool =
+  # Algorithm:
+  # fail fast if less than 2 lines.
+  # second line: /^[-:|][-:|\s]*$/
+  # extract columns & aligns from the 2nd line.
+  # extract columns & headers from the 1st line.
+  # fail fast if align&header columns length not match.
+  # construct thead
+  # iterate the rest of lines.
+  #   extract tbody
+  # construct token.
+  let start = token.getBlockStart
+  var pos = start
+  let doc = token.doc[start ..< token.doc.len]
+  let lines = doc.splitLines(keepEol=true)
+  if lines.len < 2:
+    return false
+  echo(lines)
+  false
+
 proc parseHTMLBlockContent(doc: string, startPattern: string, endPattern: string, html: var string, ignoreCase = false): int =
   # Algorithm:
   # firstLine: detectOpenTag
@@ -984,6 +1095,7 @@ proc parseBlock(state: var State, token: var Token) =
       of HTMLBlockToken: ok = parseHTMLBlock(state, token)
       of UnorderedListToken: ok = parseUnorderedList(state, token)
       of OrderedListToken: ok = parseOrderedList(state, token)
+      of TableToken: ok = parseTable(state, token)
       of ParagraphToken: ok = parseParagraph(state, token)
       else:
         raise newException(MarkdownError, fmt"unknown rule. {token.children.tail.value.slice.b}")
@@ -2020,6 +2132,17 @@ proc renderListItem(state: var State, token: Token): string =
   else:
     li(state.renderListItemChildren(token))
 
+proc renderTableHead(state: var State, token: Token): string =
+  "<thead></thead>"
+
+proc renderTableBody(state: var State, token: Token): string =
+  "<tbody></tbody>"
+
+proc renderTable(state: var State, token: Token): string =
+  let thead = state.renderTableHead(token)
+  let tbody = state.renderTableBody(token)
+  table(thead, tbody)
+
 proc renderToken(state: var State, token: Token): string =
   case token.type
   of ReferenceToken: ""
@@ -2028,6 +2151,7 @@ proc renderToken(state: var State, token: Token): string =
   of ATXHeadingToken: fmt"<h{token.atxHeadingVal.level}>{state.renderInline(token)}</h{token.atxHeadingVal.level}>"
   of SetextHeadingToken: fmt"<h{token.setextHeadingVal.level}>{state.renderInline(token)}</h{token.setextHeadingVal.level}>"
   of IndentedCodeToken: pre(code(token.doc.removeBlankLines.escapeCode, "\n"))
+  of TableToken: state.renderTable(token)
   of FenceCodeToken:
     var codeHTML = token.doc.removeBlankLines.escapeCode
     if codeHTML != "":
@@ -2725,3 +2849,20 @@ function matchwo(a,b)
 
   # 150
   check parseHTMLBlockContent("    <!-- dah -->", HTML_COMMENT_START, HTML_COMMENT_END, htmlContent) == -1
+
+  
+  check parseTableRow("|a|") == @["", "a", ""]
+  check parseTableRow("|a|b|") == @["", "a", "b", ""]
+  check parseTableRow("|`a|b`|") == @["", "`a|b`", ""]
+  check parseTableRow(r"|\`a|\`b|") == @["", r"\`a", r"\`b", ""]
+  check parseTableRow("a") == @["a"]
+  check parseTableRow("a|b") == @["a", "b"]
+  var tableAlignMatches: seq[string] = @[]
+  check parseTableAligns("| --- | --- |", tableAlignMatches) == true
+  check tableAlignMatches == @["", ""]
+  tableAlignMatches = @[]
+  check parseTableAligns(":-: | -----------:", tableAlignMatches) == true
+  check tableAlignMatches == @["center", "right"]
+  tableAlignMatches = @[]
+  check parseTableAligns("| ------ |", tableAlignMatches) == true
+  check tableAlignMatches == @[""]

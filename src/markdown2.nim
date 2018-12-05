@@ -74,6 +74,7 @@ type
     IndentedCodeToken,
     FenceCodeToken,
     BlockquoteToken,
+    HTMLBlockToken,
     BlankLineToken,
     UnorderedListToken,
     OrderedListToken,
@@ -104,6 +105,7 @@ type
     of SetextHeadingToken: setextHeadingVal*: Heading
     of ThematicBreakToken: hrVal*: string
     of BlankLineToken: blankLineVal*: string
+    of HTMLBlockToken: htmlBlockVal*: string
     of IndentedCodeToken: indentedCodeVal*: string
     of FenceCodeToken: fenceCodeVal*: Fence
     of BlockquoteToken: blockquoteVal*: Blockquote
@@ -143,6 +145,7 @@ var simpleRuleSet = RuleSet(
     OrderedListToken,
     IndentedCodeToken,
     FenceCodeToken,
+    HTMLBlockToken,
     ATXHeadingToken,
     SetextHeadingToken,
     BlankLineToken,
@@ -170,19 +173,19 @@ let ATX_HEADING_RE = r" {0,3}(#{1,6})( +)?(?(2)([^\n]*?))( +)?(?(4)#*) *(?:\n+|$
 let SETEXT_HEADING_RE = r"((?:(?:[^\n]+)\n)+) {0,3}(=|-)+ *(?:\n+|$)"
 let INDENTED_CODE_RE = r"((?: {4}| {0,3}\t)[^\n]+\n*)+"
 
-let HTML_SCRIPT_START = r"^<(script|pre|style)(?=(\s|>|$))"
+let HTML_SCRIPT_START = r"^ {0,3}<(script|pre|style)(?=(\s|>|$))"
 let HTML_SCRIPT_END = r"</(script|pre|style)>"
-let HTML_COMMENT_START = r"^<!--"
+let HTML_COMMENT_START = r"^ {0,3}<!--"
 let HTML_COMMENT_END = r"-->"
-let HTML_PROCESSING_INSTRUCTION_START = r"^<\?"
+let HTML_PROCESSING_INSTRUCTION_START = r"^ {0,3}<\?"
 let HTML_PROCESSING_INSTRUCTION_END = r"\?>"
-let HTML_DECLARATION_START = r"^<\![A-Z]"
+let HTML_DECLARATION_START = r"^ {0,3}<\![A-Z]"
 let HTML_DECLARATION_END = r">"
-let HTML_CDATA_START = r"<!\[CDATA\["
+let HTML_CDATA_START = r" {0,3}<!\[CDATA\["
 let HTML_CDATA_END = r"\]\]>"
 let HTML_VALID_TAGS = ["address", "article", "aside", "base", "basefont", "blockquote", "body", "caption", "center", "col", "colgroup", "dd", "details", "dialog", "dir", "div", "dl", "dt", "fieldset", "figcaption", "figure", "footer", "form", "frame", "frameset", "h1", "h2", "h3", "h4", "h5", "h6", "head", "header", "hr", "html", "iframe", "legend", "li", "link", "main", "menu", "menuitem", "meta", "nav", "noframes", "ol", "optgroup", "option", "p", "param", "section", "source", "summary", "table", "tbody", "td", "tfoot", "th", "thead", "title", "tr", "track", "ul"]
-let HTML_TAG_START = r"^</?(" & HTML_VALID_TAGS.join("\n") & r")(?=(\s|/?>|$))"
-let HTML_TAG_END = r"^$"
+let HTML_TAG_START = r"^ {0,3}</?(" & HTML_VALID_TAGS.join("|") & r")(?=(\s|/?>|$))"
+let HTML_TAG_END = r"^\n?$"
 
 let TAGNAME = r"[A-Za-z][A-Za-z0-9-]*"
 let ATTRIBUTENAME = r"[a-zA-Z_:][a-zA-Z0-9:._-]*"
@@ -208,6 +211,9 @@ let HTML_TAG = (
   CDATA_SECTION &
   & r")"
 )
+
+let HTML_OPEN_CLOSE_TAG_START = "^ {0,3}(?:" & OPEN_TAG & "|" & CLOSE_TAG & r")\s*$"
+let HTML_OPEN_CLOSE_TAG_END = r"^\n?$"
 
 proc parse(state: var State, token: var Token);
 proc parseBlock(state: var State, token: var Token);
@@ -694,7 +700,8 @@ proc parseBlankLine(state: var State, token: var Token): bool =
   token.children.append(blankLine)
   return true
 
-proc parseHTMLBlockContent(doc: string, size: var int): string =
+proc parseHTMLBlockContent(doc: string, startPattern: string, endPattern: string, html: var string, ignoreCase = false): int =
+  # Algorithm:
   # firstLine: detectOpenTag
   # fail fast.
   # firstLine: detectCloseTag
@@ -702,7 +709,114 @@ proc parseHTMLBlockContent(doc: string, size: var int): string =
   # rest of the lines:
   #   detectCloseTag
   #   success fast.
-  discard
+  let startRe =
+    if ignoreCase:
+      re(startPattern, {RegexFlag.reIgnoreCase})
+    else:
+      re(startPattern)
+  let endRe =
+    if ignoreCase:
+      re(endPattern, {RegexFlag.reIgnoreCase})
+    else:
+      re(endPattern)
+  var pos = 0
+  var size = -1
+  let docLines = doc.splitLines(keepEol=true)
+  if docLines.len == 0:
+    return -1
+  let firstLine = docLines[0]
+  size = firstLine.matchLen(startRe)
+  if size == -1:
+    return -1
+  html = firstLine
+  size = firstLine.find(endRe)
+  if size != -1:
+    return firstLine.len
+  else:
+    pos = firstLine.len
+  for line in docLines[1 ..< docLines.len]:
+    pos += line.len
+    html &= line
+    if line.find(endRe) != -1:
+      break
+  return pos
+
+proc genHTMLBlockToken(token: var Token, htmlContent: string, start: int, size: int): bool =
+  var htmlBlock = Token(
+    type: HTMLBlockToken,
+    slice: (start .. start+size),
+    doc: htmlContent,
+    htmlBlockVal: ""
+  )
+  token.children.append(htmlBlock)
+  true
+
+proc parseHTMLBlock(state: var State, token: var Token): bool =
+  let start = token.getBlockStart
+  var htmlContent = ""
+  var size = parseHTMLBlockContent(
+    token.doc[start..<token.doc.len],
+    HTML_SCRIPT_START, HTML_SCRIPT_END,
+    htmlContent)
+  if size != -1:
+    return token.genHTMLBlockToken(htmlContent, start, size)
+
+  size = parseHTMLBlockContent(
+    token.doc[start..<token.doc.len],
+    HTML_COMMENT_START,
+    HTML_COMMENT_END,
+    htmlContent
+  )
+  if size != -1:
+    return token.genHTMLBlockToken(htmlContent, start, size)
+
+  size = parseHTMLBlockContent(
+    token.doc[start..<token.doc.len],
+    HTML_PROCESSING_INSTRUCTION_START,
+    HTML_PROCESSING_INSTRUCTION_END,
+    htmlContent
+  )
+  if size != -1:
+    return token.genHTMLBlockToken(htmlContent, start, size)
+
+  size = parseHTMLBlockContent(
+    token.doc[start..<token.doc.len],
+    HTML_DECLARATION_START,
+    HTML_DECLARATION_END,
+    htmlContent
+  )
+  if size != -1:
+    return token.genHTMLBlockToken(htmlContent, start, size)
+
+  size = parseHTMLBlockContent(
+    token.doc[start..<token.doc.len],
+    HTML_CDATA_START,
+    HTML_CDATA_END,
+    htmlContent
+  )
+  if size != -1:
+    return token.genHTMLBlockToken(htmlContent, start, size)
+
+  size = parseHTMLBlockContent(
+    token.doc[start..<token.doc.len],
+    HTML_TAG_START,
+    HTML_TAG_END,
+    htmlContent,
+    ignoreCase=true
+  )
+  if size != -1:
+    return token.genHTMLBlockToken(htmlContent, start, size)
+
+  size = parseHTMLBlockContent(
+    token.doc[start..<token.doc.len],
+    HTML_OPEN_CLOSE_TAG_START,
+    HTML_OPEN_CLOSE_TAG_END,
+    htmlContent
+  )
+  if size != -1:
+    return token.genHTMLBlockToken(htmlContent, start, size)
+
+  false
 
 proc parseBlockquote(state: var State, token: var Token): bool =
   let markerContent = re(r"^(( {0,3}>([^\n]*(?:\n|$)))+)")
@@ -867,6 +981,7 @@ proc parseBlock(state: var State, token: var Token) =
       of FenceCodeToken: ok = parseFenceCode(state, token)
       of BlockquoteToken: ok = parseBlockquote(state, token)
       of BlankLineToken: ok = parseBlankLine(state, token)
+      of HTMLBlockToken: ok = parseHTMLBlock(state, token)
       of UnorderedListToken: ok = parseUnorderedList(state, token)
       of OrderedListToken: ok = parseOrderedList(state, token)
       of ParagraphToken: ok = parseParagraph(state, token)
@@ -1942,6 +2057,7 @@ proc renderToken(state: var State, token: Token): string =
       title=token.imageVal.title.escapeBackslash.escapeHTMLEntity.escapeAmpersandSeq.escapeQuote,
     )
   of AutoLinkToken: a(href=token.autoLinkVal.url.escapeLinkUrl.escapeAmpersandSeq, token.autoLinkVal.text.escapeAmpersandSeq)
+  of HTMLBlockToken: token.doc.strip(chars={'\n'})
   of ListItemToken: state.renderListItem(token)
   of UnorderedListToken: state.renderUnorderedList(token)
   of OrderedListToken: state.renderOrderedList(token)
@@ -2459,3 +2575,153 @@ when isMainModule:
   codeContent = "" # 101
   check parseCodeContent("   a\n    a\n  a\n   ```", 3, "```", codeContent) == 21
   check codeContent == "a\n a\na\n"
+
+  var htmlContent = ""
+  check parseHTMLBlockContent("<script>console.log('hello')</script>", HTML_SCRIPT_START, HTML_SCRIPT_END, htmlContent) == 37
+  check htmlContent == "<script>console.log('hello')</script>"
+
+  check parseHTMLBlockContent("<script>\nconsole.log('hello')\n</script>", HTML_SCRIPT_START, HTML_SCRIPT_END, htmlContent) == 39
+  check htmlContent == "<script>\nconsole.log('hello')\n</script>"
+
+  # 116
+  check parseHTMLBlockContent("<table><tr><td>\n<pre>\n**hello**\n\n_world_.</pre>", HTML_TAG_START, HTML_TAG_END, htmlContent) == 33
+  check htmlContent == "<table><tr><td>\n<pre>\n**hello**\n\n"
+
+  # Example 117
+  check parseHTMLBlockContent("<table>\n <tr> \n      <td>hi</td>\n </tr>\n</table>\n\n okay.", HTML_TAG_START, HTML_TAG_END, htmlContent) == 50
+  check htmlContent == "<table>\n <tr> \n      <td>hi</td>\n </tr>\n</table>\n\n"
+
+  # 118
+  check parseHTMLBlockContent(" <div>\n  *hello*\n           <foo><a>", HTML_TAG_START, HTML_TAG_END, htmlContent) == 36
+  check htmlContent == " <div>\n  *hello*\n           <foo><a>"
+
+  # 119
+  check parseHTMLBlockContent("</div>\n*foo*", HTML_TAG_START, HTML_TAG_END, htmlContent) == 12
+  check htmlContent == "</div>\n*foo*"
+
+  # 120
+  check parseHTMLBlockContent("<DIV class=\"foo\">\n\n*Markdown*\n\n</DIV>", HTML_TAG_START, HTML_TAG_END, htmlContent, ignoreCase=true) == 19
+  check htmlContent == "<DIV class=\"foo\">\n\n"
+
+  # 121
+  check parseHTMLBlockContent("""<div id="foo"
+  class="bar">
+</div>""", HTML_TAG_START, HTML_TAG_END, htmlContent) == 35
+  check htmlContent == """<div id="foo"
+  class="bar">
+</div>"""
+
+  # 122
+  check parseHTMLBlockContent("""<div id="foo" class="bar
+  baz">
+</div>""", HTML_TAG_START, HTML_TAG_END, htmlContent) == 39
+  check htmlContent == """<div id="foo" class="bar
+  baz">
+</div>"""
+
+  # 123
+  check parseHTMLBlockContent("""<div>
+*foo*
+
+*bar*""", HTML_TAG_START, HTML_TAG_END, htmlContent) == 13
+  check htmlContent == """<div>
+*foo*
+
+"""
+
+  # 124
+  check parseHTMLBlockContent("""<div id="foo"
+*hi*""", HTML_TAG_START, HTML_TAG_END, htmlContent) == 18
+  check htmlContent == """<div id="foo"
+*hi*"""
+
+  # 127
+  check parseHTMLBlockContent("<div><a href=\"bar\">*foo*</a></div>", HTML_TAG_START, HTML_TAG_END, htmlContent) == 34
+  check htmlContent == "<div><a href=\"bar\">*foo*</a></div>"
+
+  # 129
+  check parseHTMLBlockContent("<div></div>\n``` c\nint x = 33;\n```", HTML_TAG_START, HTML_TAG_END, htmlContent) == 33
+  check htmlContent == "<div></div>\n``` c\nint x = 33;\n```"
+
+  # 130
+  check parseHTMLBlockContent("""<a href="foo">
+*bar*
+</a>""", HTML_OPEN_CLOSE_TAG_START, HTML_OPEN_CLOSE_TAG_END, htmlContent) == 25
+  check htmlContent == """<a href="foo">
+*bar*
+</a>"""
+
+  # 131
+  check parseHTMLBlockContent("""<Warning>
+*bar*
+</Warning>""", HTML_OPEN_CLOSE_TAG_START, HTML_OPEN_CLOSE_TAG_END, htmlContent) == 26
+  check htmlContent == """<Warning>
+*bar*
+</Warning>"""
+
+  # 132
+  check parseHTMLBlockContent("""<i class="foo">
+*bar*
+</i>""", HTML_OPEN_CLOSE_TAG_START, HTML_OPEN_CLOSE_TAG_END, htmlContent) == 26
+  check htmlContent == """<i class="foo">
+*bar*
+</i>"""
+
+  # 133
+  check parseHTMLBlockContent("""</ins>
+*bar*""", HTML_OPEN_CLOSE_TAG_START, HTML_OPEN_CLOSE_TAG_END, htmlContent) == 12
+  check htmlContent == """</ins>
+*bar*"""
+
+  # 134
+  check parseHTMLBlockContent("""<del>
+*foo*
+</del>""", HTML_OPEN_CLOSE_TAG_START, HTML_OPEN_CLOSE_TAG_END, htmlContent) == 18
+  check htmlContent == """<del>
+*foo*
+</del>"""
+
+  # 135
+  check parseHTMLBlockContent("""<del>
+
+*foo*
+
+</del>""", HTML_OPEN_CLOSE_TAG_START, HTML_OPEN_CLOSE_TAG_END, htmlContent) == 7
+  check htmlContent == "<del>\n\n"
+
+  # 136
+  check parseHTMLBlockContent("<del>*foo*</del>", HTML_OPEN_CLOSE_TAG_START, HTML_OPEN_CLOSE_TAG_END, htmlContent) == -1
+
+  # 144
+  check parseHTMLBlockContent("""<!-- foo -->*bar*
+*baz*""", HTML_COMMENT_START, HTML_COMMENT_END, htmlContent) == 18
+  check htmlContent == "<!-- foo -->*bar*\n"
+
+  # 145
+  check parseHTMLBlockContent("""<script>
+foo
+</script>1. *bar*""", HTML_SCRIPT_START, HTML_SCRIPT_END, htmlContent) == 30
+  check htmlContent == """<script>
+foo
+</script>1. *bar*"""
+
+  # 147
+  check parseHTMLBlockContent("<?php\n\necho '>'\n\n?>", HTML_PROCESSING_INSTRUCTION_START, HTML_PROCESSING_INSTRUCTION_END, htmlContent) == 19
+  check htmlContent == "<?php\n\necho '>'\n\n?>"
+
+  # 148
+  check parseHTMLBlockContent("<!DOCTYPE html>", HTML_DECLARATION_START, HTML_DECLARATION_END, htmlContent) == 15
+  check htmlContent == "<!DOCTYPE html>"
+
+  # 149
+  check parseHTMLBlockContent("""<![CDATA[
+function matchwo(a,b)
+]]>
+okay""", HTML_CDATA_START, HTML_CDATA_END, htmlContent) == 36
+  check htmlContent == """<![CDATA[
+function matchwo(a,b)
+]]>
+"""
+
+  # 150
+  check parseHTMLBlockContent("    <!-- dah -->", HTML_COMMENT_START, HTML_COMMENT_END, htmlContent) == -1

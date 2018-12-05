@@ -67,16 +67,16 @@ type
     info: string
 
   HTMLTableCell = object
+    align: string
     i: int
     j: int
 
   HTMLTableRow = object
-    cells: seq[HTMLTableCell]
+    th: bool
+    td: bool
 
   HTMLTable = object
-    head: HTMLTableRow
     aligns: seq[string]
-    body: seq[HTMLTableRow]
 
   TokenType* {.pure.} = enum
     ParagraphToken,
@@ -134,8 +134,8 @@ type
     of THeadToken: theadVal: string
     of TBodyToken: tbodyVal: string
     of TableRowToken: tableRowVal: HTMLTableRow
-    of THeadCellToken: theadCellVal*: string
-    of TBodyCellToken: tbodyCellVal*: string
+    of THeadCellToken: theadCellVal*: HTMLTableCell
+    of TBodyCellToken: tbodyCellVal*: HTMLTableCell
     of ReferenceToken: referenceVal*: Reference
     of TextToken: textVal*: string
     of EmphasisToken: emphasisVal*: string
@@ -791,7 +791,7 @@ proc parseTableAligns(doc: string, aligns: var seq[string]): bool =
       aligns.add("")
   true
 
-proc parseTable(state: var State, token: var Token): bool =
+proc parseHTMLTable(state: var State, token: var Token): bool =
   # Algorithm:
   # fail fast if less than 2 lines.
   # second line: /^[-:|][-:|\s]*$/
@@ -808,8 +808,90 @@ proc parseTable(state: var State, token: var Token): bool =
   let lines = doc.splitLines(keepEol=true)
   if lines.len < 2:
     return false
-  echo(lines)
-  false
+  
+  var aligns: seq[string]
+  if not parseTableAligns(lines[1], aligns):
+    return false
+
+  if lines[0].matchLen(re"^ {4,}") != -1:
+    return false
+
+  if lines[0] == "" or lines[0].find('|') == -1:
+    return false
+
+  var heads = parseTableRow(lines[0].replace(re"^\||\|$", ""))
+  if heads.len > aligns.len:
+    return false
+
+  var theadToken = Token(
+    type: TableRowToken,
+    slice: (start ..< start+lines[0].len),
+    doc: lines[0],
+    tableRowVal: HTMLTableRow(th: true, td: false),
+  )
+  for index, elem in heads:
+    var thToken = Token(
+      type: THeadCellToken,
+      slice: (0 ..< elem.len),
+      doc: elem,
+      theadCellVal: HTMLTableCell(
+        i: index,
+        j: 0,
+        align: aligns[index],
+      )
+    )
+    theadToken.children.append(thToken)
+
+  pos += lines[0].len + lines[1].len
+
+  var tbody: seq[Token]
+  for lineIndex, line in lines[2 ..< lines.len]:
+    if lines[0].matchLen(re"^ {4,}") != -1:
+      break
+    if lines[0] == "" or lines[0].find('|') == -1:
+      break
+
+    var rowColumns = parseTableRow(line.replace(re"^\||\|$", ""))
+
+    var tableRowToken = Token(
+      type: TableRowToken,
+      slice: (0 .. 0),
+      doc: "",
+      tableRowVal: HTMLTableRow(th: false, td: true),
+    )
+    for index, elem in heads:
+      var doc = 
+        if index > rowColumns.len:
+          ""
+        else:
+          rowColumns[index]
+      var tdToken = Token(
+        type: TBodyCellToken,
+        slice: (0 .. 0),
+        doc: doc,
+        tbodyCellVal: HTMLTableCell(
+          i: index,
+          j: lineIndex,
+          align: aligns[index]
+        )
+      )
+      tableRowToken.children.append(tdToken)
+    tbody.add(tableRowToken)
+    pos += line.len
+
+  var tableToken = Token(
+    type: TableToken,
+    slice: (start .. pos),
+    doc: token.doc[start ..< pos],
+    tableVal: HTMLTable(
+      aligns: aligns,
+    )
+  )
+  tableToken.children.append(theadToken)
+  for tbodyRowToken in tbody:
+    tableToken.children.append(tbodyRowToken)
+  token.children.append(tableToken)
+  true
 
 proc parseHTMLBlockContent(doc: string, startPattern: string, endPattern: string, html: var string, ignoreCase = false): int =
   # Algorithm:
@@ -1095,7 +1177,7 @@ proc parseBlock(state: var State, token: var Token) =
       of HTMLBlockToken: ok = parseHTMLBlock(state, token)
       of UnorderedListToken: ok = parseUnorderedList(state, token)
       of OrderedListToken: ok = parseOrderedList(state, token)
-      of TableToken: ok = parseTable(state, token)
+      of TableToken: ok = parseHTMLTable(state, token)
       of ParagraphToken: ok = parseParagraph(state, token)
       else:
         raise newException(MarkdownError, fmt"unknown rule. {token.children.tail.value.slice.b}")
@@ -2133,7 +2215,19 @@ proc renderListItem(state: var State, token: Token): string =
     li(state.renderListItemChildren(token))
 
 proc renderTableHead(state: var State, token: Token): string =
-  "<thead></thead>"
+  var s = state
+  thead(
+    "\n",
+    tr(
+      "\n",
+      token.children.head.value.children.toSeq.map(
+        proc(x: Token): string =
+          s.renderToken(x)
+      ).join("\n"),
+      "\n"
+    ),
+    "\n"
+  )
 
 proc renderTableBody(state: var State, token: Token): string =
   "<tbody></tbody>"
@@ -2141,7 +2235,7 @@ proc renderTableBody(state: var State, token: Token): string =
 proc renderTable(state: var State, token: Token): string =
   let thead = state.renderTableHead(token)
   let tbody = state.renderTableBody(token)
-  table(thead, tbody)
+  table("\n", thead, tbody)
 
 proc renderToken(state: var State, token: Token): string =
   case token.type
@@ -2152,6 +2246,18 @@ proc renderToken(state: var State, token: Token): string =
   of SetextHeadingToken: fmt"<h{token.setextHeadingVal.level}>{state.renderInline(token)}</h{token.setextHeadingVal.level}>"
   of IndentedCodeToken: pre(code(token.doc.removeBlankLines.escapeCode, "\n"))
   of TableToken: state.renderTable(token)
+  of THeadCellToken:
+    let align = token.theadCellVal.align
+    if align == "":
+      fmt"<th>{state.renderInline(token)}</th>"
+    else:
+      fmt("<th align=\"{align}\">{state.renderInline(token)}</th>")
+  of TBodyCellToken:
+    let align = token.theadCellVal.align
+    if align == "":
+      fmt"<td>{state.renderInline(token)}</td>"
+    else:
+      fmt("<td align=\"{align}\">{state.renderInline(token)}</td>")
   of FenceCodeToken:
     var codeHTML = token.doc.removeBlankLines.escapeCode
     if codeHTML != "":

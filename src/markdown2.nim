@@ -420,6 +420,10 @@ proc parseOrderedListItem(doc: string, start=0, marker: var string, listItemDoc:
   return pos - start
 
 proc parseUnorderedListItem(doc: string, start=0, marker: var string, listItemDoc: var string): int =
+  #  thematic break takes precedence over list item.
+  if doc[start ..< doc.len].matchLen(re(r"^" & THEMATIC_BREAK_RE)) != -1:
+    return -1
+
   let markerRegex = re"^(?P<leading> {0,3})(?P<marker>[*\-+])(?: *$| *\n|(?<indent> +)([^\n]+(?:\n|$)))"
   var matches: array[5, string]
   var pos = start
@@ -491,7 +495,6 @@ proc parseUnorderedList(state: var State, token: var Token): bool =
     if itemSize == -1:
       break
 
-    echo(@[listItemDoc])
     var listItem = Token(
       type: ListItemToken,
       slice: (pos .. pos + itemSize),
@@ -2434,6 +2437,8 @@ when isMainModule:
   var marker = "*"
   var listItemDoc = ""
   var index = 1
+
+  check parseUnorderedListItem("* **", 0, marker, listItemDoc) == -1
 
   # 255
   check parseUnorderedListItem("*", 0, marker, listItemDoc) == 1

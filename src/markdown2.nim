@@ -360,7 +360,7 @@ proc parseParagraph(state: var State, token: var Token): bool =
     slice: (start .. start+size),
     doc: token.doc[start ..< start+size].replace(re"\n\s*", "\n").strip,
     paragraphVal: Paragraph(
-      doc: token.doc[start ..< start+size].replace(re"\n\s*", "\n")
+      doc: token.doc[start ..< start+size]
     )
   )
 
@@ -475,10 +475,8 @@ proc isLoose(token: Token): bool =
       if node.value.doc.find(re"\n\n$") != -1:
         return true
     # any of its constituent list items are separated by blank lines
-    for childNode in node.value.children.nodes:
-      if childNode.next != nil:
-        if childNode.value.doc.find(re"\n\n$") != -1:
-          return true
+    if node.value.doc.find(re"\n\n(?!$)") != -1:
+      return true
   return false
 
 proc parseUnorderedList(state: var State, token: var Token): bool =
@@ -493,6 +491,7 @@ proc parseUnorderedList(state: var State, token: var Token): bool =
     if itemSize == -1:
       break
 
+    echo(@[listItemDoc])
     var listItem = Token(
       type: ListItemToken,
       slice: (pos .. pos + itemSize),
@@ -2226,7 +2225,10 @@ proc renderUnorderedList(state: var State, token: Token): string =
 proc renderOrderedList(state: var State, token: Token): string =
   var origLoose = state.loose
   state.loose = token.olVal.loose
-  result = ol("\n", state.render(token))
+  if token.olVal.start != 1:
+    result = ol(start=fmt"{token.olVal.start}", "\n", state.render(token))
+  else:
+    result = ol("\n", state.render(token))
   state.loose = origLoose
 
 proc renderListItem(state: var State, token: Token): string =

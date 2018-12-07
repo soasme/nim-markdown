@@ -2346,7 +2346,7 @@ proc renderToken(state: var State, token: Token): string =
   of ParagraphToken: state.renderParagraph(token)
   of ATXHeadingToken: fmt"<h{token.atxHeadingVal.level}>{state.renderInline(token)}</h{token.atxHeadingVal.level}>"
   of SetextHeadingToken: fmt"<h{token.setextHeadingVal.level}>{state.renderInline(token)}</h{token.setextHeadingVal.level}>"
-  of IndentedCodeToken: pre(code(token.doc.removeBlankLines.escapeCode, "\n"))
+  of IndentedCodeToken: pre(code(token.doc.removeBlankLines.escapeCode.escapeQuote, "\n"))
   of TableToken: state.renderTable(token)
   of THeadToken: state.renderTableHead(token)
   of TBodyToken: state.renderTableBody(token)
@@ -2354,7 +2354,7 @@ proc renderToken(state: var State, token: Token): string =
   of THeadCellToken: state.renderTableHeadCell(token)
   of TBodyCellToken: state.renderTableBodyCell(token)
   of FenceCodeToken:
-    var codeHTML = token.doc.removeFenceBlankLines.escapeCode
+    var codeHTML = token.doc.removeFenceBlankLines.escapeCode.escapeQuote
     if codeHTML != "":
       codeHTML &= "\n"
     if token.fenceCodeVal.info == "":

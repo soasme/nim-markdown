@@ -1195,7 +1195,7 @@ proc parseReference*(state: var State, token: var Token): bool =
     if titleLen >= 0:
       pos += titleLen
       # link title may not contain a blank line
-      if token.doc[titleSlice].match(re"\n{2,}"):
+      if token.doc[titleSlice].find(re"\n{2,}") != -1:
         return false
 
   # parse whitespace, no more non-whitespace is allowed from now.

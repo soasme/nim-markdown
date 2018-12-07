@@ -305,7 +305,10 @@ proc escapeCode*(doc: string): string =
   result = doc.escapeAmpersandChar.escapeTag
 
 proc removeBlankLines(doc: string): string =
-  doc.replace(re(r"^ {0,3}\n", {re.reMultiLine}), "\n").strip(leading=true, trailing=true, chars={'\n'})
+  doc.strip(leading=false, trailing=true, chars={'\n'})
+  
+proc removeFenceBlankLines(doc: string): string =
+  doc.replace(re(r"^ {0,3}\n", {re.reMultiLine}), "\n").strip(leading=false, trailing=true, chars={'\n'})
 
 proc escapeInvalidHTMLTag(doc: string): string =
   doc.replacef(
@@ -606,18 +609,21 @@ proc parseCodeContent*(doc: string, indent: int, fence: string, codeContent: var
   var closeSize = -1
   var pos = 0
   var indentPrefix = ""
+  codeContent = ""
   for i in (0 ..< indent):
     indentPrefix &= " "
   let closeRe = re(r"(?: {0,3})" & fence & fmt"{fence[0]}" & "{0,}(?:$|\n)")
-  for line in doc.splitLines:
+  for line in doc.splitLines(keepEol=true):
     closeSize = line.matchLen(closeRe)
     if closeSize != -1:
       pos += closeSize
       break
-    if line != "":
+
+    if line != "\n" and line != "":
       codeContent &= line.replacef(re(r"^ {0," & indent.intToStr & r"}([^\n]*)"), "$1")
-    codeContent &= "\n"
-    pos += (line.len + 1)
+    else:
+      codeContent &= line
+    pos += line.len
   pos
 
 proc parseCodeInfo*(doc: string, size: var int): string =
@@ -2346,7 +2352,7 @@ proc renderToken(state: var State, token: Token): string =
   of THeadCellToken: state.renderTableHeadCell(token)
   of TBodyCellToken: state.renderTableBodyCell(token)
   of FenceCodeToken:
-    var codeHTML = token.doc.removeBlankLines.escapeCode
+    var codeHTML = token.doc.removeFenceBlankLines.escapeCode
     if codeHTML != "":
       codeHTML &= "\n"
     if token.fenceCodeVal.info == "":

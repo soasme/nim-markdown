@@ -707,8 +707,10 @@ test "parse code content":
   check parseCodeContent("a\n~~~\n~~~~", 0, "~~~~", codeContent) == 10
   check codeContent == "a\n~~~\n"
   codeContent = "" # 96
-  check parseCodeContent("\n\n```\na", 0, "`````", codeContent) == 8
-  check codeContent == "\n\n```\na\n"
+  check parseCodeContent("\n\n```\na", 0, "`````", codeContent) == 7
+  check codeContent == "\n\n```\na"
+  check parseCodeContent(" a\na\n```", 1, "```", codeContent) == 8
+  check codeContent == "a\na\n"
   codeContent = "" # 101
   check parseCodeContent("   a\n    a\n  a\n   ```", 3, "```", codeContent) == 21
   check codeContent == "a\n a\na\n"

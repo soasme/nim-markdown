@@ -1198,10 +1198,12 @@ proc parseReference*(state: var State, token: var Token): bool =
       if token.doc[titleSlice].find(re"\n{2,}") != -1:
         return false
 
-  # parse whitespace, no more non-whitespace is allowed from now.
-  whitespaceLen = token.doc[pos ..< token.doc.len].matchLen(re"^\s*\n+")
-  if whitespaceLen != -1:
-    pos += whitespaceLen
+    # parse whitespace, no more non-whitespace is allowed from now.
+    whitespaceLen = token.doc[pos ..< token.doc.len].matchLen(re"^\s*(?:\n|$)")
+    if whitespaceLen != -1:
+      pos += whitespaceLen
+    else:
+      return false
 
   # construct token
   var title = ""

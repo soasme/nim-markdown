@@ -180,10 +180,10 @@ var simpleRuleSet = RuleSet(
     IndentedCodeToken,
     FenceCodeToken,
     HTMLBlockToken,
-    ATXHeadingToken,
-    SetextHeadingToken,
     TableToken,
     BlankLineToken,
+    ATXHeadingToken,
+    SetextHeadingToken,
     ParagraphToken,
   ],
   inlineRules: @[
@@ -679,24 +679,55 @@ proc parseIndentedCode(state: var State, token: var Token): bool =
   token.children.append(indentedCode)
   return true
 
+proc parseSetextHeadingContent*(doc: string, headingContent: var string, headingLevel: var int): int =
+  var pos = 0
+  var markerLen = 0
+  var lineNumber = 0
+  var matches: array[1, string]
+  let pattern = re(r" {0,3}(=|-)+ *(?:\n+|$)")
+  headingLevel = 0
+  for line in doc.splitLines(keepEol=true):
+    if lineNumber == 0:
+      pos += line.len
+      lineNumber += 1
+      continue
+    else:
+      lineNumber += 1
+    if line.match(re"^(?:\n|$)"): # empty line: break
+      break
+    if line.matchLen(re"^ {4,}") != -1: # not a code block anymore.
+      pos += line.len
+      continue
+    if line.match(pattern, matches=matches):
+      pos += line.len
+      markerLen = line.len
+      if matches[0] == "=":
+        headingLevel = 1
+      elif matches[0] == "-":
+        headingLevel = 2
+      break
+    else:
+      pos += line.len
+  if headingLevel == 0:
+    -1
+  else:
+    headingContent = doc[0 ..< pos - markerLen]
+    pos
+
+
 proc parseSetextHeading(state: var State, token: var Token): bool =
   let start = token.getBlockStart
-  var matches: array[5, string]
-  let size = token.doc[start..<token.doc.len].matchLen(re(r"^(" & SETEXT_HEADING_RE & ")"), matches=matches)
+  var content = ""
+  var level = 0
+  let size = token.doc[start ..< token.doc.len].parseSetextHeadingContent(content, level)
   if size == -1:
     return false
-  var level = 1
-  if matches[2] == "=":
-    level = 1
-  elif matches[2] == "-":
-    level = 2
-  else:
-    raise newException(MarkdownError, fmt"unknown setext heading mark: {matches[2]}")
-
+  if content.match(re"(?:\s*\n)+"):
+    return false
   var heading = Token(
     type: SetextHeadingToken,
     slice: (start .. start+size),
-    doc: matches[1].strip,
+    doc: content.strip,
     setextHeadingVal: Heading(
       level: level
     )

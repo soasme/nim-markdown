@@ -879,3 +879,23 @@ test "parse table rows & aligns":
   tableAlignMatches = @[]
   check parseTableAligns("| ------ |", tableAlignMatches) == true
   check tableAlignMatches == @[""]
+
+test "parse setext heading content":
+  var level = 0
+  var content = ""
+  check parseSetextHeadingContent("a", content, level) == -1
+  check parseSetextHeadingContent("a\n-", content, level) == 3
+  check content == "a\n"
+  check level == 2
+  check parseSetextHeadingContent("F\n==\n\nF\n--\n", content, level) == 5
+  check content == "F\n"
+  check level == 1
+  check parseSetextHeadingContent("F\nb\n====\n", content, level) == 9
+  check content == "F\nb\n"
+  check level == 1
+  check parseSetextHeadingContent("   F\n-\n", content, level) == 7
+  check content == "   F\n"
+  check level == 2
+  # 54: parseSetextHeadingContent cannot tell 4 spaces.
+  check parseSetextHeadingContent("Foo\n    --", content, level) == -1
+  #check parseSetextHeading("")

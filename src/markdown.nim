@@ -1,122 +1,23 @@
-# nim-markdown
-#
-## A beautiful Markdown parser in the Nim world.
-##
-## Usage of the binary: convert markdown document in bash like below.::
-##
-##    $ markdown < file.md > file.html
-##
-## Disable escaping characters via `--no-escape`::
-##
-##    $ markdown --no-escape < file.md
-##
-## Usage of the library: import this file by writing `import markdown`.::
-##
-##     let s = markdown("# hello world")
-##     echo(s)
-##
-## Options can be created with `initMarkdownConfig <#initMarkdownConfig%2C>`_.
-## Choices of options are listed below:
-##
-## * `escape`, default `true`.
-##
-## With the default option, `Nim & Markdown` will be translated into `Nim &amp; Markdown`.
-## If you want to escape no characters in the document, turn off `Escape`::
-##
-##     let config = initMarkdownConfig(escape = false)
-##
-##     let doc = """
-##     # Hello World
-##
-##     Nim & Markdown
-##     """
-##
-##     let html = markdown(doc, config)
-##     echo(html) # <h1>Hello World</h1><p>Nim & Markdown</p>
-##
-##
-## :copyright: (c) 2018 by Ju Lin.
-## :repo: https://github.com/soasme/nim-markdown
-## :patreon: https://www.patreon.com/join/enqueuezero
-## :license: MIT.
-
-import re, strutils, strformat, tables, sequtils, math, uri, htmlparser, lists
-from unicode import runeAt, isWhiteSpace
-
-const MARKDOWN_VERSION* = "0.5.2"
+import re, strutils, strformat, tables, sequtils, math, uri, htmlparser, lists, unicode
+from sequtils import map
+from lists import DoublyLinkedList, prepend, append
+from htmlgen import nil, p, br, em, strong, a, img, code, del, blockquote, li, ul, ol, pre, code, table, thead, tbody, th, tr, td
 
 type
   MarkdownError* = object of Exception ## The error object for markdown parsing and rendering.
 
-  Heading* = object ## The type for heading element.
-    inlines: seq[MarkdownTokenRef]
-    level: int
+  MarkdownConfig* = object ## Options for configuring parsing or rendering behavior.
+    escape: bool ## escape ``<``, ``>``, and ``&`` characters to be HTML-safe
+    keepHtml: bool ## deprecated: preserve HTML tags rather than escape it
 
-  Fence* = object ## The type for fences.
-    code: string
-    lang: string
-
-  ListItem* = object ## The type for the list item
-    blocks: seq[MarkdownTokenRef]
-
-  ListBlock* = object ## The type for the list block
-    blocks: seq[MarkdownTokenRef]
-    depth: int
-    ordered: bool
-
-  DefineLink* = object ## The type for defining a link
-    text: string
-    title: string
-    link: string
-
-  DefineFootnote* = object ## The type for defining a footnote
-    anchor: string
-    footnote: string
-
-  HTMLBlock* = object ## The type for a raw HTML block.
-    tag: string
-    attributes: string
-    text: string
-
-  Paragraph* = object ## The type for a paragraph
-    doc: string
-    inlines: seq[MarkdownTokenRef]
-
-  Link* = object ## The type for a link in full format.
-    url: string
-    text: string
-    title: string
-    isImage: bool
-    isEmail: bool
-
-  RefLink* = object ## The type for a link in referencing mode.
-    id: string
-    text: string
-    title: string
-    isImage: bool
-
-  RefFootnote* = object ## The type for a footnote in referencing mode.
-    anchor: string
-
-  TableCell* = object
-    dom: seq[MarkdownTokenRef]
-    align: string
-
-  TableHead* = object
-    cells: seq[TableCell]
-
-  TableRow* = object
-    cells: seq[TableCell]
-
-  HTMLTable* = object
-    head: TableHead
-    body: seq[TableRow]
-
-  BlockQuote* = object
-    blocks: seq[MarkdownTokenRef]
+  RuleSet = object
+    preProcessingRules: seq[TokenType]
+    blockRules: seq[TokenType]
+    inlineRules: seq[TokenType]
+    postProcessingRules: seq[TokenType]
 
   Delimeter* = object
-    token: MarkdownTokenRef
+    token: Token
     kind: string
     num: int
     originalNum: int
@@ -124,124 +25,218 @@ type
     canOpen: bool
     canClose: bool
 
-  Emphasis* = object
-    inlines: seq[MarkdownTokenRef]
+  Paragraph = object
+    doc: string
 
-  DoubleEmphasis* = object
-    inlines: seq[MarkdownTokenRef]
+  Reference = object
+    text: string
+    title: string
+    url: string
 
-  MarkdownConfig* = object ## Options for configuring parsing or rendering behavior.
-    escape: bool ## escape ``<``, ``>``, and ``&`` characters to be HTML-safe
-    keepHtml: bool ## deprecated: preserve HTML tags rather than escape it
+  Link = object 
+    text: string ## A link contains link text (the visible text).
+    url: string ## A link contains destination (the URI that is the link destination).
+    title: string ## A link contains a optional title.
 
-  MarkdownContext* = object ## The type for saving parsing context.
-    links: Table[string, Link]
-    footnotes: Table[string, string]
-    listDepth: int
-    config: MarkdownConfig
+  ReferenceLink = object
+    id: string
+    text: string
 
-  MarkdownTokenType* {.pure.} = enum # All token types
-    ATXHeading,
-    SetextHeading,
-    ThematicBreak,
-    IndentedBlockCode,
-    FencingBlockCode,
-    Paragraph,
-    Text,
-    ListItem,
-    ListBlock,
-    BlockQuote,
-    DefineLink,
-    DefineFootnote,
-    HTMLBlock,
-    HTMLTable,
-    Newline,
-    AutoLink,
-    InlineEscape,
-    InlineText,
-    InlineHTML,
-    InlineLink,
-    InlineRefLink,
-    InlineNoLink,
-    InlineURL,
-    InlineEmail,
-    InlineDoubleEmphasis,
-    InlineEmphasis,
-    InlineCode,
-    InlineBreak,
-    InlineStrikethrough,
-    InlineFootnote
+  Image = object
+    url: string
+    alt: string
+    title: string
 
-  MarkdownTokenRef* = ref MarkdownToken ## Hold two values:
-                                        ## * type: MarkdownTokenType
-                                        ## * xyzValue: xyz is the particular type name.
-  MarkdownToken* = object
-    len: int
-    case type*: MarkdownTokenType
-    of MarkdownTokenType.ATXHeading: atxHeadingVal*: Heading
-    of MarkdownTokenType.SetextHeading: setextHeadingVal*: Heading
-    of MarkdownTokenType.ThematicBreak: thematicBreakVal*: string
-    of MarkdownTokenType.BlockQuote: blockQuoteVal*: BlockQuote
-    of MarkdownTokenType.IndentedBlockCode: codeVal*: string
-    of MarkdownTokenType.FencingBlockCode: fencingBlockCodeVal*: Fence
-    of MarkdownTokenType.Paragraph: paragraphVal*: Paragraph
-    of MarkdownTokenType.Text: textVal*: string
-    of MarkdownTokenType.Newline: newlineVal*: string
-    of MarkdownTokenType.AutoLink: autoLinkVal*: Link
-    of MarkdownTokenType.InlineText: inlineTextVal*: string
-    of MarkdownTokenType.InlineEscape: inlineEscapeVal*: string
-    of MarkdownTokenType.ListBlock: listBlockVal*: ListBlock
-    of MarkdownTokenType.ListItem: listItemVal*: ListItem
-    of MarkdownTokenType.DefineLink: defineLinkVal*: DefineLink
-    of MarkdownTokenType.DefineFootnote: defineFootnoteVal*: DefineFootnote
-    of MarkdownTokenType.HTMLBlock: htmlBlockVal*: HTMLBlock
-    of MarkdownTokenType.HTMLTable: htmlTableVal*: HTMLTable
-    of MarkdownTokenType.InlineHTML: inlineHTMLVal*: string
-    of MarkdownTokenType.InlineLink: inlineLinkVal*: Link
-    of MarkdownTokenType.InlineRefLink: inlineRefLinkVal*: RefLink
-    of MarkdownTokenType.InlineNoLink: inlineNoLinkVal*: RefLink
-    of MarkdownTokenType.InlineURL: inlineURLVal*: string
-    of MarkdownTokenType.InlineEmail: inlineEmailVal*: string
-    of MarkdownTokenType.InlineDoubleEmphasis: inlineDoubleEmphasisVal*: DoubleEmphasis
-    of MarkdownTokenType.InlineEmphasis: inlineEmphasisVal*: Emphasis
-    of MarkdownTokenType.InlineCode: inlineCodeVal*: string
-    of MarkdownTokenType.InlineBreak: inlineBreakVal*: string
-    of MarkdownTokenType.InlineStrikethrough: inlineStrikethroughVal*: string
-    of MarkdownTokenType.InlineFootnote: inlineFootnoteVal*: RefFootnote
+  AutoLink = object
+    text: string
+    url: string
 
-const INLINE_TAGS* = [
-    "a", "em", "strong", "small", "s", "cite", "q", "dfn", "abbr", "data",
-    "time", "code", "var", "samp", "kbd", "sub", "sup", "i", "b", "u", "mark",
-    "ruby", "rt", "rp", "bdi", "bdo", "span", "br", "wbr", "ins", "del",
-    "img", "font",
-]
+  Blockquote = object
+    doc: string
 
-proc initMarkdownConfig*(
-  escape = true,
-  keepHtml = true
-): MarkdownConfig =
-  MarkdownConfig(
-    escape: escape,
-    keepHtml: keepHtml
-  )
+  UnorderedList = object
+    loose: bool
 
-let blockTagAttribute = """\s*[a-zA-Z\-](?:\s*\=\s*(?:"[^"]*"|'[^']*'|[^\s'">]+))?"""
-let blockTag = r"(?!(?:" & fmt"{INLINE_TAGS.join(""|"")}" & r")\b)\w+(?!:/|[^\w\s@]*@)\b"
-let TAGNAME = r"[A-Za-z][A-Za-z0-9-]*"
-let ATTRIBUTENAME = r"[a-zA-Z_:][a-zA-Z0-9:._-]*"
-let UNQUOTEDVALUE = r"[^""'=<>`\x00-\x20]+"
-let DOUBLEQUOTEDVALUE = """"[^"]*""""
-let SINGLEQUOTEDVALUE = r"'[^']*'"
-let ATTRIBUTEVALUE = "(?:" & UNQUOTEDVALUE & "|" & SINGLEQUOTEDVALUE & "|" & DOUBLEQUOTEDVALUE & ")"
-let ATTRIBUTEVALUESPEC = r"(?:\s*=" & r"\s*" & ATTRIBUTEVALUE & r")"
-let ATTRIBUTE = r"(?:\s+" & ATTRIBUTENAME & ATTRIBUTEVALUESPEC & r"?)"
-let OPEN_TAG = r"<" & TAGNAME & ATTRIBUTE & r"*" & r"\s*/?>"
-let CLOSE_TAG = r"</" & TAGNAME & r"\s*[>]"
-let HTML_COMMENT = r"<!---->|<!--(?:-?[^>-])(?:-?[^-])*-->"
-let PROCESSING_INSTRUCTION = r"[<][?].*?[?][>]"
-let DECLARATION = r"<![A-Z]+\s+[^>]*>"
-let CDATA_SECTION = r"<!\[CDATA\[[\s\S]*?\]\]>"
-let HTML_TAG = (
+  OrderedList = object
+    loose: bool
+    start: int
+
+  ListItem = object
+    marker: string
+
+  Heading = object
+    level: int
+
+  Fence = object
+    info: string
+
+  HTMLTableCell = object
+    align: string
+    i: int
+    j: int
+
+  HTMLTableRow = object
+    th: bool
+    td: bool
+
+  HTMLTable = object
+    aligns: seq[string]
+
+  HTMLTableHead = object
+    size: int
+
+  HTMLTableBody = object
+    size: int
+
+  TokenType* {.pure.} = enum
+    ParagraphToken,
+    ATXHeadingToken,
+    SetextHeadingToken,
+    ThematicBreakToken,
+    IndentedCodeToken,
+    FenceCodeToken,
+    BlockquoteToken,
+    HTMLBlockToken,
+    TableToken,
+    THeadToken,
+    TBodyToken,
+    TableRowToken,
+    THeadCellToken,
+    TBodyCellToken
+    BlankLineToken,
+    UnorderedListToken,
+    OrderedListToken,
+    ListItemToken,
+    ReferenceToken,
+    TextToken,
+    AutoLinkToken,
+    LinkToken,
+    ImageToken,
+    EmphasisToken,
+    HTMLEntityToken,
+    InlineHTMLToken,
+    CodeSpanToken,
+    StrongToken,
+    EscapeToken,
+    StrikethroughToken
+    SoftLineBreakToken,
+    HardLineBreakToken,
+    DocumentToken
+
+  Token* = ref object
+    slice: Slice[int]
+    doc: string
+    children: DoublyLinkedList[Token]
+    case type*: TokenType
+    of ParagraphToken: paragraphVal*: Paragraph
+    of ATXHeadingToken: atxHeadingVal*: Heading
+    of SetextHeadingToken: setextHeadingVal*: Heading
+    of ThematicBreakToken: hrVal*: string
+    of BlankLineToken: blankLineVal*: string
+    of HTMLBlockToken: htmlBlockVal*: string
+    of IndentedCodeToken: indentedCodeVal*: string
+    of FenceCodeToken: fenceCodeVal*: Fence
+    of BlockquoteToken: blockquoteVal*: Blockquote
+    of UnorderedListToken: ulVal*: UnorderedList
+    of OrderedListToken: olVal*: OrderedList
+    of ListItemToken: listItemVal*: ListItem
+    of TableToken: tableVal*: HTMLTable
+    of THeadToken: theadVal: HTMLTableHead
+    of TBodyToken: tbodyVal: HTMLTableBody
+    of TableRowToken: tableRowVal: HTMLTableRow
+    of THeadCellToken: theadCellVal*: HTMLTableCell
+    of TBodyCellToken: tbodyCellVal*: HTMLTableCell
+    of ReferenceToken: referenceVal*: Reference
+    of TextToken: textVal*: string
+    of EmphasisToken: emphasisVal*: string
+    of AutoLinkToken: autoLinkVal*: AutoLink
+    of LinkToken: linkVal*: Link
+    of EscapeToken: escapeVal*: string
+    of InlineHTMLToken: inlineHTMLVal*: string
+    of ImageToken: imageVal*: Image
+    of HTMLEntityToken: htmlEntityVal*: string
+    of CodeSpanToken: codeSpanVal*: string
+    of StrongToken: strongVal*: string
+    of StrikethroughToken: strikethroughVal*: string
+    of SoftLineBreakToken: softLineBreakVal*: string
+    of HardLineBreakToken: hardLineBreakVal*: string
+    of DocumentToken: documentVal*: string
+
+  State* = ref object
+    doc: string
+    ruleSet: RuleSet
+    loose: bool
+    references: Table[string, Reference]
+    tokens: DoublyLinkedList[Token]
+
+var simpleRuleSet = RuleSet(
+  preProcessingRules: @[],
+  blockRules: @[
+    ReferenceToken,
+    ThematicBreakToken,
+    BlockquoteToken,
+    UnorderedListToken,
+    OrderedListToken,
+    IndentedCodeToken,
+    FenceCodeToken,
+    HTMLBlockToken,
+    ATXHeadingToken,
+    SetextHeadingToken,
+    TableToken,
+    BlankLineToken,
+    ParagraphToken,
+  ],
+  inlineRules: @[
+    EmphasisToken, # including strong.
+    ImageToken,
+    AutoLinkToken,
+    LinkToken,
+    HTMLEntityToken,
+    InlineHTMLToken,
+    EscapeToken,
+    CodeSpanToken,
+    StrikethroughToken,
+    HardLineBreakToken,
+    SoftLineBreakToken,
+    TextToken,
+  ],
+  postProcessingRules: @[],
+)
+
+const THEMATIC_BREAK_RE* = r" {0,3}([-*_])(?:[ \t]*\1){2,}[ \t]*(?:\n+|$)"
+const ATX_HEADING_RE* = r" {0,3}(#{1,6})( +)?(?(2)([^\n]*?))( +)?(?(4)#*) *(?:\n+|$)"
+const SETEXT_HEADING_RE* = r"((?:(?:[^\n]+)\n)+) {0,3}(=|-)+ *(?:\n+|$)"
+const INDENTED_CODE_RE* = r"((?: {4}| {0,3}\t)[^\n]+\n*)+"
+
+let HTML_SCRIPT_START* = r"^ {0,3}<(script|pre|style)(?=(\s|>|$))"
+let HTML_SCRIPT_END* = r"</(script|pre|style)>"
+let HTML_COMMENT_START* = r"^ {0,3}<!--"
+let HTML_COMMENT_END* = r"-->"
+let HTML_PROCESSING_INSTRUCTION_START* = r"^ {0,3}<\?"
+let HTML_PROCESSING_INSTRUCTION_END* = r"\?>"
+let HTML_DECLARATION_START* = r"^ {0,3}<\![A-Z]"
+let HTML_DECLARATION_END* = r">"
+let HTML_CDATA_START* = r" {0,3}<!\[CDATA\["
+let HTML_CDATA_END* = r"\]\]>"
+let HTML_VALID_TAGS* = ["address", "article", "aside", "base", "basefont", "blockquote", "body", "caption", "center", "col", "colgroup", "dd", "details", "dialog", "dir", "div", "dl", "dt", "fieldset", "figcaption", "figure", "footer", "form", "frame", "frameset", "h1", "h2", "h3", "h4", "h5", "h6", "head", "header", "hr", "html", "iframe", "legend", "li", "link", "main", "menu", "menuitem", "meta", "nav", "noframes", "ol", "optgroup", "option", "p", "param", "section", "source", "summary", "table", "tbody", "td", "tfoot", "th", "thead", "title", "tr", "track", "ul"]
+let HTML_TAG_START* = r"^ {0,3}</?(" & HTML_VALID_TAGS.join("|") & r")(?=(\s|/?>|$))"
+let HTML_TAG_END* = r"^\n?$"
+
+const TAGNAME* = r"[A-Za-z][A-Za-z0-9-]*"
+const ATTRIBUTENAME* = r"[a-zA-Z_:][a-zA-Z0-9:._-]*"
+const UNQUOTEDVALUE* = r"[^""'=<>`\x00-\x20]+"
+const DOUBLEQUOTEDVALUE* = """"[^"]*""""
+const SINGLEQUOTEDVALUE* = r"'[^']*'"
+const ATTRIBUTEVALUE* = "(?:" & UNQUOTEDVALUE & "|" & SINGLEQUOTEDVALUE & "|" & DOUBLEQUOTEDVALUE & ")"
+const ATTRIBUTEVALUESPEC* = r"(?:\s*=" & r"\s*" & ATTRIBUTEVALUE & r")"
+const ATTRIBUTE* = r"(?:\s+" & ATTRIBUTENAME & ATTRIBUTEVALUESPEC & r"?)"
+const OPEN_TAG* = r"<" & TAGNAME & ATTRIBUTE & r"*" & r"\s*/?>"
+const CLOSE_TAG* = r"</" & TAGNAME & r"\s*[>]"
+const HTML_COMMENT* = r"<!---->|<!--(?:-?[^>-])(?:-?[^-])*-->"
+const PROCESSING_INSTRUCTION* = r"[<][?].*?[?][>]"
+const DECLARATION* = r"<![A-Z]+\s+[^>]*>"
+const CDATA_SECTION* = r"<!\[CDATA\[[\s\S]*?\]\]>"
+const HTML_TAG* = (
   r"(?:" &
   OPEN_TAG & "|" &
   CLOSE_TAG & "|" &
@@ -252,221 +247,28 @@ let HTML_TAG = (
   & r")"
 )
 
-let LINK_SCHEME = r"[a-zA-Z][a-zA-Z0-9+.-]{1,31}"
-let LINK_EMAIL = r"[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+(@)[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+(?![-_])"
-let LINK_LABEL = r"(?:\[[^\[\]]*\]|\\[\[\]]?|`[^`]*`|[^\[\]\\])*?"
-let LINK_HREF = r"\s*(<(?:\\[<>]?|[^\n<>\\])*>|(?:\\[()]?|\([^\s\x00-\x1f\\]*\)|[^\s\x00-\x1f()\\])*?)"
-let LINK_TITLE = r""""(?:\\"?|[^"\\])*"|'(?:\\'?|[^'\\])*'|\((?:\\\)?|[^)\\])*\)"""
-let INLINE_AUTOLINK = r"<(" & LINK_SCHEME & r"[^\s\x00-\x1f<>]*|" & LINK_EMAIL & ")>"
-let INLINE_LINK = r"!?\[(" & LINK_LABEL & r")\]\(" & LINK_HREF & r"(?:\s+(" & LINK_TITLE & r"))?\s*\)"
-let INLINE_REFLINK = r"!?\[(" & LINK_LABEL & r")\]\[(?!\s*\])((?:\\[\[\]]?|[^\[\]\\])+)\]"
-let INLINE_NOLINK = r"!?\[(?!\s*\])((?:\[[^\[\]]*\]|\\[\[\]]|[^\[\]])*)\](?:\[\])?"
+let HTML_OPEN_CLOSE_TAG_START* = "^ {0,3}(?:" & OPEN_TAG & "|" & CLOSE_TAG & r")\s*$"
+let HTML_OPEN_CLOSE_TAG_END* = r"^\n?$"
 
-let BULLET = r"(?:[*+-]|\d+\.)"
-let HR = r" {0,3}([-*_])(?:[ \t]*\1){2,}[ \t]*(?:\n+|$)"
-let DEF = r" {0,3}\[(" & LINK_LABEL & r")\]: *\n? *<?([^\s>]+)>?(?:(?: +\n? *| *\n *)(" & LINK_TITLE & r"))? *(?:\n+|$)"
-let LIST = (
-  r"( *)(" & BULLET & r") [\s\S]+?(?=\n+" &
-  HR.replace(r"\1", r"\4") &
-  r"|\n+(?=" &
-  DEF &
-  r")|\n{2,}(?! )(?!\2" &
-  BULLET &
-  r" )\n*|\s*$)"
-)
+proc parse(state: var State, token: var Token);
+proc parseBlock(state: var State, token: var Token);
+proc parseLeafBlockInlines(state: var State, token: var Token);
+proc parseLinkInlines*(state: var State, token: var Token, allowNested: bool = false);
+proc getLinkText*(doc: string, start: int, slice: var Slice[int], allowNested: bool = false): int;
+proc getLinkLabel*(doc: string, start: int, label: var string): int;
+proc getLinkDestination*(doc: string, start: int, slice: var Slice[int]): int;
+proc getLinkTitle*(doc: string, start: int, slice: var Slice[int]): int;
+proc render(state: var State, token: Token): string;
 
-let TAG = (
-  "address|article|aside|base|basefont|blockquote|body|caption" &
-  "|center|col|colgroup|dd|details|dialog|dir|div|dl|dt|fieldset|figcaption" &
-  "|figure|footer|form|frame|frameset|h[1-6]|head|header|hr|html|iframe" &
-  "|legend|li|link|main|menu|menuitem|meta|nav|noframes|ol|optgroup|option" &
-  "|p|param|section|source|summary|table|tbody|td|tfoot|th|thead|title|tr" &
-  "track|ul"
-)
-let RE_HEADING = r"^ *(#{1,6}) *([^\n]+?) *(?:#+ *)?(?:\n+|$)"
-let RE_LHEADING = r"^([^\n]+)\n *(=|-){2,} *(?:\n+|$)"
-let RE_PARAGRAPH = (
-  r"(((?:[^\n]+\n?" &
-  r"(?!" &
-  r" {0,3}[-*_](?: *[-*_]){2,} *(?:\n+|$)|" & # ThematicBreak
-  r" {0,3}(?:#{1,6}) +(?:[^\n]+?) *#* *(?:\n+|$)|" & # atx heading
-  LIST & # list
-  r"))+)\n*)"
-)
-
-let RE_ATX_HEADING = r" {0,3}(#{1,6})( +)?(?(2)([^\n]*?))( +)?(?(4)#*) *(?:\n+|$)"
-
-let RE_BLOCKQUOTE = (
-  r"( {0,3}> ?([^\n]*(?:\n[^\n]+)*\n*)(?:\n|$))+"
-)
-
-var blockRules = @{
-  MarkdownTokenType.ATXHeading: re("^" & RE_ATX_HEADING),
-  MarkdownTokenType.SetextHeading: re"^(((?:(?:[^\n]+)\n)+) {0,3}(=|-)+ *(?:\n+|$))",
-  MarkdownTokenType.ThematicBreak: re"^ {0,3}([-*_])(?:[ \t]*\1){2,}[ \t]*(?:\n+|$)",
-  MarkdownTokenType.IndentedBlockCode: re"^(( {4}[^\n]+\n*)+)",
-  MarkdownTokenType.FencingBlockCode: re"^( *(`{3,}|~{3}) *([^`\s]+)? *\n([\s\S]+?)\s*\2 *(\n+|$))",
-  MarkdownTokenType.BlockQuote: re(r"^(" & RE_BLOCKQUOTE & r")"),
-  MarkdownTokenType.Paragraph: re(
-    "^(" & RE_PARAGRAPH & ")"
-  ),
-  MarkdownTokenType.ListBlock: re(
-    r"^(" & LIST & ")"
-  ),
-  MarkdownTokenType.ListItem: re(
-    r"^( *(?:[*+-]|\d+\.) [^\n]*" &
-    r"(?:\n(?! *(?:[*+-]|\d+\.) )[^\n]*)*)",
-    {RegexFlag.reMultiLine}
-  ),
-  MarkdownTokenType.DefineLink: re"^( {0,3}\[([^^\]]+)\]: *\n? *<?([^\s>]+)>?(?:(?: *\n? +)[\""'(]([^\n]+)[\""')])? *(?:\n+|$))",
-  MarkdownTokenType.DefineFootnote: re(
-    r"^(\[\^([^\]]+)\]: *(" &
-    r"[^\n]*(?:\n+|$)" &
-    r"(?: {1,}[^\n]*(?:\n+|$))*" &
-    r"))"
-  ),
-  MarkdownTokenType.HTMLBlock: re(
-    r"^(" &
-    r" *(?:" &
-    r"<!--[\s\S]*?-->" &
-    r"|<(" & blockTag & r")((?:" & blockTagAttribute & r")*?)>([\s\S]*?)<\/\2>" &
-    r"|<" & blockTag & r"(?:" & blockTagAttribute & r")*?\s*\/?>" &
-    r")" &
-    r" *(?:\n{2,}|\s*$)" &
-    r")"
-  ),
-  MarkdownTokenType.HTMLTable: re(
-    r"^( *\|(.+)\n *\|( *[-:]+[-| :]*)\n((?: *\|.*(?:\n|$))*)\n*)"
-  ),
-  MarkdownTokenType.Text: re"^([^\n]+)",
-  MarkdownTokenType.Newline: re"^(\n+)",
-  MarkdownTokenType.AutoLink: re("^(" & INLINE_AUTOLINK & ")"),
-  MarkdownTokenType.InlineText: re"^([\p{P}]+(?=[*_]+(?!_|\s|\p{Z}|\xa0))|[\s\S]+?(?=[\\<!\[`~]|[\s\p{P}]*\*+(?!_|\s|\p{Z}|\xa0)|[\s\p{P}]+_+(?!_|\s|\p{Z}|\xa0)|https?://| {2,}\n|$))",
-  MarkdownTokenType.InlineEscape: re(
-    r"^\\([\\`*{}\[\]()#+\-.!_<>~|""$%&',/:;=?@^])"
-  ),
-  MarkdownTokenType.InlineHTML: re(
-    "^(" & HTML_TAG & ")", {RegexFlag.reIgnoreCase}
-  ),
-  MarkdownTokenType.InlineLink: re(
-    "^(" & INLINE_LINK & ")"
-  ),
-  MarkdownTokenType.InlineRefLink: re(
-    "^(" & INLINE_REFLINK & ")"
-  ),
-  MarkdownTokenType.InlineNoLink: re("^(" & INLINE_NOLINK & ")"),
-  MarkdownTokenType.InlineURL: re(
-    r"^(" &
-    r"(?:www|https?://[\w\d_\-]+|ftp://[\w\d_\-]+)" &
-    r"(?:\.[\w\d_\-.]+)+" &
-    r"[^< ]+[^?!.,:*_~< ]" &
-    r")"
-  ),
-  MarkdownTokenType.InlineEmail: re(
-    r"^(" &
-    r"(?!(?:(?:\x22?\x5C[\x00-\x7E]\x22?)|(?:\x22?[^\x5C\x22]\x22?)){255,})(?!(?:(?:\x22?\x5C[\x00-\x7E]\x22?)|(?:\x22?[^\x5C\x22]\x22?)){65,}@)(?:(?:[\x21\x23-\x27\x2A\x2B\x2D\x2F-\x39\x3D\x3F\x5E-\x7E]+)|(?:\x22(?:[\x01-\x08\x0B\x0C\x0E-\x1F\x21\x23-\x5B\x5D-\x7F]|(?:\x5C[\x00-\x7F]))*\x22))(?:\.(?:(?:[\x21\x23-\x27\x2A\x2B\x2D\x2F-\x39\x3D\x3F\x5E-\x7E]+)|(?:\x22(?:[\x01-\x08\x0B\x0C\x0E-\x1F\x21\x23-\x5B\x5D-\x7F]|(?:\x5C[\x00-\x7F]))*\x22)))*@(?:(?:(?!.*[^.]{64,})(?:(?:(?:xn--)?[a-z0-9]+(?:-[a-z0-9]+)*\.){1,126}){1,}(?:(?:[a-z][a-z0-9]*)|(?:(?:xn--)[a-z0-9]+))(?:-[a-z0-9]+)*)|(?:\[(?:(?:IPv6:(?:(?:[a-f0-9]{1,4}(?::[a-f0-9]{1,4}){7})|(?:(?!(?:.*[a-f0-9][:\]]){7,})(?:[a-f0-9]{1,4}(?::[a-f0-9]{1,4}){0,5})?::(?:[a-f0-9]{1,4}(?::[a-f0-9]{1,4}){0,5})?)))|(?:(?:IPv6:(?:(?:[a-f0-9]{1,4}(?::[a-f0-9]{1,4}){5}:)|(?:(?!(?:.*[a-f0-9]:){5,})(?:[a-f0-9]{1,4}(?::[a-f0-9]{1,4}){0,3})?::(?:[a-f0-9]{1,4}(?::[a-f0-9]{1,4}){0,3}:)?)))?(?:(?:25[0-5])|(?:2[0-4][0-9])|(?:1[0-9]{2})|(?:[1-9]?[0-9]))(?:\.(?:(?:25[0-5])|(?:2[0-4][0-9])|(?:1[0-9]{2})|(?:[1-9]?[0-9]))){3}))\]))" &
-    r")"
-  ),
-  MarkdownTokenType.InlineDoubleEmphasis: re(
-    r"^(_{2}([\w\d][\s\S]*?(?<![\\\s]))_{2}(?!_)(?>=\s*|$)" &
-    r"|\*{2}([\w\d][\s\S]*?(?<![\\\s]))\*{2}(?!\*))"
-  ),
-  MarkdownTokenType.InlineEmphasis: re(
-    r"^(_((?!_|\s|\p{Z}|\xa0)[\s\S]*?(?<![\\\s_]))_(?!_)(?>=\s*|$)" &
-    r"|\*((?!_|\s|\p{Z}|\xa0)[\s\S]*?(?<![\\\s*]))\*(?!\*|\p{P}))"
-  ),
-  MarkdownTokenType.InlineCode: re"^((`+)\s*([\s\S]*?[^`])\s*\2(?!`))",
-  MarkdownTokenType.InlineBreak: re"^((?: {2,}\n|\\\n)(?!\s*$))",
-  MarkdownTokenType.InlineStrikethrough: re"^(~~(?=\S)([\s\S]*?\S)~~)",
-  MarkdownTokenType.InlineFootnote: re"^(\[\^([^\]]+)\])",
-}.newTable
-
-
-
-let blockParsingOrder = @[
-  MarkdownTokenType.DefineLink,
-  MarkdownTokenType.DefineFootnote,
-  MarkdownTokenType.IndentedBlockCode,
-  MarkdownTokenType.FencingBlockCode,
-  MarkdownTokenType.BlockQuote,
-  MarkdownTokenType.ThematicBreak,
-  MarkdownTokenType.ATXHeading,
-  MarkdownTokenType.ListBlock,
-  MarkdownTokenType.SetextHeading,
-  
-  MarkdownTokenType.HTMLBlock,
-  MarkdownTokenType.HTMLTable,
-  MarkdownTokenType.Paragraph,
-  MarkdownTokenType.Newline,
-]
-
-let listParsingOrder = @[
-  MarkdownTokenType.Newline,
-  MarkdownTokenType.IndentedBlockCode,
-  MarkdownTokenType.FencingBlockCode,
-  MarkdownTokenType.ATXHeading,
-  MarkdownTokenType.ThematicBreak,
-  MarkdownTokenType.BlockQuote,
-  MarkdownTokenType.ListBlock,
-  MarkdownTokenType.HTMLBlock,
-  MarkdownTokenType.InlineEscape,
-  MarkdownTokenType.InlineHTML,
-  MarkdownTokenType.InlineURL,
-  MarkdownTokenType.InlineEmail,
-  MarkdownTokenType.InlineLink,
-  MarkdownTokenType.InlineFootnote,
-  MarkdownTokenType.InlineRefLink,
-  MarkdownTokenType.InlineNoLink,
-  MarkdownTokenType.InlineDoubleEmphasis,
-  MarkdownTokenType.InlineEmphasis,
-  MarkdownTokenType.InlineCode,
-  MarkdownTokenType.InlineBreak,
-  MarkdownTokenType.InlineStrikethrough,
-  MarkdownTokenType.AutoLink,
-  MarkdownTokenType.InlineText,
-]
-
-let inlineParsingOrder = @[
-  MarkdownTokenType.InlineEscape,
-  MarkdownTokenType.InlineHTML,
-  MarkdownTokenType.InlineURL,
-  MarkdownTokenType.InlineEmail,
-  MarkdownTokenType.InlineLink,
-  MarkdownTokenType.InlineFootnote,
-  MarkdownTokenType.InlineRefLink,
-  MarkdownTokenType.InlineNoLink,
-  MarkdownTokenType.InlineDoubleEmphasis,
-  MarkdownTokenType.InlineEmphasis,
-  MarkdownTokenType.InlineCode,
-  MarkdownTokenType.InlineBreak,
-  MarkdownTokenType.InlineStrikethrough,
-  MarkdownTokenType.AutoLink,
-  MarkdownTokenType.InlineText,
-]
-
-let inlineLinkParsingOrder = @[
-  MarkdownTokenType.InlineEscape,
-  MarkdownTokenType.InlineDoubleEmphasis,
-  MarkdownTokenType.InlineEmphasis,
-  MarkdownTokenType.InlineCode,
-  MarkdownTokenType.InlineBreak,
-  MarkdownTokenType.InlineStrikethrough,
-  MarkdownTokenType.InlineText,
-]
-
-proc findToken*(doc: string, start: var int, ruleType: MarkdownTokenType): MarkdownTokenRef;
-proc parseInlines*(ctx: MarkdownContext, doc: string): seq[MarkdownTokenRef];
-proc renderToken*(ctx: MarkdownContext, token: MarkdownTokenRef): string;
-
-proc preprocessing*(doc: string): string =
-  ## Pre-processing the text.
-  result = doc.replace(re"\r\n|\r", "\n")
-  result = result.replace(re"^\t", "    ")
-  result = result.replace(re"^ {1,3}\t", "    ")
-  result = result.replace("\u2424", " ")
-  result = result.replace("\u0000", "\uFFFD")
-  result = result.replace("&#0;", "&#XFFFD;")
-  result = result.replace(re(r"^ +$", {RegexFlag.reMultiLine}), "")
+proc preProcessing(state: var State, token: var Token) =
+  token.doc = token.doc.replace(re"\r\n|\r", "\n")
+  token.doc = token.doc.replace(re"^\t", "    ")
+  token.doc = token.doc.replace(re"^ {1,3}\t", "    ")
+  token.doc = token.doc.replace("\u2424", " ")
+  token.doc = token.doc.replace("\u0000", "\uFFFD")
+  token.doc = token.doc.replace("&#0;", "&#XFFFD;")
+  # FIXME: it will aggressively clean empty line in code. 98
+  token.doc = token.doc.replace(re(r"^ +$", {RegexFlag.reMultiLine}), "")
 
 proc escapeTag*(doc: string): string =
   ## Replace `<` and `>` to HTML-safe characters.
@@ -502,6 +304,15 @@ proc escapeCode*(doc: string): string =
   ## Make code block in markdown document HTML-safe.
   result = doc.escapeAmpersandChar.escapeTag
 
+proc removeBlankLines(doc: string): string =
+  doc.replace(re(r"^ {0,3}\n", {re.reMultiLine}), "\n").strip(leading=true, trailing=true, chars={'\n'})
+
+proc escapeInvalidHTMLTag(doc: string): string =
+  doc.replacef(
+    re(r"<(title|textarea|style|xmp|iframe|noembed|noframes|script|plaintext)>",
+      {RegexFlag.reIgnoreCase}),
+    "&lt;$1>")
+
 const IGNORED_HTML_ENTITY = ["&lt;", "&gt;", "&amp;"]
 
 proc escapeHTMLEntity*(doc: string): string =
@@ -533,295 +344,937 @@ proc escapeLinkUrl*(url: string): string =
 proc escapeBackslash*(doc: string): string =
   doc.replacef(re"\\([\\`*{}\[\]()#+\-.!_<>~|""$%&',/:;=?@^])", "$1")
 
-proc slugify*(doc: string): string =
-  ## Convert the footnote key to a url-friendly key.
-  result = doc.toLower.escapeAmpersandSeq.escapeTag.escapeQuote.replace(re"\s+", "-")
-
-iterator parseTokens*(doc: string, typeset: seq[MarkdownTokenType]): MarkdownTokenRef =
-  ## Parse markdown document into a sequence of tokens.
-  var n = 0
-  while n < doc.len:
-    var token: MarkdownTokenRef = nil
-    for type in typeset:
-      token = findToken(doc, n, type)
-      if token != nil:
-        yield token
-        break
-    if token == nil:
-      raise newException(MarkdownError, fmt"unknown block rule at position {n}.")
-
-proc genNewlineToken(matches: openArray[string]): MarkdownTokenRef =
-  result = MarkdownTokenRef(type: MarkdownTokenType.Newline, newlineVal: matches[0])
-
-proc genATXHeading(matches: openArray[string], ): MarkdownTokenRef =
-  var val: Heading
-  val.level = matches[0].len
-  if matches[2] =~ re"#+": # ATX headings can be empty. Ignore closing sequence if captured.
-    val.inlines = @[]
+proc getBlockStart(token: Token): int =
+  if token.children.tail == nil:
+    0
   else:
-    val.inlines = toSeq(parseTokens(matches[2], inlineParsingOrder))
-  result = MarkdownTokenRef(type: MarkdownTokenType.ATXHeading, atxHeadingVal: val) 
+    token.children.tail.value.slice.b
 
-proc genSetextHeading(matches: openArray[string]): MarkdownTokenRef =
-  var val: Heading
-  if matches[2] == "-":
-    val.level = 2
-  elif matches[2] == "=":
-    val.level = 1
+let LAZINESS_TEXT = r"(?:(?! {0,3}>| {0,3}(?:\*|\+|-)(?: |\n|$)| {0,3}\d+(?:\.|\))(?: |\n|$)| {0,3}#| {0,3}`{3,}| {0,3}\*{3}| {0,3}-{3}| {0,3}_{3})[^\n]+(?:\n|$))+"
+
+proc parseParagraph(state: var State, token: var Token): bool =
+  let start = token.getBlockStart
+  let size = token.doc[start..<token.doc.len].matchLen(re(r"^((?:[^\n]+\n?)(" & LAZINESS_TEXT & "|\n*))"))
+
+  if size == -1:
+    return false
+
+  var paragraph = Token(
+    type: ParagraphToken,
+    slice: (start .. start+size),
+    doc: token.doc[start ..< start+size].replace(re"\n\s*", "\n").strip,
+    paragraphVal: Paragraph(
+      doc: token.doc[start ..< start+size]
+    )
+  )
+
+  token.children.append(paragraph)
+  return true
+
+proc parseOrderedListItem*(doc: string, start=0, marker: var string, listItemDoc: var string, index: var int = 1): int =
+  let markerRegex = re"^(?P<leading> {0,3})(?<index>\d{1,9})(?P<marker>\.|\))(?: *$| *\n|(?P<indent> +)([^\n]+(?:\n|$)))"
+  var matches: array[5, string]
+  var pos = start
+
+  var firstLineSize = doc[pos ..< doc.len].matchLen(markerRegex, matches=matches)
+  if firstLineSize == -1:
+    return -1
+
+  pos += firstLineSize
+
+  var leading = matches[0]
+  if marker == "":
+    marker = matches[2]
+  if marker != matches[2]:
+    return -1
+
+  var indexString = matches[1]
+  index = indexString.parseInt
+
+  listItemDoc = matches[4]
+
+  var indent = 1
+  if matches[3].len > 1 and matches[3].len <= 4:
+    indent = matches[3].len
+  elif matches[3].len > 4:
+    listItemDoc = matches[3][1 ..< matches[3].len] & listItemDoc
+
+  var padding = indexString.len + marker.len + leading.len + indent
+
+  var size = 0
+  while pos < doc.len:
+    size = doc[pos ..< doc.len].matchLen(re(r"^(?:\s*| {" & fmt"{padding}" & r"}([^\n]*))(\n|$)"), matches=matches)
+    if size != -1:
+      listItemDoc &= matches[0]
+      listItemDoc &= matches[1]
+      if listItemDoc.startswith("\n") and matches[0] == "":
+        pos += size
+        break
+    elif listItemDoc.find(re"\n{2,}$") == -1:
+      size = doc[pos ..< doc.len].matchLen(re("^(" & LAZINESS_TEXT & ")"), matches=matches)
+      if size != -1:
+        listItemDoc &= matches[0]
+      else:
+          break
+    else:
+      break
+
+    pos += size
+
+  return pos - start
+
+proc parseUnorderedListItem*(doc: string, start=0, marker: var string, listItemDoc: var string): int =
+  #  thematic break takes precedence over list item.
+  if doc[start ..< doc.len].matchLen(re(r"^" & THEMATIC_BREAK_RE)) != -1:
+    return -1
+
+  let markerRegex = re"^(?P<leading> {0,3})(?P<marker>[*\-+])(?: *$| *\n|(?<indent> +)([^\n]+(?:\n|$)))"
+  var matches: array[5, string]
+  var pos = start
+
+  var firstLineSize = doc[pos ..< doc.len].matchLen(markerRegex, matches=matches)
+  if firstLineSize == -1:
+    return -1
+
+  pos += firstLineSize
+
+  var leading = matches[0]
+  if marker == "":
+    marker = matches[1]
+  if marker != matches[1]:
+    return -1
+
+  listItemDoc = matches[3]
+
+  var indent = 1
+  if matches[2].len > 1 and matches[2].len <= 4:
+    indent = matches[2].len
+  elif matches[2].len > 4: # code block indent is still 1.
+    listItemDoc = matches[2][1 ..< matches[2].len] & listItemDoc
+
+  var padding = marker.len + leading.len + indent
+
+  var size = 0
+  while pos < doc.len:
+    size = doc[pos ..< doc.len].matchLen(re(r"^(?:\s*| {" & fmt"{padding}" & r"}([^\n]*))(\n|$)"), matches=matches)
+    if size != -1:
+      listItemDoc &= matches[0]
+      listItemDoc &= matches[1]
+      if listItemDoc.startswith("\n") and matches[0] == "":
+        pos += size
+        break
+    elif listItemDoc.find(re"\n{2,}$") == -1:
+      size = doc[pos ..< doc.len].matchLen(re("^(" & LAZINESS_TEXT & ")"), matches=matches)
+      if size != -1:
+        listItemDoc &= matches[0]
+      else:
+          break
+    else:
+      break
+
+    pos += size
+
+  return pos - start
+
+proc isLoose(token: Token): bool =
+  for node in token.children.nodes:
+    # any of its constituent list items are separated by blank lines
+    if node.next != nil:
+      if node.value.doc.find(re"\n\n$") != -1:
+        return true
+    # any of its constituent list items are separated by blank lines
+    if node.value.doc.find(re"\n\n(?!$)") != -1:
+      return true
+  return false
+
+proc parseUnorderedList(state: var State, token: var Token): bool =
+  let start = token.getBlockStart
+  var pos = start
+  var marker = ""
+  var listItems: seq[Token];
+
+  while pos < token.doc.len:
+    var listItemDoc = ""
+    var itemSize = parseUnorderedListItem(token.doc, pos, marker, listItemDoc)
+    if itemSize == -1:
+      break
+
+    var listItem = Token(
+      type: ListItemToken,
+      slice: (pos .. pos + itemSize),
+      doc: listItemDoc,
+      listItemVal: ListItem(
+        marker: marker
+      )
+    )
+    if listItemDoc != "":
+      parseBlock(state, listItem)
+    listItems.add(listItem)
+
+    pos += itemSize
+
+  if marker == "":
+    return false
+
+  var ulToken = Token(
+    type: UnorderedListToken,
+    slice: (start .. pos),
+    doc: token.doc[start ..< pos],
+    ulVal: UnorderedList(
+      loose: false
+    )
+  )
+  for listItem in listItems:
+    ulToken.children.append(listItem)
+  ulToken.ulVal.loose = ulToken.isLoose
+  token.children.append(ulToken)
+  result = true
+
+proc parseOrderedList(state: var State, token: var Token): bool =
+  let start = token.getBlockStart
+  var pos = start
+  var marker = ""
+  var startIndex = 1
+  var found = false
+  var index = 1
+  var listItems: seq[Token];
+
+  while pos < token.doc.len:
+    var listItemDoc = ""
+    var itemSize = parseOrderedListItem(token.doc, pos, marker, listItemDoc, index)
+    if itemSize == -1:
+      break
+    if not found:
+      startIndex = index
+      found = true
+
+    var listItem = Token(
+      type: ListItemToken,
+      slice: (pos .. pos + itemSize),
+      doc: listItemDoc,
+      listItemVal: ListItem(
+        marker: marker
+      )
+    )
+    if listItemDoc != "":
+      parseBlock(state, listItem)
+    listItems.add(listItem)
+
+    pos += itemSize
+
+  if marker == "":
+    return false
+
+  var olToken = Token(
+    type: OrderedListToken,
+    slice: (start .. pos),
+    doc: token.doc[start ..< pos],
+    olVal: OrderedList(
+      start: startIndex,
+      loose: false
+    )
+  )
+  for listItem in listItems:
+    olToken.children.append(listItem)
+  olToken.olVal.loose = olToken.isLoose
+  token.children.append(olToken)
+  result = true
+
+proc parseThematicBreak(state: var State, token: var Token): bool =
+  let start = token.getBlockStart
+  let size = token.doc[start..<token.doc.len].matchLen(re(r"^" & THEMATIC_BREAK_RE))
+  if size == -1:
+    return false
+  var hr = Token(
+    type: ThematicBreakToken,
+    slice: (start .. start+size),
+    doc: token.doc[start ..< start+size],
+    hrVal: ""
+  )
+  token.children.append(hr)
+  return true
+
+proc parseCodeFence*(doc: string, indent: var int, size: var int): string =
+  var matches: array[2, string]
+  size = doc.matchLen(re"((?: {0,3})?)(`{3,}|~{3,})", matches=matches)
+  if size == -1:
+    return ""
+  indent = matches[0].len
+  doc[0 ..< size].strip
+
+proc parseCodeContent*(doc: string, indent: int, fence: string, codeContent: var string): int =
+  var closeSize = -1
+  var pos = 0
+  var indentPrefix = ""
+  for i in (0 ..< indent):
+    indentPrefix &= " "
+  let closeRe = re(r"(?: {0,3})" & fence & fmt"{fence[0]}" & "{0,}(?:$|\n)")
+  for line in doc.splitLines:
+    closeSize = line.matchLen(closeRe)
+    if closeSize != -1:
+      pos += closeSize
+      break
+    if line != "":
+      codeContent &= line.replacef(re(r"^ {0," & indent.intToStr & r"}([^\n]*)"), "$1")
+    codeContent &= "\n"
+    pos += (line.len + 1)
+  pos
+
+proc parseCodeInfo*(doc: string, size: var int): string =
+  var matches: array[1, string]
+  size = doc.matchLen(re"(?: |\t)*([^`\n]*)?(?:\n|$)", matches=matches)
+  if size == -1:
+    return ""
+  for item in matches[0].splitWhitespace:
+    return item
+  return ""
+
+proc parseFenceCode(state: var State, token: var Token): bool =
+  let start = token.getBlockStart
+  var pos = start
+  var indent = 0
+
+  var fenceSize = -1
+  var fence = parseCodeFence(token.doc[start ..< token.doc.len], indent, fenceSize)
+  if fenceSize == -1:
+    return false
+
+  pos += fenceSize
+  var infoSize = -1
+  var info = parseCodeInfo(token.doc[pos ..< token.doc.len], infoSize)
+  if infoSize == -1:
+    return false
+
+  pos += infoSize
+  var codeContent = ""
+  var codeContentSize = parseCodeContent(token.doc[pos ..< token.doc.len], indent, fence, codeContent)
+  pos += codeContentSize
+
+  var codeToken = Token(
+    type: FenceCodeToken,
+    slice: (start .. pos),
+    doc: codeContent,
+    fenceCodeVal: Fence(info: info),
+  )
+  token.children.append(codeToken)
+  true
+
+proc parseIndentedCode(state: var State, token: var Token): bool =
+  # FIXME: example 81 failed: 6 spaces were striped earlier.
+  let start = token.getBlockStart
+  var matches: array[5, string]
+  let size = token.doc[start..<token.doc.len].matchLen(
+    re(r"^(" & INDENTED_CODE_RE & ")"),
+    matches=matches
+  )
+  if size == -1:
+    return false
+  var codeContent = matches[0].replace(re(r"^ {4}", {RegexFlag.reMultiLine}), "")
+  var indentedCode = Token(
+    type: IndentedCodeToken,
+    slice: (start .. start+size),
+    doc: codeContent,
+    indentedCodeVal: "",
+  )
+  token.children.append(indentedCode)
+  return true
+
+proc parseSetextHeading(state: var State, token: var Token): bool =
+  let start = token.getBlockStart
+  var matches: array[5, string]
+  let size = token.doc[start..<token.doc.len].matchLen(re(r"^(" & SETEXT_HEADING_RE & ")"), matches=matches)
+  if size == -1:
+    return false
+  var level = 1
+  if matches[2] == "=":
+    level = 1
+  elif matches[2] == "-":
+    level = 2
   else:
     raise newException(MarkdownError, fmt"unknown setext heading mark: {matches[2]}")
 
-  val.inlines = toSeq(parseTokens(matches[1].strip, inlineParsingOrder))
-  return MarkdownTokenRef(type: MarkdownTokenType.SetextHeading, setextHeadingVal: val) 
+  var heading = Token(
+    type: SetextHeadingToken,
+    slice: (start .. start+size),
+    doc: matches[1].strip,
+    setextHeadingVal: Heading(
+      level: level
+    )
+  )
+  token.children.append(heading)
+  return true
 
-proc genThematicBreakToken(matches: openArray[string]): MarkdownTokenRef =
-  result = MarkdownTokenRef(type: MarkdownTokenType.ThematicBreak, thematicBreakVal: "")
 
-proc genBlockQuoteToken(matches: openArray[string]): MarkdownTokenRef =
-  var quote = matches[0].replace(re(r"^ *> ?", {RegexFlag.reMultiLine}), "").strip(chars={'\n', ' '})
-  var tokens = toSeq(parseTokens(quote, blockParsingOrder))
-  var blockquote = BlockQuote(blocks: tokens)
-  result = MarkdownTokenRef(type: MarkdownTokenType.BlockQuote, blockQuoteVal: blockquote)
+proc parseATXHeading(state: var State, token: var Token): bool =
+  let start = token.getBlockStart
+  var matches: array[5, string]
+  let size = token.doc[start..<token.doc.len].matchLen(re(r"^" & ATX_HEADING_RE), matches=matches)
+  if size == -1:
+    return false
+  var doc = matches[2]
+  if doc =~ re"#+":
+    doc = ""
+  var heading = Token(
+    type: ATXHeadingToken,
+    slice: (start .. start+size),
+    doc: doc,
+    atxHeadingVal: Heading(
+      level: matches[0].len,
+    )
+  )
+  token.children.append(heading)
+  return true
 
-proc genIndentedBlockCode(matches: openArray[string]): MarkdownTokenRef =
-  var code = matches[0].replace(re(r"^ {4}", {RegexFlag.reMultiLine}), "")
-  result = MarkdownTokenRef(type: MarkdownTokenType.IndentedBlockCode, codeVal: code)
+proc parseBlankLine(state: var State, token: var Token): bool =
+  let start = token.getBlockStart
+  let size = token.doc[start..<token.doc.len].matchLen(re(r"^((?:\s*\n)+)"))
 
-proc genFencingBlockCode(matches: openArray[string]): MarkdownTokenRef =
-  var val: Fence
-  val.lang = matches[2]
-  val.code = matches[3]
-  result = MarkdownTokenRef(type: MarkdownTokenType.FencingBlockCode, fencingBlockCodeVal: val)
+  if size == -1:
+    return false
 
-proc genParagraph(matches: openArray[string]): MarkdownTokenRef =
-  var doc = matches[0].strip(chars={'\n', ' '}).replace(re"\n *", "\n")
-  var tokens: seq[MarkdownTokenRef] = @[]
-  var val = Paragraph(inlines: tokens, doc: doc)
-  result = MarkdownTokenRef(type: MarkdownTokenType.Paragraph, paragraphVal: val)
-
-proc genText(matches: openArray[string]): MarkdownTokenRef =
-  result = MarkdownTokenRef(type: MarkdownTokenType.Text, textVal: matches[0])
-
-proc genDefineLink(matches: openArray[string]): MarkdownTokenRef =
-  if matches[1].match(re"\s+"):
-    return genParagraph(@[matches[0]])
-
-  var val: DefineLink
-  val.text = matches[1]
-  val.link = matches[2]
-  val.title = matches[3]
-  result = MarkdownTokenRef(type: MarkdownTokenType.DefineLink, defineLinkVal: val)
-
-proc genDefineFootnote(matches: openArray[string]): MarkdownTokenRef =
-  var val: DefineFootnote
-  val.anchor = matches[1]
-  val.footnote = matches[2]
-  result = MarkdownTokenRef(type: MarkdownTokenType.DefineFootnote, defineFootnoteVal: val)
-
-iterator parseListTokens(doc: string): MarkdownTokenRef =
-  let items = doc.findAll(blockRules[MarkdownTokenType.ListItem])
-  for index, item in items:
-    var val: ListItem
-    var text = item.replace(re"^ *(?:[*+-]|\d+\.) +", "").strip
-    val.blocks = toSeq(parseTokens(text, listParsingOrder))
-    yield MarkdownTokenRef(len: 1, type: MarkdownTokenType.ListItem, listItemVal: val)
-
-proc genListBlock(matches: openArray[string]): MarkdownTokenRef =
-  var val: ListBlock
-  let doc = matches[0]
-  val.ordered = matches[2] =~ re"\d+."
-  val.blocks = toSeq(parseListTokens(doc))
-  result = MarkdownTokenRef(type: MarkdownTokenType.ListBlock, listBlockVal: val)
-
-proc genHTMLBlock(matches: openArray[string]): MarkdownTokenRef =
-  var val: HTMLBlock
-  if matches[1] == "":
-    val.tag = ""
-    val.attributes = ""
-    val.text = matches[0].strip
-  else:
-    val.tag = matches[1].strip
-    val.attributes = matches[2].strip
-    val.text = matches[3]
-  result = MarkdownTokenRef(type: MarkdownTokenType.HTMLBlock, htmlBlockVal: val)
-
-proc findAlign(align: string): seq[string] =
-  for cellAlign in align.replace(re"\| *$", "").split(re" *\| *"):
-    if cellAlign.find(re"^ *-+: *$") != -1:
-      result.add("right")
-    elif cellAlign.find(re"^ *:-+: *$") != -1:
-      result.add("center")
-    elif cellAlign.find(re"^ *:-+ *$") != -1:
-      result.add("left")
-    else:
-      result.add("")
-
-proc genHTMLTable*(matches: openArray[string]): MarkdownTokenRef =
-  var head: TableHead
-  var headTokens = matches[1].replace(re"^ *| *\| *$", "").split(re" *\| *")
-  var aligns = findAlign(matches[2])
-  head.cells = newSeq[TableCell](len(headTokens))
-  for index, headCell in headTokens:
-    if index > aligns.len - 1:
-      head.cells[index].align = ""
-    else:
-      head.cells[index].align = aligns[index]
-    head.cells[index].dom = toSeq(parseTokens(headCell, inlineParsingOrder))
-
-  var bodyItems = matches[3].replace(re"\n$", "").split("\n")
-  var body = newSeq[TableRow](bodyItems.len)
-  for i, row in bodyItems:
-    var rowCells = row.replace(re"^ *\| *| *\| *$", "").split(re" *(?<!\\)\| *")
-    body[i].cells = newSeq[TableCell](rowCells.len)
-    for j, rowItem in rowCells:
-      body[i].cells[j] = TableCell(dom: toSeq(parseTokens(rowItem.replace(re"\\\\\|", "|"), inlineParsingOrder)))
-
-  var val = HTMLTable(head: head, body: body)
-  result = MarkdownTokenRef(type: MarkdownTokenType.HTMLTable, htmlTableVal: val)
-
-proc genAutoLink(matches: openArray[string]): MarkdownTokenRef =
-  var link: Link
-  link.url = matches[1]
-  link.text = matches[1]
-  link.isEmail = matches[1].match(re(LINK_EMAIL))
-  link.isImage = false
-  result = MarkdownTokenRef(type: MarkdownTokenType.AutoLink, autoLinkVal: link)
-
-proc genInlineText(matches: openArray[string]): MarkdownTokenRef =
-  var text = matches[0].replace(re" *\n", "\n")
-  result = MarkdownTokenRef(type: MarkdownTokenType.InlineText, inlineTextVal: text)
-
-proc genInlineEscape(matches: openArray[string]): MarkdownTokenRef =
-  result = MarkdownTokenRef(type: MarkdownTokenType.InlineEscape, inlineEscapeVal: matches[0])
-
-proc isCharBalanced*(text: string, leftChar: char = '[', rightChar: char = ']'): bool =
-  var stack: seq[char]
-  var isEscaped = false
-  for ch in text:
-    if isEscaped:
-      continue
-    elif ch == leftChar:
-      stack.add(ch)
-    elif ch == rightChar:
-      if stack.len > 0:
-        discard stack.pop
-      else:
-        return false
-    elif ch == '\\':
-      isEscaped = true
-    else:
-      continue
-  result = stack.len == 0
-
-proc genInlineLink(matches: openArray[string]): MarkdownTokenRef =
-  var link: Link
-  link.isEmail = false
-  link.isImage = matches[0][0] == '!'
-  link.text = matches[1]
-  link.url = matches[2].replacef(re"<([^>]*)>", "$1")
-  link.title = matches[3].replacef(re"^'(.*)'", "$1").replacef(re"^\((.*)\)$", "$1").replacef(re("^\"(.*)\""), "$1")
-  result = MarkdownTokenRef(type: MarkdownTokenType.InlineLink, inlineLinkVal: link)
-
-proc genInlineHTML(matches: openArray[string]): MarkdownTokenRef =
-  result = MarkdownTokenRef(type: MarkdownTokenType.InlineHTML, inlineHTMLVal: matches[0])
-
-proc genInlineRefLink(matches: openArray[string]): MarkdownTokenRef =
-  var link: RefLink
-  link.text = matches[1]
-  if matches[2] == "":
-    link.id = link.text
-  else:
-    link.id = matches[2]
-  link.isImage = matches[0][0] == '!'
-  result = MarkdownTokenRef(type: MarkdownTokenType.InlineRefLink, inlineRefLinkVal: link)
-
-proc genInlineNoLink(matches: openArray[string]): MarkdownTokenRef =
-  var link: RefLink
-  link.id = matches[1]
-  link.text = matches[1]
-  link.isImage = matches[0][0] == '!'
-  result = MarkdownTokenRef(type: MarkdownTokenType.InlineNoLink, inlineNoLinkVal: link)
-
-proc genInlineURL(matches: openArray[string]): MarkdownTokenRef =
-  let url = matches[0]
-  result = MarkdownTokenRef(type: MarkdownTokenType.InlineURL, inlineURLVal: url)
-
-proc genInlineEmail(matches: openArray[string]): MarkdownTokenRef =
-  let email = matches[0]
-  result = MarkdownTokenRef(type: MarkdownTokenType.InlineEmail, inlineEmailVal: email)
-
-proc genInlineDoubleEmphasis(matches: openArray[string]): MarkdownTokenRef =
-  var text: string
-  if matches[0][0] == '_':
-    text = matches[1]
-  else:
-    text = matches[2]
-  result = MarkdownTokenRef(
-    type: MarkdownTokenType.InlineDoubleEmphasis,
-    inlineDoubleEmphasisVal: DoubleEmphasis(inlines: @[
-      MarkdownTokenRef(type: MarkdownTokenType.InlineText, inlineTextVal: text)
-    ])
+  var blankLine = Token(
+    type: BlankLineToken,
+    slice: (start .. start+size),
+    doc: token.doc[start ..< start+size],
+    blankLineVal: token.doc[start ..< start+size]
   )
 
-proc genInlineEmphasis(matches: openArray[string]): MarkdownTokenRef =
-  if matches[2].startsWith("\u00a0") or matches[2].endswith("\u00a0"): # unicode whitespace. PCRE seems not support \u in regex.
-    return MarkdownTokenRef(type: MarkdownTokenType.InlineText, inlineTextVal: matches[0])
-  var text: string
-  if matches[0][0] == '_':
-    text = matches[1]
-  else:
-    text = matches[2]
-    result = MarkdownTokenRef(
-      type: MarkdownTokenType.InlineEmphasis,
-      inlineEmphasisVal: Emphasis(inlines: @[
-        MarkdownTokenRef(type: MarkdownTokenType.InlineText, inlineTextVal: text)
-      ])
-    )
+  token.children.append(blankLine)
+  return true
 
-proc genInlineCode(matches: openArray[string]): MarkdownTokenRef =
-  result = MarkdownTokenRef(type: MarkdownTokenType.InlineCode, inlineCodeVal: matches[2])
+proc parseTableRow*(doc: string): seq[string] =
+  var pos = 0
+  var max = doc.len
+  var ch: char
+  var escapes = 0
+  var lastPos = 0
+  var backTicked = false
+  var lastBackTick = 0
 
-proc genInlineBreak(matches: openArray[string]): MarkdownTokenRef =
-  result = MarkdownTokenRef(type: MarkdownTokenType.InlineBreak, inlineBreakVal: "")
+  if doc == "":
+    return @[]
 
-proc genInlineStrikethrough(matches: openArray[string]): MarkdownTokenRef =
-  result = MarkdownTokenRef(type: MarkdownTokenType.InlineStrikethrough, inlineStrikethroughVal: matches[1])
+  ch = doc[pos]
 
-proc genInlineFootnote(matches: openArray[string]): MarkdownTokenRef =
-  let footnote = RefFootnote(anchor: matches[1])
-  result = MarkdownTokenRef(type: MarkdownTokenType.InlineFootnote, inlineFootnoteVal: footnote)
+  while pos < max:
+    if ch == '`':
+      if backTicked:
+        backTicked = false
+        lastBackTick = pos
+      elif escapes mod 2 == 0:
+        backTicked = true
+        lastBackTick = pos
+    elif ch == '|' and escapes mod 2 == 0 and not backTicked:
+      result.add(doc[lastPos ..< pos])
+      lastPos = pos + 1
 
+    if ch == '\\':
+      escapes += 1
+    else:
+      escapes = 0
 
-const ENTITY = r"&(?:#x[a-f0-9]{1,6}|#[0-9]{1,7}|[a-z][a-z0-9]{1,31});"
+    pos += 1
 
-proc parseNewline*(doc: string, start: int, size: var int): seq[MarkdownTokenRef] = @[]
+    if pos == max and backTicked:
+      backTicked = false
+      pos = lastBackTick + 1
 
-proc parseBackslash*(doc: string, start: int, size: var int): seq[MarkdownTokenRef] =
-  var pos: int = start
-  var token: MarkdownTokenRef
+    if pos < max:
+      ch = doc[pos]
 
-  token = findToken(doc, pos, MarkdownTokenType.InlineBreak)
-  if token != nil:
-    size = pos - start
-    return @[token]
+  result.add(doc[lastPos ..< max])
 
-  token = findToken(doc, pos, MarkdownTokenType.InlineEscape)
-  if token != nil:
-    size = pos - start
-    return @[token]
+proc parseTableAligns*(doc: string, aligns: var seq[string]): bool =
+  if not doc.match(re"^ {0,3}[-:|][-:|\s]*(?:\n|$)"):
+    return false
+  var columns = doc.split("|")
+  for index, column in columns:
+    var t = column.strip
+    if t == "":
+      if index == 0 or index == columns.len - 1:
+        continue
+      else:
+        return false
+    if not t.match(re"^:?-+:?$"):
+      return false
+    if t[0] == ':':
+      if t[t.len - 1] == ':':
+        aligns.add("center")
+      else:
+        aligns.add("left")
+    elif t[t.len - 1] == ':':
+      aligns.add("right")
+    else:
+      aligns.add("")
+  true
 
-  size = -1
-  result = @[]
-
-proc parseBacktick*(doc: string, start: int, size: var int): seq[MarkdownTokenRef] =
+proc parseHTMLTable(state: var State, token: var Token): bool =
+  # Algorithm:
+  # fail fast if less than 2 lines.
+  # second line: /^[-:|][-:|\s]*$/
+  # extract columns & aligns from the 2nd line.
+  # extract columns & headers from the 1st line.
+  # fail fast if align&header columns length not match.
+  # construct thead
+  # iterate the rest of lines.
+  #   extract tbody
+  # construct token.
+  let start = token.getBlockStart
   var pos = start
-  let token = findToken(doc, pos, MarkdownTokenType.InlineCode)
-  if token == nil:
-    size = -1
-    result = @[]
+  let doc = token.doc[start ..< token.doc.len]
+  let lines = doc.splitLines(keepEol=true)
+  if lines.len < 2:
+    return false
+
+  var aligns: seq[string]
+  if not parseTableAligns(lines[1], aligns):
+    return false
+
+  if lines[0].matchLen(re"^ {4,}") != -1:
+    return false
+
+  if lines[0] == "" or lines[0].find('|') == -1:
+    return false
+
+  var heads = parseTableRow(lines[0].replace(re"^\||\|$", ""))
+  if heads.len > aligns.len:
+    return false
+
+  var theadToken = Token(
+    type: THeadToken,
+    slice: (start .. start + lines[0].len),
+    doc: lines[0],
+    theadVal: HTMLTableHead(size: 1)
+  )
+  var theadRowToken = Token(
+    type: TableRowToken,
+    slice: (start ..< start+lines[0].len),
+    doc: lines[0],
+    tableRowVal: HTMLTableRow(th: true, td: false),
+  )
+  for index, elem in heads:
+    var thToken = Token(
+      type: THeadCellToken,
+      slice: (0 ..< elem.len),
+      doc: elem.strip,
+      theadCellVal: HTMLTableCell(
+        i: index,
+        j: 0,
+        align: aligns[index],
+      )
+    )
+    theadRowToken.children.append(thToken)
+  theadToken.children.append(theadRowToken)
+
+  pos += lines[0].len + lines[1].len
+
+  var tbodyRows: seq[Token]
+  for lineIndex, line in lines[2 ..< lines.len]:
+    if line.matchLen(re"^ {4,}") != -1:
+      break
+    if line == "" or line.find('|') == -1:
+      break
+
+    var rowColumns = parseTableRow(line.replace(re"^\||\|$", ""))
+
+    var tableRowToken = Token(
+      type: TableRowToken,
+      slice: (0 .. 0),
+      doc: "",
+      tableRowVal: HTMLTableRow(th: false, td: true),
+    )
+    for index, elem in heads:
+      var doc = 
+        if index >= rowColumns.len:
+          ""
+        else:
+          rowColumns[index]
+      var tdToken = Token(
+        type: TBodyCellToken,
+        slice: (0 .. 0),
+        doc: doc.replace(re"\\\|", "|").strip,
+        tbodyCellVal: HTMLTableCell(
+          i: index,
+          j: lineIndex,
+          align: aligns[index]
+        )
+      )
+      tableRowToken.children.append(tdToken)
+    tbodyRows.add(tableRowToken)
+    pos += line.len
+
+  var tableToken = Token(
+    type: TableToken,
+    slice: (start .. pos),
+    doc: token.doc[start ..< pos],
+    tableVal: HTMLTable(
+      aligns: aligns,
+    )
+  )
+  tableToken.children.append(theadToken)
+  if tbodyRows.len > 0:
+    var tbodyToken = Token(
+      type: TBodyToken,
+      slice: (start+lines[0].len+lines[1].len .. pos),
+      doc: token.doc[start+lines[0].len+lines[1].len ..< pos],
+      tbodyVal: HTMLTableBody(size: tbodyRows.len)
+    )
+    for tbodyRowToken in tbodyRows:
+      tbodyToken.children.append(tbodyRowToken)
+    tableToken.children.append(tbodyToken)
+  token.children.append(tableToken)
+  true
+
+proc parseHTMLBlockContent*(doc: string, startPattern: string, endPattern: string, html: var string, ignoreCase = false): int =
+  # Algorithm:
+  # firstLine: detectOpenTag
+  # fail fast.
+  # firstLine: detectCloseTag
+  # success fast.
+  # rest of the lines:
+  #   detectCloseTag
+  #   success fast.
+  let startRe =
+    if ignoreCase:
+      re(startPattern, {RegexFlag.reIgnoreCase})
+    else:
+      re(startPattern)
+  let endRe =
+    if ignoreCase:
+      re(endPattern, {RegexFlag.reIgnoreCase})
+    else:
+      re(endPattern)
+  var pos = 0
+  var size = -1
+  let docLines = doc.splitLines(keepEol=true)
+  if docLines.len == 0:
+    return -1
+  let firstLine = docLines[0]
+  size = firstLine.matchLen(startRe)
+  if size == -1:
+    return -1
+  html = firstLine
+  size = firstLine.find(endRe)
+  if size != -1:
+    return firstLine.len
   else:
-    size = pos - start
-    result = @[token]
+    pos = firstLine.len
+  for line in docLines[1 ..< docLines.len]:
+    pos += line.len
+    html &= line
+    if line.find(endRe) != -1:
+      break
+  return pos
+
+proc genHTMLBlockToken(token: var Token, htmlContent: string, start: int, size: int): bool =
+  var htmlBlock = Token(
+    type: HTMLBlockToken,
+    slice: (start .. start+size),
+    doc: htmlContent,
+    htmlBlockVal: ""
+  )
+  token.children.append(htmlBlock)
+  true
+
+proc parseHTMLBlock(state: var State, token: var Token): bool =
+  let start = token.getBlockStart
+  var htmlContent = ""
+  var size = parseHTMLBlockContent(
+    token.doc[start..<token.doc.len],
+    HTML_SCRIPT_START, HTML_SCRIPT_END,
+    htmlContent)
+  if size != -1:
+    return token.genHTMLBlockToken(htmlContent, start, size)
+
+  size = parseHTMLBlockContent(
+    token.doc[start..<token.doc.len],
+    HTML_COMMENT_START,
+    HTML_COMMENT_END,
+    htmlContent
+  )
+  if size != -1:
+    return token.genHTMLBlockToken(htmlContent, start, size)
+
+  size = parseHTMLBlockContent(
+    token.doc[start..<token.doc.len],
+    HTML_PROCESSING_INSTRUCTION_START,
+    HTML_PROCESSING_INSTRUCTION_END,
+    htmlContent
+  )
+  if size != -1:
+    return token.genHTMLBlockToken(htmlContent, start, size)
+
+  size = parseHTMLBlockContent(
+    token.doc[start..<token.doc.len],
+    HTML_DECLARATION_START,
+    HTML_DECLARATION_END,
+    htmlContent
+  )
+  if size != -1:
+    return token.genHTMLBlockToken(htmlContent, start, size)
+
+  size = parseHTMLBlockContent(
+    token.doc[start..<token.doc.len],
+    HTML_CDATA_START,
+    HTML_CDATA_END,
+    htmlContent
+  )
+  if size != -1:
+    return token.genHTMLBlockToken(htmlContent, start, size)
+
+  size = parseHTMLBlockContent(
+    token.doc[start..<token.doc.len],
+    HTML_TAG_START,
+    HTML_TAG_END,
+    htmlContent,
+    ignoreCase=true
+  )
+  if size != -1:
+    return token.genHTMLBlockToken(htmlContent, start, size)
+
+  size = parseHTMLBlockContent(
+    token.doc[start..<token.doc.len],
+    HTML_OPEN_CLOSE_TAG_START,
+    HTML_OPEN_CLOSE_TAG_END,
+    htmlContent
+  )
+  if size != -1:
+    return token.genHTMLBlockToken(htmlContent, start, size)
+
+  false
+
+proc parseBlockquote(state: var State, token: var Token): bool =
+  let markerContent = re(r"^(( {0,3}>([^\n]*(?:\n|$)))+)")
+  var matches: array[3, string]
+  let start = token.getBlockStart
+  var pos = start
+  var size = -1
+  var document = ""
+  var found = false
+  
+  while pos < token.doc.len:
+    size = token.doc[pos ..< token.doc.len].matchLen(markerContent, matches=matches)
+
+    if size == -1:
+      break
+
+    found = true
+    pos += size
+    # extract content with blockquote mark
+    document &= matches[0].replacef(re"(^|\n) {0,3}> ?", "$1")
+
+    # blank line in non-lazy content always breaks the blockquote.
+    if matches[2].strip == "":
+      document = document.strip(leading=false, trailing=true)
+      break
+
+    # find the empty line in lazy content
+    if token.doc[pos ..< token.doc.len].matchLen(re"^\n|$") > -1:
+      break
+
+    # find the laziness text
+    size = token.doc[pos ..< token.doc.len].matchLen(re("^(" & LAZINESS_TEXT & ")"), matches=matches)
+
+    # blank line in laziness text always breaks the blockquote
+    if size == -1:
+      break
+
+    # concat the laziness text
+    pos += size
+    document &= matches[0]
+
+  if not found:
+    return false
+
+  var blockquote = Token(
+    type: BlockquoteToken,
+    slice: (start .. pos),
+    doc: document,
+    blockquoteVal: Blockquote(
+      doc: document
+    )
+  )
+  if document.strip != "":
+    parseBlock(state, blockquote)
+  token.children.append(blockquote)
+  return true
+
+proc parseReference*(state: var State, token: var Token): bool =
+  var pos = token.getBlockStart
+  var start = pos
+  let lastSlice = token.getBlockStart
+  let doc = token.doc[pos ..< token.doc.len]
+
+  var markStart = doc.matchLen(re"^ {0,3}\[")
+  if markStart == -1:
+    return false
+
+  pos += markStart - 1
+
+  var label: string
+  var labelSize = getLinkLabel(token.doc, pos, label)
+
+  # Link should have matching ] for [.
+  if labelSize == -1:
+    return false
+
+  # A link label must contain at least one non-whitespace character.
+  if label.find(re"\S") == -1:
+    return false
+
+  # An inline link consists of a link text followed immediately by a left parenthesis (
+  pos += labelSize # [link]
+
+  if pos >= token.doc.len or token.doc[pos] != ':':
+    return false
+  pos += 1
+
+  # parse whitespace
+  var whitespaceLen = token.doc[pos ..< token.doc.len].matchLen(re"^[ \t]*\n?[ \t]*")
+  if whitespaceLen != -1:
+    pos += whitespaceLen
+
+  # parse destination
+  var destinationSlice: Slice[int]
+  var destinationLen = getLinkDestination(token.doc, pos, destinationslice)
+
+  if destinationLen <= 0:
+    return false
+
+  pos += destinationLen
+
+  # parse whitespace
+  whitespaceLen = token.doc[pos ..< token.doc.len].matchLen(re"^[ \t]*\n?[ \t]*")
+  if whitespaceLen != -1:
+    pos += whitespaceLen
+
+  # parse title (optional)
+  var titleSlice: Slice[int]
+  var titleLen = 0;
+  if pos<token.doc.len and( token.doc[pos] == '(' or token.doc[pos] == '\'' or token.doc[pos] == '"'):
+    # TODO: validate at least one whitespace before the optional title.
+
+    titleLen = getLinkTitle(token.doc, pos, titleSlice)
+    if titleLen >= 0:
+      pos += titleLen
+      # link title may not contain a blank line
+      if token.doc[titleSlice].match(re"\n{2,}"):
+        return false
+
+  # parse whitespace, no more non-whitespace is allowed from now.
+  whitespaceLen = token.doc[pos ..< token.doc.len].matchLen(re"^\s*\n+")
+  if whitespaceLen != -1:
+    pos += whitespaceLen
+
+  # construct token
+  var title = ""
+  if titleLen > 0:
+    title = token.doc[titleSlice]
+
+  var url = token.doc[destinationSlice]
+
+  var reference = Token(
+    type: ReferenceToken,
+    slice: (start .. pos),
+    doc: token.doc[start ..< pos],
+    referenceVal: Reference(
+      text: label,
+      url: url,
+      title: title,
+    )
+  )
+
+  token.children.append(reference)
+
+  if not state.references.contains(label):
+    state.references[label] = reference.referenceVal
+  return true
+
+proc parseBlock(state: var State, token: var Token) =
+  let doc = token.doc
+  var ok: bool
+  #while token.children.tail == nil or token.getBlockStart < doc.len:
+  while token.getBlockStart < doc.len:
+    ok = false
+    for rule in state.ruleSet.blockRules:
+      case rule
+      of ReferenceToken: ok = parseReference(state, token)
+      of ThematicBreakToken: ok = parseThematicBreak(state, token)
+      of ATXHeadingToken: ok = parseATXHeading(state, token)
+      of SetextHeadingToken: ok = parseSetextHeading(state, token)
+      of IndentedCodeToken: ok = parseIndentedCode(state, token)
+      of FenceCodeToken: ok = parseFenceCode(state, token)
+      of BlockquoteToken: ok = parseBlockquote(state, token)
+      of BlankLineToken: ok = parseBlankLine(state, token)
+      of HTMLBlockToken: ok = parseHTMLBlock(state, token)
+      of UnorderedListToken: ok = parseUnorderedList(state, token)
+      of OrderedListToken: ok = parseOrderedList(state, token)
+      of TableToken: ok = parseHTMLTable(state, token)
+      of ParagraphToken: ok = parseParagraph(state, token)
+      else:
+        raise newException(MarkdownError, fmt"unknown rule. {token.children.tail.value.slice.b}")
+      if ok:
+        break
+    if not ok:
+      raise newException(MarkdownError, fmt"unknown rule. {token.children.tail.value.slice.b}")
+
+proc parseText(state: var State, token: var Token, start: int): int =
+  let slice = token.slice
+  var text = Token(
+    type: TextToken,
+    slice: (start .. start+1),
+    textVal: token.doc[start ..< start+1],
+  )
+  token.children.append(text)
+  result = 1 # FIXME: should match aggresively.
+
+proc parseSoftLineBreak(state: var State, token: var Token, start: int): int =
+  result = token.doc[start ..< token.doc.len].matchLen(re"^ \n *")
+  if result != -1:
+    token.children.append(Token(
+      type: SoftLineBreakToken,
+      slice: (start .. start+result),
+      softLineBreakVal: "\n"
+    ))
+
+proc parseAutoLink(state: var State, token: var Token, start: int): int =
+  let slice = token.slice
+  if token.doc[start] != '<':
+    return -1
+
+  let EMAIL_RE = r"^<([a-zA-Z0-9.!#$%&'*+\/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*)>"
+  var emailMatches: array[1, string]
+  result = token.doc[start ..< token.doc.len].matchLen(re(EMAIL_RE, {RegexFlag.reIgnoreCase}), matches=emailMatches)
+
+  if result != -1:
+    var url = emailMatches[0]
+    # TODO: validate and normalize the link
+    token.children.append(Token(
+      type: AutoLinkToken,
+      slice: (start .. start+result),
+      autoLinkVal: AutoLink(
+        text: url,
+        url: fmt"mailto:{url}"
+      )
+    ))
+    return result
+  
+  let LINK_RE = r"^<([a-zA-Z][a-zA-Z0-9+.\-]{1,31}):([^<>\x00-\x20]*)>"
+  var linkMatches: array[2, string]
+  result = token.doc[start ..< token.doc.len].matchLen(re(LINK_RE, {RegexFlag.reIgnoreCase}), matches=linkMatches)
+
+  if result != -1:
+    var schema = linkMatches[0]
+    var uri = linkMatches[1]
+    token.children.append(Token(
+      type: AutoLinkToken,
+      slice: (start .. start+result),
+      autoLinkVal: AutoLink(
+        text: fmt"{schema}:{uri}",
+        url: fmt"{schema}:{uri}",
+      )
+    ))
+    return result
 
 proc scanInlineDelimeters*(doc: string, start: int, delimeter: var Delimeter) =
   var charBefore = '\n'
@@ -871,13 +1324,13 @@ proc scanInlineDelimeters*(doc: string, start: int, delimeter: var Delimeter) =
     delimeter.canOpen = isLeftFlanking
     delimeter.canClose = isRightFlanking
 
-  #echo(fmt"{delimeter.canOpen} {delimeter.canClose}")
+proc parseDelimeter(state: var State, token: var Token, start: int, delimeters: var DoublyLinkedList[Delimeter]): int =
+  if token.doc[start] != '*' and token.doc[start] != '_':
+    return -1
 
-proc parseDelimeter*(doc: string, start: int, size: var int, delimeterStack: var DoublyLinkedList[Delimeter]): seq[MarkdownTokenRef] =
-  ## add a placeholder for delimeter and append a delimeter to the stack.
   var delimeter = Delimeter(
     token: nil,
-    kind: fmt"{doc[start]}",
+    kind: fmt"{token.doc[start]}",
     num: 0,
     originalNum: 0,
     isActive: true,
@@ -885,21 +1338,648 @@ proc parseDelimeter*(doc: string, start: int, size: var int, delimeterStack: var
     canClose: false,
   )
 
-  scanInlineDelimeters(doc, start, delimeter)
-
+  scanInlineDelimeters(token.doc, start, delimeter)
   if delimeter.num == 0:
-    return @[]
+    return -1
 
-  size = delimeter.num
+  result = delimeter.num
 
-  var inlineText = MarkdownTokenRef(
-    type: MarkdownTokenType.InlineText,
-    inlineTextVal: doc[start .. start + size - 1]
+  var textToken = Token(
+    type: TextToken,
+    slice: (start .. start+result),
+    textVal: token.doc[start ..< start+result]
+  )
+  token.children.append(textToken)
+  delimeter.token = textToken
+  delimeters.append(delimeter)
+
+proc getLinkDestination*(doc: string, start: int, slice: var Slice[int]): int =
+  # if start < 1 or doc[start - 1] != '(':
+  #   raise newException(MarkdownError, fmt"{start} can not be the start of inline link destination.")
+
+  # A link destination can be 
+  # a sequence of zero or more characters between an opening < and a closing >
+  # that contains no line breaks or unescaped < or > characters, or
+  if doc[start] == '<':
+    result = doc[start ..< doc.len].matchLen(re"^<([^\n<>]*)>")
+    if result != -1:
+      slice.a = start + 1
+      slice.b = start + result - 2
+    return result
+
+  # A link destination can also be
+  # a nonempty sequence of characters that does not include ASCII space or control characters, 
+  # and includes parentheses only if 
+  # (a) they are backslash-escaped or 
+  # (b) they are part of a balanced pair of unescaped parentheses. 
+  # (Implementations may impose limits on parentheses nesting to avoid performance issues, 
+  # but at least three levels of nesting should be supported.)
+  var level = 1 # assume the parenthesis has opened.
+  var urlLen = 0
+  var isEscaping = false
+  for i, ch in doc[start ..< doc.len]:
+    urlLen += 1
+    if isEscaping:
+      isEscaping = false
+      continue
+    elif ch == '\\':
+      isEscaping = true
+      continue
+    elif ch.int < 0x20 or ch.int == 0x7f or ch == ' ':
+      urlLen -= 1
+      break
+    elif ch == '(':
+      level += 1
+    elif ch == ')':
+      level -= 1
+      if level == 0:
+        urlLen -= 1
+        break
+  if level > 1:
+    return -1
+  if urlLen == -1:
+     return -1
+  slice = (start ..< start+urlLen)
+  return urlLen
+
+proc getLinkTitle*(doc: string, start: int, slice: var Slice[int]): int =
+  var marker = doc[start]
+  # Titles may be in single quotes, double quotes, or parentheses
+  if marker != '"' and marker != '\'' and marker != '(':
+    return -1
+  if marker == '(':
+    marker = ')'
+  var isEscaping = false
+  for i, ch in doc[start+1 ..< doc.len]:
+    if isEscaping:
+      isEscaping = false
+      continue
+    elif ch == '\\':
+      isEscaping = true
+      continue
+    elif ch == marker:
+      slice = (start+1 .. start+i)
+      return i+2
+  return -1
+
+proc normalizeLabel*(label: string): string =
+  # One label matches another just in case their normalized forms are equal.
+  # To normalize a label, strip off the opening and closing brackets,
+  # perform the Unicode case fold, strip leading and trailing whitespace
+  # and collapse consecutive internal whitespace to a single space.
+  label.toLower.strip.replace(re"\s+", " ")
+
+proc getLinkLabel*(doc: string, start: int, label: var string): int =
+  if doc[start] != '[':
+    raise newException(MarkdownError, fmt"{doc[start]} cannot be the start of link label.")
+
+  if start+1 >= doc.len:
+    return -1
+
+  var isEscaping = false
+  var size = 0
+  for i, ch in doc[start+1 ..< doc.len]:
+    size += 1
+
+    # A link label begins with a left bracket ([) and ends with the first right bracket (]) that is not backslash-escaped.
+    if isEscaping:
+      isEscaping = false
+      continue
+    elif ch == '\\':
+      isEscaping = true
+    elif ch == ']':
+      break
+
+    # Unescaped square bracket characters are not allowed inside the opening and closing square brackets of link labels
+    elif ch == '[':
+      return -1
+
+    # A link label can have at most 999 characters inside the square brackets.
+    if size > 999:
+      return -1
+
+  label = doc[start+1 ..< start+size].normalizeLabel
+  return size + 1
+
+
+proc getLinkText*(doc: string, start: int, slice: var Slice[int], allowNested: bool = false): int =
+  # based on assumption: token.doc[start] = '['
+  if doc[start] != '[':
+    raise newException(MarkdownError, fmt"{start} is not [.")
+
+  # A link text consists of a sequence of zero or more inline elements enclosed by square brackets ([ and ]).
+  var level = 0
+  var isEscaping = false
+  var skip = 0
+  for i, ch in doc[start ..< doc.len]:
+    # Skip ahead for higher precedent matches like code spans, autolinks, and raw HTML tags.
+    if skip > 0:
+      skip -= 1
+      continue
+
+    # Brackets are allowed in the link text only if (a) they are backslash-escaped
+    if isEscaping:
+      isEscaping = false
+      continue
+    elif ch == '\\':
+      isEscaping = true
+
+    # or (b) they appear as a matched pair of brackets, with an open bracket [,
+    # a sequence of zero or more inlines, and a close bracket ].
+    elif ch == '[':
+      level += 1
+    elif ch == ']':
+      level -= 1
+
+    # Backtick: code spans bind more tightly than the brackets in link text.
+    # Skip the tokens in code.
+    elif ch == '`':
+      # FIXME: it's better to extract to a code span helper function
+      skip = doc[start+i ..< doc.len].matchLen(re"^((`+)\s*([\s\S]*?[^`])\s*\2(?!`))") - 1
+
+    # autolinks, and raw HTML tags bind more tightly than the brackets in link text.
+    elif ch == '<':
+      skip = doc[start+i ..< doc.len].matchLen(re"^<[^>]*>") - 1
+
+    # Links may not contain other links, at any level of nesting.
+    # Image description may contain links.
+    if level == 0 and not allowNested and doc[start .. start+i].find(re"[^!]\[[^]]*\]\([^)]*\)") > -1:
+        return -1
+    if level == 0 and not allowNested and doc[start .. start+i].find(re"[^!]\[[^]]*\]\[[^]]*\]") > -1:
+        return -1
+
+    if level == 0:
+      slice = (start .. start+i)
+      return i+1
+
+  return -1
+
+
+proc parseInlineLink(state: var State, token: var Token, start: int, labelSlice: Slice[int]): int =
+  if token.doc[start] != '[':
+    return -1
+
+  var pos = labelSlice.b + 2 # [link](
+
+  # parse whitespace
+  var whitespaceLen = token.doc[pos ..< token.doc.len].matchLen(re"^[ \t\n]*")
+  if whitespaceLen != -1:
+    pos += whitespaceLen
+
+  # parse destination
+  var destinationSlice: Slice[int]
+  var destinationLen = getLinkDestination(token.doc, pos, destinationslice)
+
+  if destinationLen == -1:
+    return -1
+
+  pos += destinationLen
+
+  # parse whitespace
+  whitespaceLen = token.doc[pos ..< token.doc.len].matchLen(re"^[ \t\n]*")
+  if whitespaceLen != -1:
+    pos += whitespaceLen
+
+  # parse title (optional)
+  if token.doc[pos] != '(' and token.doc[pos] != '\'' and token.doc[pos] != '"' and token.doc[pos] != ')':
+    return -1
+  var titleSlice: Slice[int]
+  var titleLen = getLinkTitle(token.doc, pos, titleSlice)
+
+  if titleLen >= 0:
+    pos += titleLen
+
+  # parse whitespace
+  whitespaceLen = token.doc[pos ..< token.doc.len].matchLen(re"^[ \t\n]*")
+  pos += whitespaceLen
+
+  # require )
+  if pos >= token.doc.len:
+    return -1
+  if token.doc[pos] != ')':
+    return -1
+
+  # construct token
+  var title = ""
+  if titleLen >= 0:
+    title = token.doc[titleSlice]
+  var url = token.doc[destinationSlice]
+  var text = token.doc[labelSlice.a+1 ..< labelSlice.b]
+  var link = Token(
+    type: LinkToken,
+    slice: (start .. pos + 1),
+    doc: token.doc[start .. pos],
+    linkVal: Link(
+      text: text,
+      url: url,
+      title: title,
+    )
+  )
+  parseLinkInlines(state, link)
+  token.children.append(link)
+  result = pos - start + 1
+
+proc parseFullReferenceLink(state: var State, token: var Token, start: int, textSlice: Slice[int]): int =
+  var pos = textSlice.b + 1
+  var label: string
+  var labelSize = getLinkLabel(token.doc, pos, label)
+
+  if labelSize == -1:
+    return -1
+
+  if not state.references.contains(label):
+    return -1
+
+  pos += labelSize
+
+  var text = token.doc[textSlice.a+1 ..< textSlice.b]
+  var reference = state.references[label]
+  var link = Token(
+    type: LinkToken,
+    slice: (start ..< pos),
+    doc: token.doc[start ..< pos],
+    linkVal: Link(
+      url: reference.url,
+      title: reference.title,
+      text: text
+    )
+  )
+  parseLinkInlines(state, link)
+  token.children.append(link)
+  return pos - start
+
+proc parseCollapsedReferenceLink(state: var State, token: var Token, start: int, label: Slice[int]): int =
+  var id = token.doc[label.a+1 ..< label.b].toLower.replace(re"\s+", " ")
+  var text = token.doc[label.a+1 ..< label.b]
+  if not state.references.contains(id):
+    return -1
+
+  var reference = state.references[id]
+  var link = Token(
+    type: LinkToken,
+    slice: (start ..< label.b + 1),
+    doc: token.doc[start ..< label.b+1],
+    linkVal: Link(
+      url: reference.url,
+      title: reference.title,
+      text: text
+    )
+  )
+  parseLinkInlines(state, link)
+  token.children.append(link)
+  return label.b - start + 3
+
+proc parseShortcutReferenceLink(state: var State, token: var Token, start: int, label: Slice[int]): int =
+  var id = token.doc[label.a+1 ..< label.b].toLower.replace(re"\s+", " ")
+  var text = token.doc[label.a+1 ..< label.b]
+  if not state.references.contains(id):
+    return -1
+
+  var reference = state.references[id]
+  var link = Token(
+    type: LinkToken,
+    slice: (start ..< label.b + 1),
+    doc: token.doc[start ..< label.b+1],
+    linkVal: Link(
+      url: reference.url,
+      title: reference.title,
+      text: text
+    )
+  )
+  parseLinkInlines(state, link)
+  token.children.append(link)
+  return label.b - start + 1
+
+
+proc parseLink*(state: var State, token: var Token, start: int): int =
+  # Link should start with [
+  if token.doc[start] != '[':
+    return -1
+
+  var labelSlice: Slice[int]
+  result = getLinkText(token.doc, start, labelSlice)
+  # Link should have matching ] for [.
+  if result == -1:
+    return -1
+
+  # An inline link consists of a link text followed immediately by a left parenthesis (
+  if labelSlice.b + 1 < token.doc.len and token.doc[labelSlice.b + 1] == '(':
+    var size = parseInlineLink(state, token, start, labelSlice)
+    if size != -1:
+      return size
+
+  # A collapsed reference link consists of a link label that matches a link reference 
+  # definition elsewhere in the document, followed by the string []. 
+  if labelSlice.b + 2 < token.doc.len and token.doc[labelSlice.b+1 .. labelSlice.b+2] == "[]":
+    var size = parseCollapsedReferenceLink(state, token, start, labelSlice)
+    if size != -1:
+      return size
+
+  # A full reference link consists of a link text immediately followed by a link label 
+  # that matches a link reference definition elsewhere in the document.
+  elif labelSlice.b + 1 < token.doc.len and token.doc[labelSlice.b + 1] == '[':
+    return parseFullReferenceLink(state, token, start, labelSlice)
+
+  # A shortcut reference link consists of a link label that matches a link reference 
+  # definition elsewhere in the document and is not followed by [] or a link label.
+  return parseShortcutReferenceLink(state, token, start, labelSlice)
+
+proc parseInlineImage(state: var State, token: var Token, start: int, labelSlice: Slice[int]): int =
+  var pos = labelSlice.b + 2 # ![link](
+
+  # parse whitespace
+  var whitespaceLen = token.doc[pos ..< token.doc.len].matchLen(re"^[ \t\n]*")
+  pos += whitespaceLen
+
+  # parse destination
+  var destinationSlice: Slice[int]
+  var destinationLen = getLinkDestination(token.doc, pos, destinationslice)
+  if destinationLen == -1:
+    return -1
+
+  pos += destinationLen
+
+  # parse whitespace
+  whitespaceLen = token.doc[pos ..< token.doc.len].matchLen(re"^[ \t\n]*")
+  pos += whitespaceLen
+
+  # parse title (optional)
+  if token.doc[pos] != '(' and token.doc[pos] != '\'' and token.doc[pos] != '"' and token.doc[pos] != ')':
+    return -1
+  var titleSlice: Slice[int]
+  var titleLen = getLinkTitle(token.doc, pos, titleSlice)
+
+  if titleLen >= 0:
+    pos += titleLen
+
+  # parse whitespace
+  whitespaceLen = token.doc[pos ..< token.doc.len].matchLen(re"^[ \t\n]*")
+  pos += whitespaceLen
+
+  # require )
+  if pos >= token.doc.len:
+    return -1
+  if token.doc[pos] != ')':
+    return -1
+
+  # construct token
+  var title = ""
+  if titleLen >= 0:
+    title = token.doc[titleSlice]
+  var url = token.doc[destinationSlice]
+  var text = token.doc[labelSlice.a+1 ..< labelSlice.b]
+
+  var image = Token(
+    type: ImageToken,
+    slice: (start-1 .. pos+1),
+    doc: token.doc[start-1 ..< pos+1],
+    imageVal: Image(
+      alt: text,
+      url: url,
+      title: title,
+    )
   )
 
-  result = @[inlineText]
-  delimeter.token = inlineText
-  delimeterStack.append(delimeter)
+  parseLinkInlines(state, image, allowNested=true)
+  token.children.append(image)
+  result = pos - start + 2
+
+proc parseFullReferenceImage(state: var State, token: var Token, start: int, altSlice: Slice[int]): int =
+  var pos = altSlice.b + 1
+  var label: string
+  var labelSize = getLinkLabel(token.doc, pos, label)
+
+  if labelSize == -1:
+    return -1
+
+  pos += labelSize
+
+  var alt = token.doc[altSlice.a+1 ..< altSlice.b]
+  if not state.references.contains(label):
+    return -1
+
+  var reference = state.references[label]
+  var image = Token(
+    type: ImageToken,
+    slice: (start ..< pos),
+    doc: token.doc[start ..< pos-1],
+    imageVal: Image(
+      url: reference.url,
+      title: reference.title,
+      alt: alt
+    )
+  )
+  parseLinkInlines(state, image, allowNested=true)
+  token.children.append(image)
+  return pos - start + 1
+
+proc parseCollapsedReferenceImage(state: var State, token: var Token, start: int, label: Slice[int]): int =
+  var id = token.doc[label.a+1 ..< label.b].toLower.replace(re"\s+", " ")
+  var alt = token.doc[label.a+1 ..< label.b]
+  if not state.references.contains(id):
+    return -1
+
+  var reference = state.references[id]
+  var image = Token(
+    type: ImageToken,
+    slice: (start ..< label.b + 3),
+    doc: token.doc[start ..< label.b+2],
+    imageVal: Image(
+      url: reference.url,
+      title: reference.title,
+      alt: alt
+    )
+  )
+  parseLinkInlines(state, image)
+  token.children.append(image)
+  return label.b - start + 3
+
+proc parseShortcutReferenceImage(state: var State, token: var Token, start: int, label: Slice[int]): int =
+  var id = token.doc[label.a+1 ..< label.b].toLower.replace(re"\s+", " ")
+  var alt = token.doc[label.a+1 ..< label.b]
+  if not state.references.contains(id):
+    return -1
+
+  var reference = state.references[id]
+  var image = Token(
+    type: ImageToken,
+    slice: (start ..< label.b + 1),
+    doc: token.doc[start ..< label.b+1],
+    imageVal: Image(
+      url: reference.url,
+      title: reference.title,
+      alt: alt
+    )
+  )
+  parseLinkInlines(state, image)
+  token.children.append(image)
+  return label.b - start + 1
+
+
+proc parseImage*(state: var State, token: var Token, start: int): int =
+  # Image should start with ![
+  if not token.doc[start ..< token.doc.len].match(re"^!\["):
+    return -1
+
+  var labelSlice: Slice[int]
+  var labelSize = getLinkText(token.doc, start+1, labelSlice, allowNested=true)
+
+  # Image should have matching ] for [.
+  if labelSize == -1:
+    return -1
+
+  # An inline image consists of a link text followed immediately by a left parenthesis (
+  if labelSlice.b + 1 < token.doc.len and token.doc[labelSlice.b + 1] == '(':
+    return parseInlineImage(state, token, start+1, labelSlice)
+
+  # A collapsed reference link consists of a link label that matches a link reference 
+  # definition elsewhere in the document, followed by the string []. 
+  elif labelSlice.b + 2 < token.doc.len and token.doc[labelSlice.b+1 .. labelSlice.b+2] == "[]":
+    return parseCollapsedReferenceImage(state, token, start, labelSlice)
+
+  # A full reference link consists of a link text immediately followed by a link label 
+  # that matches a link reference definition elsewhere in the document.
+  if labelSlice.b + 1 < token.doc.len and token.doc[labelSlice.b + 1] == '[':
+    return parseFullReferenceImage(state, token, start, labelSlice)
+
+  # A shortcut reference link consists of a link label that matches a link reference 
+  # definition elsewhere in the document and is not followed by [] or a link label.
+  else:
+    return parseShortcutReferenceImage(state, token, start, labelSlice)
+
+const ENTITY = r"&(?:#x[a-f0-9]{1,6}|#[0-9]{1,7}|[a-z][a-z0-9]{1,31});"
+proc parseHTMLEntity*(state: var State, token: var Token, start: int): int =
+  if token.doc[start] != '&':
+    return -1
+
+  let regex = re(r"^(" & ENTITY & ")", {RegexFlag.reIgnoreCase})
+  var matches: array[1, string]
+
+  var size = token.doc[start .. token.doc.len - 1].matchLen(regex, matches)
+  if size == -1:
+    return -1
+
+  var entity: string
+  if matches[0] == "&#0;":
+    entity = "\uFFFD"
+  else:
+    entity = escapeHTMLEntity(matches[0])
+
+  token.children.append(Token(
+    type: HTMLEntityToken,
+    slice: (start ..< start+size),
+    htmlEntityVal: entity
+  ))
+  return size
+
+proc parseEscape*(state: var State, token: var Token, start: int): int =
+  if token.doc[start] != '\\':
+    return -1
+
+  let regex = re"^\\([\\`*{}\[\]()#+\-.!_<>~|""$%&',/:;=?@^])"
+  let size = token.doc[start ..< token.doc.len].matchLen(regex)
+  if size == -1:
+    return -1
+
+  token.children.append(Token(
+    type: EscapeToken,
+    slice: (start ..< start + 2),
+    escapeVal: fmt"{token.doc[start+1]}"
+  ))
+  return 2
+
+proc parseInlineHTML*(state: var State, token: var Token, start: int): int =
+  if token.doc[start] != '<':
+    return -1
+  let regex = re("^(" & HTML_TAG & ")", {RegexFlag.reIgnoreCase})
+  var matches: array[5, string]
+  var size = token.doc[start ..< token.doc.len].matchLen(regex, matches=matches)
+
+  if size == -1:
+    return -1
+
+  token.children.append(Token(
+    type: InlineHTMLToken,
+    slice: (start ..< start+size),
+    inlineHTMLVal: matches[0]
+  ))
+  return size
+
+proc parseHardLineBreak*(state: var State, token: var Token, start: int): int =
+  if token.doc[start] != ' ' and token.doc[start] != '\\':
+    return -1
+
+  let size = token.doc[start ..< token.doc.len].matchLen(re"^((?: {2,}\n|\\\n)\s*)")
+
+  if size == -1:
+    return -1
+
+  token.children.append(Token(
+    type: HardLineBreakToken,
+    slice: (start ..< start+size),
+    hardLineBreakVal: ""
+  ))
+  return size
+
+proc parseCodeSpan*(state: var State, token: var Token, start: int): int =
+  if token.doc[start] != '`':
+    return -1
+
+  var matches: array[5, string]
+  var size = token.doc[start ..< token.doc.len].matchLen(re"^((`+)([^`]|[^`][\s\S]*?[^`])\2(?!`))", matches=matches)
+
+  if size == -1:
+    size = token.doc[start ..< token.doc.len].matchLen(re"^`+(?!`)")
+    if size == -1:
+      return -1
+    token.children.append(Token(
+      type: TextToken,
+      slice: (start ..< start+size),
+      textVal: token.doc[start ..< start+size]
+    ))
+    return size
+
+
+  token.children.append(Token(
+    type: CodeSpanToken,
+    slice: (start ..< start+size),
+    codeSpanVal: matches[2].strip.replace(re"[ \n]+", " ")
+  ))
+  return size
+
+proc parseStrikethrough*(state: var State, token: var Token, start: int): int =
+  if token.doc[start] != '~':
+    return -1
+
+  var matches: array[5, string]
+  var size = token.doc[start ..< token.doc.len].matchLen(re"^(~~(?=\S)([\s\S]*?\S)~~)", matches=matches)
+
+  if size == -1:
+    return -1
+
+  token.children.append(Token(
+    type: StrikethroughToken,
+    slice: (start ..< start+size),
+    strikethroughVal: matches[1]
+  ))
+  return size
+
+proc findInlineToken(state: var State, token: var Token, rule: TokenType, start: int, delimeters: var DoublyLinkedList[Delimeter]): int =
+  case rule
+  of EmphasisToken: result = parseDelimeter(state, token, start, delimeters)
+  of AutoLinkToken: result = parseAutoLink(state, token, start)
+  of LinkToken: result = parseLink(state, token, start)
+  of ImageToken: result = parseImage(state, token, start)
+  of HTMLEntityToken: result = parseHTMLEntity(state, token, start)
+  of InlineHTMLToken: result = parseInlineHTML(state, token, start)
+  of EscapeToken: result = parseEscape(state, token, start)
+  of CodeSpanToken: result = parseCodeSpan(state, token, start)
+  of StrikethroughToken: result = parseStrikethrough(state, token, start)
+  of HardLineBreakToken: result = parseHardLineBreak(state, token, start)
+  of SoftLineBreakToken: result = parseSoftLineBreak(state, token, start)
+  of TextToken: result = parseText(state, token, start)
+  else: raise newException(MarkdownError, fmt"{token.type} has no inline rule.")
+
 
 proc removeDelimeter*(delimeter: var DoublyLinkedNode[Delimeter]) =
   if delimeter.prev != nil:
@@ -908,7 +1988,7 @@ proc removeDelimeter*(delimeter: var DoublyLinkedNode[Delimeter]) =
     delimeter.next.prev = delimeter.prev
   delimeter = delimeter.next
 
-proc processEmphasis*(tokens: var seq[MarkdownTokenRef], delimeterStack: var DoublyLinkedList[Delimeter]) =
+proc processEmphasis*(state: var State, token: var Token, delimeterStack: var DoublyLinkedList[Delimeter]) =
   var opener: DoublyLinkedNode[Delimeter] = nil
   var closer: DoublyLinkedNode[Delimeter] = nil
   var oldCloser: DoublyLinkedNode[Delimeter] = nil
@@ -919,14 +1999,21 @@ proc processEmphasis*(tokens: var seq[MarkdownTokenRef], delimeterStack: var Dou
   var asteriskOpenerBottom: DoublyLinkedNode[Delimeter] = nil
 
   # find first closer above stack_bottom
+  #
+  # *opener and closer*
+  #                   ^
   closer = delimeterStack.head
-
   # move forward, looking for closers, and handling each
   while closer != nil:
     # find the first closing delimeter.
+    #
+    # sometimes, the delimeter **can _not** close.
+    #                                ^
+    # , so we choose jumping to the next ^
     if not closer.value.canClose:
       closer = closer.next
       continue
+
     # found emphasis closer. now look back for first matching opener.
     opener = closer.prev
     openerFound = false
@@ -964,49 +2051,48 @@ proc processEmphasis*(tokens: var seq[MarkdownTokenRef], delimeterStack: var Dou
       # remove used delimiters from stack elts and inlines
       opener.value.num -= useDelims
       closer.value.num -= useDelims
-      openerInlineText.inlineTextVal = openerInlineText.inlineTextVal[0 .. ^(useDelims+1)]
-      closerInlineText.inlineTextVal = closerInlineText.inlineTextVal[0 .. ^(useDelims+1)]
+      openerInlineText.textVal = openerInlineText.textVal[0 .. ^(useDelims+1)]
+      closerInlineText.textVal = closerInlineText.textVal[0 .. ^(useDelims+1)]
 
       # build contents for new emph element
-      var isEmphasized = false
-      var startIndex = 0
-      var endIndex = 0
-      var inlines: seq[MarkdownTokenRef] = @[]
-      for index, token in tokens:
-        if token == opener.value.token:
-          isEmphasized = true
-          startIndex = index
-        elif token == closer.value.token:
-          isEmphasized = false
-          endIndex = index
-        elif isEmphasized:
-          inlines.add(token)
-      tokens.delete(startIndex + 1, endIndex - 1)
-
       # add emph element to tokens
-      var emph: MarkdownTokenRef
+      var emToken: Token
       if useDelims == 2:
-        emph = MarkdownTokenRef(type: MarkdownTokenType.InlineDoubleEmphasis, inlineDoubleEmphasisVal: DoubleEmphasis(inlines: inlines))
+        emToken = Token(type: StrongToken)
       else:
-        emph = MarkdownTokenRef(type: MarkdownTokenType.InlineEmphasis, inlineEmphasisVal: Emphasis(inlines: inlines))
-      tokens.insert(emph, startIndex + 1)
+        emToken = Token(type: EmphasisToken)
+
+      var emNode = newDoublyLinkedNode(emToken)
+      for childNode in token.children.nodes:
+        if childNode.value == opener.value.token:
+          emToken.children.head = childNode.next
+          if childNode.next != nil:
+            childNode.next.prev = nil
+          childNode.next = emNode
+          emNode.prev = childNode
+        if childNode.value == closer.value.token:
+          emToken.children.tail = childNode.prev
+          if childNode.prev != nil:
+            childNode.prev.next = nil
+          childNode.prev = emNode
+          emNode.next = childNode
 
       # remove elts between opener and closer in delimiters stack
-      if opener.next != closer:
+      if opener != nil and opener.next != closer:
         opener.next = closer
         closer.prev = opener
 
-      # remove closer if no text left
-      if closer.value.num == 0:
-        tokens.delete(startIndex + 2) # the closer token
-        var tmp = closer.next
-        removeDelimeter(closer)
-        closer = tmp
-
-      # remove opener if no text left
-      if opener.value.num == 0:
-        tokens.delete(startIndex)
-        removeDelimeter(opener)
+      for childNode in token.children.nodes:
+        if opener != nil and childNode.value == opener.value.token:
+          # remove opener if no text left
+          if opener.value.num == 0:
+            removeDelimeter(opener)
+        if closer != nil and childNode.value == closer.value.token:
+          # remove closer if no text left
+          if closer.value.num == 0:
+            var tmp = closer.next
+            removeDelimeter(closer)
+            closer = tmp
 
     # if none is found.
     if not openerFound and not oddMatch:
@@ -1026,492 +2112,280 @@ proc processEmphasis*(tokens: var seq[MarkdownTokenRef], delimeterStack: var Dou
   while delimeterStack.head != nil:
     removeDelimeter(delimeterStack.head)
 
-proc parseQuote*(doc: string, start: int, size: var int): seq[MarkdownTokenRef] = @[]
-
-proc parseOpenBracket*(doc: string, start: int, size: var int): seq[MarkdownTokenRef] =
-  var pos: int = start
-  var token: MarkdownTokenRef
-
-  token = findToken(doc, pos, MarkdownTokenType.InlineFootnote)
-  if token != nil:
-    size = pos - start
-    return @[token]
-
-  token = findToken(doc, pos, MarkdownTokenType.InlineRefLink)
-  if token != nil:
-    size = pos - start
-    return @[token]
-
-  token = findToken(doc, pos, MarkdownTokenType.InlineLink)
-  if token != nil:
-    size = pos - start
-    return @[token]
-
-  token = findToken(doc, pos, MarkdownTokenType.InlineNoLink)
-  if token != nil:
-    size = pos - start
-    return @[token]
-
-  size = -1
-  result = @[]
-
-proc parseHTMLEntity*(doc: string, start: int, size: var int): seq[MarkdownTokenRef] =
-  let regex = re(r"^(" & ENTITY & ")", {RegexFlag.reIgnoreCase})
-  var matches: array[1, string]
-  size = doc[start .. doc.len - 1].matchLen(regex, matches)
-
-  var entity: string
-
-  if size == -1:
-    return @[]
-
-  if matches[0] == "&#0;":
-    entity = "\uFFFD"
-  else:
-    entity = escapeHTMLEntity(matches[0])
-
-  result = @[MarkdownTokenRef(type: MarkdownTokenType.InlineText, inlineTextVal: entity)]
-
-proc parseAutolink*(doc: string, start: int, size: var int): seq[MarkdownTokenRef] =
-  var pos: int = start
-  var token: MarkdownTokenRef
-
-  token = findToken(doc, pos, MarkdownTokenType.Autolink)
-  if token != nil:
-    size = pos - start
-    return @[token]
-
-  size = -1
-  result = @[]
-
-proc parseHTMLTag*(doc: string, start: int, size: var int): seq[MarkdownTokenRef] =
-  var pos: int = start
-  var token: MarkdownTokenRef
-
-  token = findToken(doc, pos, MarkdownTokenType.InlineHTML)
-  if token != nil:
-    size = pos - start
-    return @[token]
-
-  size = -1
-  result = @[]
-
-proc parseString*(doc: string, start: int, size: var int): seq[MarkdownTokenRef] =
-  var pos: int = start
-  var token: MarkdownTokenRef
-
-  token = findToken(doc, pos, MarkdownTokenType.InlineURL)
-  if token != nil:
-    size = pos - start
-    return @[token]
-
-  token = findToken(doc, pos, MarkdownTokenType.InlineEmail)
-  if token != nil:
-    size = pos - start
-    return @[token]
-
-  token = findToken(doc, pos, MarkdownTokenType.InlineStrikethrough)
-  if token != nil:
-    size = pos - start
-    return @[token]
-
-  size = -1
-  result = @[]
-
-proc parseLessThan(doc: string, start: int, size: var int): seq[MarkdownTokenRef] =
-  result = parseHTMLTag(doc, start, size)
-
-  if result.len != 0:
-    return result
-
-  result = parseAutolink(doc, start, size)
-
-proc parseHardLineBreak(doc: string, start: int, size: var int): seq[MarkdownTokenRef] =
-  size = doc[start .. doc.len - 1].matchLen(re"^ {2,}\n *")
-  if size != -1:
-    return @[MarkdownTokenRef(type: MarkdownTokenType.InlineBreak, inlineBreakVal: "")]
-
-  size = doc[start .. doc.len - 1].matchLen(re" \n *")
-  if size != -1:
-    return @[MarkdownTokenRef(type: MarkdownTokenType.InlineText, inlineTextVal: "\n")]
-
-  result = @[]
-  
-
-proc parseInlines*(ctx: MarkdownContext, doc: string): seq[MarkdownTokenRef] =
+proc parseLinkInlines*(state: var State, token: var Token, allowNested: bool = false) =
+  var delimeters: DoublyLinkedList[Delimeter]
   var pos = 0
-  var delimeterStack: DoublyLinkedList[Delimeter]
+  var size = 0
+  if token.type == LinkToken:
+    pos = 1
+    size = token.linkVal.text.len - 1
+  elif token.type == ImageToken:
+    pos = 2
+    size = token.imageVal.alt.len
+  else:
+    raise newException(MarkdownError, fmt"{token.type} has no link inlines.")
 
-  for index, ch in doc:
+  for index, ch in token.doc[pos .. pos+size]:
+    if 1+index < pos:
+      continue
+    var ok = false
+    var size = -1
+    for rule in state.ruleSet.inlineRules:
+      if not allowNested and rule == LinkToken:
+        continue
+      size = findInlineToken(state, token, rule, pos, delimeters)
+      if size != -1:
+        pos += size
+        break
+    if size == -1:
+      token.children.append(Token(type: TextToken, slice: (index .. index+1), textVal: fmt"{ch}"))
+      pos += 1
+
+  processEmphasis(state, token, delimeters)
+
+proc parseLeafBlockInlines(state: var State, token: var Token) =
+  var pos = 0
+  var delimeters: DoublyLinkedList[Delimeter]
+
+  for index, ch in token.doc[0 ..< token.doc.len].strip:
     if index < pos:
       continue
-
+    var ok = false
     var size = -1
-    var tokens: seq[MarkdownTokenRef] = @[]
-
-    case ch
-    of '\n': tokens = parseNewline(doc, index, size)
-    of '\\': tokens = parseBackslash(doc, index, size)
-    of '`': tokens = parseBacktick(doc, index, size)
-    of '*': tokens = parseDelimeter(doc, index, size, delimeterStack)
-    of '_': tokens = parseDelimeter(doc, index, size, delimeterStack)
-    of '\'': tokens = parseQuote(doc, index, size)
-    of '"': tokens = parseQuote(doc, index, size)
-    of '[': tokens = parseOpenBracket(doc, index, size)
-    of '!': tokens = parseOpenBracket(doc, index, size)
-    of '&': tokens = parseHTMLEntity(doc, index, size)
-    of '<': tokens = parseLessThan(doc, index, size)
-    of ' ': tokens = parseHardLineBreak(doc, index, size)
-    else: tokens = parseString(doc, index, size)
-
+    for rule in state.ruleSet.inlineRules:
+      if token.type == rule:
+        continue
+      size = findInlineToken(state, token, rule, pos, delimeters)
+      if size != -1:
+        pos += size
+        break
     if size == -1:
-      tokens.add(MarkdownTokenRef(type: MarkdownTokenType.InlineText, inlineTextVal: fmt"{ch}"))
-      pos = index + 1
-    else:
-      pos += size
+      token.children.append(Token(type: TextToken, slice: (index .. index+1), textVal: fmt"{ch}"))
+      pos += 1
 
-    result.insert(tokens, result.len)
+  processEmphasis(state, token, delimeters)
 
-  result.processEmphasis(delimeterStack)
+proc isContainerToken(token: Token): bool =
+  {DocumentToken, BlockquoteToken, ListItemToken, UnorderedListToken,
+   OrderedListToken, TableToken, THeadToken, TBodyToken, TableRowToken, }.contains(token.type)
 
-proc findToken(doc: string, start: var int, ruleType: MarkdownTokenType): MarkdownTokenRef =
-  ## Find a markdown token from document `doc` at position `start`,
-  ## based on a rule type and regex rule.
-  let regex = blockRules[ruleType]
-  var matches: array[5, string]
-
-  let size = doc[start .. doc.len - 1].matchLen(regex, matches=matches)
-
-  if size == -1:
-    return nil
-
-  case ruleType
-  of MarkdownTokenType.Newline: result = genNewlineToken(matches)
-  of MarkdownTokenType.ATXHeading: result = genATXHeading(matches)
-  of MarkdownTokenType.SetextHeading: result = genSetextHeading(matches)
-  of MarkdownTokenType.ThematicBreak: result = genThematicBreakToken(matches)
-  of MarkdownTokenType.BlockQuote: result = genBlockQuoteToken(matches)
-  of MarkdownTokenType.IndentedBlockCode: result = genIndentedBlockCode(matches)
-  of MarkdownTokenType.FencingBlockCode: result = genFencingBlockCode(matches)
-  of MarkdownTokenType.DefineLink: result = genDefineLink(matches)
-  of MarkdownTokenType.DefineFootnote: result = genDefineFootnote(matches)
-  of MarkdownTokenType.HTMLBlock: result = genHTMLBlock(matches)
-  of MarkdownTokenType.HTMLTable: result = genHTMLTable(matches)
-  of MarkdownTokenType.ListBlock: result = genListBlock(matches)
-  of MarkdownTokenType.Paragraph: result = genParagraph(matches)
-  of MarkdownTokenType.Text: result = genText(matches)
-  of MarkdownTokenType.AutoLink: result = genAutoLink(matches)
-  of MarkdownTokenType.InlineText: result = genInlineText(matches)
-  of MarkdownTokenType.InlineEscape: result = genInlineEscape(matches)
-  of MarkdownTokenType.InlineHTML: result = genInlineHTML(matches)
-  of MarkdownTokenType.InlineLink: result = genInlineLink(matches)
-  of MarkdownTokenType.InlineRefLink: result = genInlineRefLink(matches)
-  of MarkdownTokenType.InlineNoLink: result = genInlineNoLink(matches)
-  of MarkdownTokenType.InlineURL: result = genInlineURL(matches)
-  of MarkdownTokenType.InlineEmail: result = genInlineEmail(matches)
-  of MarkdownTokenType.InlineDoubleEmphasis: result = genInlineDoubleEmphasis(matches)
-  of MarkdownTokenType.InlineEmphasis: result = genInlineEmphasis(matches)
-  of MarkdownTokenType.InlineCode: result = genInlineCode(matches)
-  of MarkdownTokenType.InlineBreak: result = genInlineBreak(matches)
-  of MarkdownTokenType.InlineStrikethrough: result = genInlineStrikethrough(matches)
-  of MarkdownTokenType.InlineFootnote: result = genInlineFootnote(matches)
+proc parseInline(state: var State, token: var Token) =
+  if isContainerToken(token):
+    for childToken in token.children.mitems:
+      parseInline(state, childToken)
   else:
-    result = genText(matches)
+    parseLeafBlockInlines(state, token)
 
-  start += size
+proc postProcessing(state: var State, token: var Token) =
+  discard
 
-  
-proc renderHeading(ctx: MarkdownContext, heading: Heading): string =
-  # Render heading tag, for example, `<h1>`, `<h2>`, etc.
-  result = fmt"<h{heading.level}>"
-  for token in heading.inlines:
-    result &= renderToken(ctx, token)
-  result &= fmt"</h{heading.level}>"
+proc parse(state: var State, token: var Token) =
+  preProcessing(state, token)
+  parseBlock(state, token)
+  parseInline(state, token)
+  postProcessing(state, token)
 
-proc renderText(ctx: MarkdownContext, text: string): string =
-  # Render text by escaping itself.
-  if ctx.config.escape:
-    result = text.escapeAmpersandSeq.escapeTag.escapeQuote
+proc toSeq(tokens: DoublyLinkedList[Token]): seq[Token] =
+  result = newSeq[Token]()
+  for token in tokens.items:
+    result.add(token)
+
+proc renderToken(state: var State, token: Token): string;
+proc renderInline(state: var State, token: Token): string =
+  var s = state
+  token.children.toSeq.map(
+    proc(x: Token): string =
+      result = s.renderToken(x)
+  ).join("")
+
+proc renderImageAlt*(state: var State, token: Token): string =
+  var s = state
+  token.children.toSeq.map(
+    proc(x: Token): string =
+      case x.type
+      of LinkToken: x.linkVal.text
+      of ImageToken: x.imageVal.alt
+      of EmphasisToken: s.renderInline(x)
+      of StrongToken: s.renderInline(x)
+      else: s.renderToken(x)
+  ).join("")
+
+proc renderParagraph(state: var State, token: Token): string =
+  if state.loose:
+    p(state.renderInline(token))
   else:
-    result = text
+    state.renderInline(token)
 
-proc renderFencingBlockCode(fence: Fence): string =
-  # Render fencing block code
-  var lang: string
-  if fence.lang == "":
-    lang = ""
+proc renderListItemChildren(state: var State, token: Token): string =
+  var html: string
+  var results: seq[string]
+  for token in token.children.items:
+    html = renderToken(state, token)
+    if html != "":
+      results.add(html)
+
+  result = results.join("\n")
+  if state.loose:
+    result = result & "\n"
+
+proc renderUnorderedList(state: var State, token: Token): string =
+  var origLoose = state.loose
+  state.loose = token.ulVal.loose
+  result = ul("\n", state.render(token))
+  state.loose = origLoose
+
+proc renderOrderedList(state: var State, token: Token): string =
+  var origLoose = state.loose
+  state.loose = token.olVal.loose
+  if token.olVal.start != 1:
+    result = ol(start=fmt"{token.olVal.start}", "\n", state.render(token))
   else:
-    lang = fmt(" class=\"language-{escapeHTMLEntity(escapeBackslash(fence.lang))}\"")
-  result = fmt("""<pre><code{lang}>{escapeCode(fence.code)}
-</code></pre>""")
+    result = ol("\n", state.render(token))
+  state.loose = origLoose
 
-proc renderIndentedBlockCode(code: string): string =
-  # Render indented block code.
-  # The code content will be escaped as it might contains HTML tags.
-  # By default the indented block code doesn't support code highlight.
-  result = fmt"<pre><code>{escapeCode(code)}</code></pre>"
-
-proc renderParagraph(ctx: MarkdownContext, paragraph: Paragraph): string =
-  for token in paragraph.inlines:
-    result &= renderToken(ctx, token)
-  result = fmt"<p>{result}</p>"
-
-proc renderThematicBreak(): string =
-  result = "<hr />"
-
-proc renderBlockQuote(ctx: MarkdownContext, blockQuote: BlockQuote): string =
-  result = "<blockquote>\n"
-  for token in blockQuote.blocks:
-    result &= renderToken(ctx, token)
-    result &= "\n"
-  result &= "</blockquote>"
-
-proc renderListItem(ctx: MarkdownContext, listItem: ListItem): string =
-  for el in listItem.blocks:
-    result &= renderToken(ctx, el)
-  result = fmt("<li>{result}</li>\n")
-
-proc renderListBlock(ctx: MarkdownContext, listBlock: ListBlock): string =
-  result = ""
-  for el in listBlock.blocks:
-    result &= renderListItem(ctx, el.listItemVal)
-  if listBlock.ordered:
-    result = fmt("<ol>\n{result}</ol>")
+proc renderListItem(state: var State, token: Token): string =
+  if state.loose:
+    li("\n", state.renderListItemChildren(token))
   else:
-    result = fmt("<ul>\n{result}</ul>")
+    li(state.renderListItemChildren(token))
 
-proc escapeInvalidHTMLTag(doc: string): string =
-  doc.replacef(
-    re(r"<(title|textarea|style|xmp|iframe|noembed|noframes|script|plaintext)>",
-      {RegexFlag.reIgnoreCase}),
-    "&lt;$1>")
-
-proc renderHTMLBlock(ctx: MarkdownContext, htmlBlock: HTMLBlock): string =
-  var text = htmlBlock.text.escapeInvalidHTMLTag
-  if htmlBlock.tag == "":
-    result = text
+proc renderTableHeadCell(state: var State, token: Token): string =
+  let align = token.theadCellVal.align
+  if align == "":
+    fmt"<th>{state.renderInline(token)}</th>"
   else:
-    var space: string
-    if htmlBlock.attributes == "":
-      space = ""
-    else:
-      space = " "
-    result = fmt"<{htmlBlock.tag}{space}{htmlBlock.attributes}>{text}</{htmlBlock.tag}>"
-  if not ctx.config.keepHTML:
-    result = result.escapeAmpersandSeq.escapeTag
+    fmt("<th align=\"{align}\">{state.renderInline(token)}</th>")
 
-proc renderHTMLTableCell(ctx: MarkdownContext, cell: TableCell, tag: string): string =
-  if cell.align != "":
-    result = fmt("<{tag} style=\"text-align: {cell.align}\">")
+proc renderTableBodyCell(state: var State, token: Token): string =
+  let align = token.tbodyCellVal.align
+  if align == "":
+    fmt"<td>{state.renderInline(token)}</td>"
   else:
-    result = fmt("<{tag}>")
-  for token in cell.dom:
-    result &= renderToken(ctx, token)
-  result &= fmt("</{tag}>\n")
+    fmt("<td align=\"{align}\">{state.renderInline(token)}</td>")
 
-proc renderHTMLTable*(ctx: MarkdownContext, table: HTMLTable): string =
-  result &= "<table>\n"
-  result &= "<thead>\n"
-  result &= "<tr>\n"
-  for headCell in table.head.cells:
-    result &= renderHTMLTableCell(ctx, headCell, tag="th")
-  result &= "</tr>\n"
-  result &= "</thead>\n"
-  if table.body.len > 0:
-    result &= "<tbody>\n"
-    for row in table.body:
-      result &= "<tr>\n"
-      for cell in row.cells:
-        result &= renderHTMLTableCell(ctx, cell, tag="td")
-      result &= "</tr>"
-    result &= "</tbody>"
-  result &= "</table>"
-
-proc renderInlineEscape(ctx: MarkdownContext, inlineEscape: string): string =
-  result = inlineEscape.escapeAmpersandSeq.escapeTag.escapeQuote
-
-proc renderInlineText(ctx: MarkdownContext, inlineText: string): string =
-  if ctx.config.escape:
-    result = renderInlineEscape(ctx, escapeHTMLEntity(inlineText))
-  else:
-    result = escapeHTMLEntity(inlineText)
-
-proc renderLinkTitle(text: string): string =
-  var title: string
-  if text != "":
-    fmt(" title=\"{text.escapeBackslash.escapeHTMLEntity.escapeAmpersandSeq.escapeQuote}\"")
-  else:
-    ""
-
-proc renderImageAlt(text: string): string =
-  var alt = text.escapeBackslash.escapeQuote.replace(re"\*", "")
-  fmt(" alt=\"{alt}\"")
-
-proc renderLinkText(ctx: MarkdownContext, text: string): string =
-  for token in parseTokens(text, inlineParsingOrder):
-    result &= renderToken(ctx, token)
-
-proc renderAutoLink(ctx: MarkdownContext, link: Link): string =
-  if link.isEmail and link.url.find(re(r"^mailto:", {RegexFlag.reIgnoreCase})) != -1:
-    return fmt"""<a href="{link.url}">{link.text}</a>"""
-
-  if link.isEmail and link.url.find(re"\\") != -1:
-    return fmt"""&lt;{link.url.escapeBackslash}&gt;"""
-
-  if link.isEmail:
-    return fmt"""<a href="mailto:{link.url}">{link.text}</a>"""
-
-  var text = link.url.escapeAmpersandSeq
-  var url = link.url.escapeLinkUrl.escapeAmpersandChar
-
-  if link.url.contains(" "):
-    return fmt"""&lt;{url}&gt;"""
-
-  if link.url.matchLen(re"^[^:]+:") == -1:
-    return fmt"""<a href="http://{url}">{text}</a>"""
-
-  result = fmt"""<a href="{url}">{text}</a>"""
-
-proc renderInlineLink(ctx: MarkdownContext, link: Link): string =
-  var refId = link.text.toLower.replace(re"\s+", " ")
-  if ctx.links.contains(refId):
-    var definedLink = ctx.links[refId]
-    let url = escapeLinkUrl(escapeBackslash(definedLink.url))
-    if link.isImage:
-      return fmt"""<img src="{url}"{renderImageAlt(link.text)}{renderLinkTitle(definedLink.title)} />"""
-    else:
-      return fmt"""<a href="{url}"{renderLinkTitle(definedLink.title)}>{renderLinkText(ctx, link.text)}</a>"""
-  let url = escapeLinkUrl(escapeBackslash(link.url))
-  if link.isImage:
-    result = fmt"""<img src="{url}"{renderImageAlt(link.text)}{renderLinkTitle(link.title)} />"""
-  else:
-    result = fmt"""<a href="{url}"{renderLinkTitle(link.title)}>{renderLinkText(ctx, link.text)}</a>"""
-
-proc renderInlineRefLink(ctx: MarkdownContext, link: RefLink): string =
-  var id = link.id.toLower.replace(re"\s+", " ")
-  if ctx.links.hasKey(id):
-    let definedLink = ctx.links[id]
-    let url = escapeLinkUrl(escapeBackslash(definedLink.url))
-    if link.isImage:
-      result = fmt"""<img src="{url}"{renderImageAlt(link.text)}{renderLinkTitle(definedLink.title)} />"""
-    else:
-      result = fmt"""<a href="{url}"{renderLinkTitle(definedLink.title)}>{renderLinkText(ctx, link.text)}</a>"""
-  else:
-    if link.id != "" and link.text != "" and link.id != link.text:
-      result = fmt"[{link.text}][{renderLinkText(ctx, link.id)}]"
-    elif link.isImage:
-      result = fmt"![{link.id}]"
-    else:
-      result = fmt"[{link.id}]"
-
-proc renderInlineURL(ctx: MarkdownContext, url: string): string =
-  if url.matchLen(re"^[^:]+:") == -1:
-    return fmt"""<a href="http://{escapeBackslash(url)}">{url}</a>"""
-
-  result = fmt"""<a href="{escapeBackslash(url)}">{url}</a>"""
-
-proc renderInlineEmail(ctx: MarkdownContext, email: string): string =
-  result = fmt"""<a href="mailto:{email}">{email}</a>"""
-
-proc renderInlineHTML(ctx: MarkdownContext, html: string): string =
-  result = html.escapeInvalidHTMLTag
-
-proc renderInlineDoubleEmphasis(ctx: MarkdownContext, emph: DoubleEmphasis): string =
-  var em = ""
-  for token in emph.inlines:
-    em &= renderToken(ctx, token)
-  result = fmt"""<strong>{em}</strong>"""
-
-proc renderInlineEmphasis(ctx: MarkdownContext, emph: Emphasis): string =
-  var em = ""
-  for token in emph.inlines:
-    em &= renderToken(ctx, token)
-  result = fmt"""<em>{em}</em>"""
-
-proc renderInlineCode(ctx: MarkdownContext, code: string): string =
-  let formattedCode = code.strip.escapeAmpersandChar.escapeTag.escapeQuote.replace(re"\s+", " ")
-  result = fmt"""<code>{formattedCode}</code>"""
-
-proc renderInlineBreak(ctx: MarkdownContext, code: string): string =
-  result = "<br />\n"
-
-proc renderInlineStrikethrough(ctx: MarkdownContext, text: string): string =
-  result = fmt"<del>{text}</del>"
-
-proc renderInlineFootnote(ctx: MarkdownContext, footnote: RefFootnote): string =
-  let slug = slugify(footnote.anchor)
-  result = fmt"""<sup class="footnote-ref" id="footnote-ref-{slug}">""" &
-    fmt"""<a href="#footnote-{slug}">{footnote.anchor}</a></sup>"""
-
-proc renderToken*(ctx: MarkdownContext, token: MarkdownTokenRef): string =
-  ## Render token.
-  ## This is a simple dispatcher function.
-  case token.type
-  of MarkdownTokenType.ATXHeading: result = renderHeading(ctx, token.atxHeadingVal)
-  of MarkdownTokenType.SetextHeading: result = renderHeading(ctx, token.setextHeadingVal)
-  of MarkdownTokenType.ThematicBreak: result = renderThematicBreak()
-  of MarkdownTokenType.Text: result = renderText(ctx, token.textVal)
-  of MarkdownTokenType.IndentedBlockCode: result = renderIndentedBlockCode(token.codeVal)
-  of MarkdownTokenType.FencingBlockCode: result = renderFencingBlockCode(token.fencingBlockCodeVal)
-  of MarkdownTokenType.Paragraph:
-    for inlineToken in parseInlines(ctx, token.paragraphVal.doc):
-      token.paragraphVal.inlines.add(inlineToken)
-    result = renderParagraph(ctx, token.paragraphVal)
-  of MarkdownTokenType.BlockQuote: result = renderBlockQuote(ctx, token.blockQuoteVal)
-  of MarkdownTokenType.ListBlock: result = renderListBlock(ctx, token.listBlockVal)
-  of MarkdownTokenType.ListItem: result = renderListItem(ctx, token.listItemVal)
-  of MarkdownTokenType.HTMLBlock: result = renderHTMLBlock(ctx, token.htmlBlockVal)
-  of MarkdownTokenType.HTMLTable: result = renderHTMLTable(ctx, token.htmlTableVal)
-  of MarkdownTokenType.InlineText: result = renderInlineText(ctx, token.inlineTextVal)
-  of MarkdownTokenType.InlineEscape: result = renderInlineEscape(ctx, token.inlineEscapeVal)
-  of MarkdownTokenType.AutoLink: result = renderAutoLink(ctx, token.autoLinkVal)
-  of MarkdownTokenType.InlineHTML: result = renderInlineHTML(ctx, token.inlineHTMLVal)
-  of MarkdownTokenType.InlineLink: result = renderInlineLink(ctx, token.inlineLinkVal)
-  of MarkdownTokenType.InlineRefLink: result = renderInlineRefLink(ctx, token.inlineRefLinkVal)
-  of MarkdownTokenType.InlineNoLink: result = renderInlineRefLink(ctx, token.inlineNoLinkVal)
-  of MarkdownTokenType.InlineURL: result = renderInlineURL(ctx, token.inlineURLVal)
-  of MarkdownTokenType.InlineEmail: result = renderInlineEmail(ctx, token.inlineEmailVal)
-  of MarkdownTokenType.InlineDoubleEmphasis: result = renderInlineDoubleEmphasis(ctx, token.inlineDoubleEmphasisVal)
-  of MarkdownTokenType.InlineEmphasis: result = renderInlineEmphasis(ctx, token.inlineEmphasisVal)
-  of MarkdownTokenType.InlineCode: result = renderInlineCode(ctx, token.inlineCodeVal)
-  of MarkdownTokenType.InlineBreak: result = renderInlineBreak(ctx, token.inlineBreakVal)
-  of MarkdownTokenType.InlineStrikethrough: result = renderInlineStrikethrough(ctx, token.inlineStrikethroughVal)
-  of MarkdownTokenType.InlineFootnote: result = renderInlineFootnote(ctx, token.inlineFootnoteVal)
-  else:
-    result = ""
-
-proc buildContext*(tokens: seq[MarkdownTokenRef], config: MarkdownConfig): MarkdownContext =
-  # add building context
-  result = MarkdownContext(
-    links: initTable[string, Link](),
-    footnotes: initTable[string, string](),
-    config: config
+proc renderTableRow(state: var State, token: Token): string =
+  var s = state
+  tr(
+    "\n",
+    token.children.toSeq.map(
+      proc(x: Token): string =
+        s.renderToken(x)
+    ).join("\n"),
+    "\n"
   )
-  for token in tokens:
-    case token.type
-    of MarkdownTokenType.DefineLink:
-      var id = token.defineLinkVal.text.toLower.replace(re"\s+", " ")
-      if not result.links.contains(id):
-        result.links[id] = Link(
-          url: token.defineLinkVal.link,
-          text: token.defineLinkVal.text,
-          title: token.defineLinkVal.title)
-    of MarkdownTokenType.DefineFootnote:
-      result.footnotes[token.defineFootnoteVal.anchor] = token.defineFootnoteVal.footnote
-    else:
-      discard
 
-proc markdown*(doc: string, config: MarkdownConfig = initMarkdownConfig()): string =
-  ## Convert markdown string `doc` into an HTML string. Parsing & rendering
-  ## behavior can be customized using ``config`` - see `MarkdownConfig <#MarkdownConfig>`_
-  ## for the available options.
-  let tokens = toSeq(parseTokens(preprocessing(doc), blockParsingOrder))
-  let ctx = buildContext(tokens, config)
-  for token in tokens:
-    var html = renderToken(ctx, token)
+proc renderTableHead(state: var State, token: Token): string =
+  thead(
+    "\n",
+    state.renderTableRow(token.children.head.value.children.head.value),
+    "\n"
+  )
+
+proc renderTableBody(state: var State, token: Token): string =
+  if token.children.head.next == nil:
+    return ""
+  var s = state
+  tbody(
+    "\n",
+    token.children.tail.value.children.toSeq.map(
+      proc(x: Token): string =
+        s.renderToken(x)
+    ).join("\n"),
+  )
+
+proc renderTable(state: var State, token: Token): string =
+  let thead = state.renderTableHead(token)
+  var tbody = state.renderTableBody(token)
+  if tbody != "":
+    tbody = "\n" & tbody.strip
+  table("\n", thead, tbody)
+
+proc renderToken(state: var State, token: Token): string =
+  case token.type
+  of ReferenceToken: ""
+  of ThematicBreakToken: "<hr />"
+  of ParagraphToken: state.renderParagraph(token)
+  of ATXHeadingToken: fmt"<h{token.atxHeadingVal.level}>{state.renderInline(token)}</h{token.atxHeadingVal.level}>"
+  of SetextHeadingToken: fmt"<h{token.setextHeadingVal.level}>{state.renderInline(token)}</h{token.setextHeadingVal.level}>"
+  of IndentedCodeToken: pre(code(token.doc.removeBlankLines.escapeCode, "\n"))
+  of TableToken: state.renderTable(token)
+  of THeadToken: state.renderTableHead(token)
+  of TBodyToken: state.renderTableBody(token)
+  of TableRowToken: state.renderTableRow(token)
+  of THeadCellToken: state.renderTableHeadCell(token)
+  of TBodyCellToken: state.renderTableBodyCell(token)
+  of FenceCodeToken:
+    var codeHTML = token.doc.removeBlankLines.escapeCode
+    if codeHTML != "":
+      codeHTML &= "\n"
+    if token.fenceCodeVal.info == "":
+      pre(code(codeHTML))
+    else:
+      pre(code(class=fmt"language-{token.fenceCodeVal.info.escapeBackslash.escapeHTMLEntity}", codeHTML))
+  of LinkToken:
+    if token.linkVal.title == "": a(
+      href=token.linkVal.url.escapeBackslash.escapeLinkUrl,
+      state.renderInline(token)
+    )
+    else: a(
+      href=token.linkVal.url.escapeBackslash.escapeLinkUrl,
+      title=token.linkVal.title.escapeBackslash.escapeHTMLEntity.escapeAmpersandSeq.escapeQuote,
+      state.renderInline(token)
+    )
+  of ImageToken:
+    if token.imageVal.title == "": img(
+      src=token.imageVal.url.escapeBackslash.escapeLinkUrl,
+      alt=state.renderImageAlt(token)
+    )
+    else: img(
+      src=token.imageVal.url.escapeBackslash.escapeLinkUrl,
+      alt=state.renderImageAlt(token),
+      title=token.imageVal.title.escapeBackslash.escapeHTMLEntity.escapeAmpersandSeq.escapeQuote,
+    )
+  of AutoLinkToken: a(href=token.autoLinkVal.url.escapeLinkUrl.escapeAmpersandSeq, token.autoLinkVal.text.escapeAmpersandSeq)
+  of HTMLBlockToken: token.doc.strip(chars={'\n'})
+  of ListItemToken: state.renderListItem(token)
+  of UnorderedListToken: state.renderUnorderedList(token)
+  of OrderedListToken: state.renderOrderedList(token)
+  of BlankLineToken: ""
+  of BlockquoteToken: blockquote("\n", state.render(token))
+  of TextToken: token.textVal.escapeAmpersandSeq.escapeTag.escapeQuote
+  of HTMLEntityToken: token.htmlEntityVal.escapeHTMLEntity.escapeQuote
+  of InlineHTMLToken: token.inlineHTMLVal.escapeInvalidHTMLTag
+  of EscapeToken: token.escapeVal.escapeAmpersandSeq.escapeTag.escapeQuote
+  of EmphasisToken: em(state.renderInline(token))
+  of StrongToken: strong(state.renderInline(token))
+  of StrikethroughToken: del(token.strikethroughVal)
+  of HardLineBreakToken: br() & "\n"
+  of CodeSpanToken: code(token.codeSpanVal.escapeAmpersandChar.escapeTag.escapeQuote)
+  of SoftLineBreakToken: token.softLineBreakVal
+  of DocumentToken: ""
+  else: raise newException(MarkdownError, fmt"{token.type} rendering not impleted.")
+
+proc render(state: var State, token: Token): string =
+  var html: string
+  for token in token.children.items:
+    html = renderToken(state, token)
     if html != "":
       result &= html
       result &= "\n"
+
+
+proc initMarkdownConfig*(
+  escape = true,
+  keepHtml = true
+): MarkdownConfig =
+  MarkdownConfig(
+    escape: escape,
+    keepHtml: keepHtml
+  )
+
+proc markdown*(doc: string, config: MarkdownConfig = initMarkdownConfig()): string =
+  var tokens: DoublyLinkedList[Token]
+  var state = State(doc: doc.strip(chars={'\n'}), tokens: tokens, ruleSet: simpleRuleSet, references: initTable[string, Reference](), loose: true)
+  var document = Token(type: DocumentToken, slice: (0 ..< doc.len), doc: doc.strip(chars={'\n'}), documentVal: "")
+  parse(state, document)
+  render(state, document)
 
 proc readCLIOptions*(): MarkdownConfig =
   ## Read options from command line.

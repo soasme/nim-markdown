@@ -50,9 +50,6 @@ The usage of binary `markdown` is like below:
 ```
 # Read from stdin and write to stdout.
 $ markdown < hello-world.md > hello-world.html
-
-# Turn off `escape`.
-$ markdown --no-escape < hello-world.md > hello-world.html
 ```
 
 ## Development
@@ -93,16 +90,15 @@ Notes:
 
 Features:
 
-- [x] GFM 4.1 Thematic Break
-- [x] GFM 4.2 Heading
+- [x] Thematic Break
+- [x] Heading
 - [x] Indented code block
 - [x] Fence code block
-- [x] Blockquote
+- [x] Block Quote
 - [x] Ordered/Un-ordered List
 - [x] Nested lists
 - [x] Raw HTML block
 - [x] Table
-- [x] Footnote
 - [x] Ref Link
 - [x] Inline Link
 - [x] Auto link
@@ -115,12 +111,15 @@ Features:
 - [x] Inline HTML
 - [x] Escape
 - [x] Paragraph
+- [ ] Auto link (extension)
+- [ ] Footnote
 - [ ] Want new features? Issues or pull requests are welcome. ;)
 
 ## ChangeLog
 
 Released:
 
+* v0.6.0, 7 Dec 2018, refactor the codebase by mix using regex and verbatim scanning.
 * v0.5.2, 5 Nov 2018, bugfix: ambiguous call.
 * v0.5.1, 4 Nov 2018, inline email support; bugfix: \u00a0 causing build error [#16](https://github.com/soasme/nim-markdown/issues/16), etc.
 * v0.5.0, 3 Nov 2018, bugfix: links in lists not working (#14), etc.

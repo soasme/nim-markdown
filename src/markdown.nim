@@ -1106,7 +1106,7 @@ proc parseBlockquote(state: var State, token: var Token): bool =
       break
 
     # find the empty line in lazy content
-    if token.doc[pos ..< token.doc.len].matchLen(re"^\n|$") > -1:
+    if token.doc[start ..< pos].find(re" {4,}[^\n]+\n") != -1 and token.doc[pos ..< token.doc.len].matchLen(re"^\n|^ {4,}|$") > -1:
       break
 
     # find the laziness text

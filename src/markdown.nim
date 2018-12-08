@@ -459,7 +459,7 @@ proc parseUnorderedListItem*(doc: string, start=0, marker: var string, listItemD
 
   var size = 0
   while pos < doc.len:
-    size = doc[pos ..< doc.len].matchLen(re(r"^(?:\s*| {" & fmt"{padding}" & r"}([^\n]*))(\n|$)"), matches=matches)
+    size = doc[pos ..< doc.len].matchLen(re(r"^(?:[ \t]*| {" & fmt"{padding}" & r"}([^\n]*))(\n|$)"), matches=matches)
     if size != -1:
       listItemDoc &= matches[0]
       listItemDoc &= matches[1]

@@ -16,13 +16,13 @@ test "newline":
 test "indented block code":
   check markdown("    proc helloworld():\n") == "<pre><code>proc helloworld():\n</code></pre>\n"
   check markdown("    proc helloworld():\n        echo(\"hello world\")\n"
-    ) == "<pre><code>proc helloworld():\n    echo(\"hello world\")\n</code></pre>\n"
+    ) == "<pre><code>proc helloworld():\n    echo(&quot;hello world&quot;)\n</code></pre>\n"
 
 test "fencing block code":
   check markdown("```nim\nproc helloworld():\n  echo(\"hello world\")\n```"
-    ) == "<pre><code class=\"language-nim\">proc helloworld():\n  echo(\"hello world\")\n</code></pre>\n"
+    ) == "<pre><code class=\"language-nim\">proc helloworld():\n  echo(&quot;hello world&quot;)\n</code></pre>\n"
   check markdown("```\nproc helloworld():\n  echo(\"hello world\")\n```"
-    ) == "<pre><code>proc helloworld():\n  echo(\"hello world\")\n</code></pre>\n"
+    ) == "<pre><code>proc helloworld():\n  echo(&quot;hello world&quot;)\n</code></pre>\n"
 
 test "paragraph":
   check markdown("hello world") == "<p>hello world</p>\n"
@@ -534,8 +534,8 @@ test "parse list item":
 
   # 235, preserve empty lines within the code block verbatim
   marker = ""
-  check parseUnorderedListItem("- A\n\n      B\n\n      C", 0, marker, listItemDoc) == 21
-  check listItemDoc == "A\n\n    B\n\n    C"
+  check parseUnorderedListItem("- A\n\n      B\n\n\n      C", 0, marker, listItemDoc) == 22
+  check listItemDoc == "A\n\n    B\n\n\n    C"
   marker = ""
   check parseOrderedListItem("1. A\n\n       B\n\n       C", 0, marker, listItemDoc, index) == 24
   check listItemDoc == "A\n\n    B\n\n    C"
@@ -563,7 +563,7 @@ test "parse list item":
   # 280
   marker = ""
   check parseUnorderedListItem("- a\n  - aa\n    - aaa\n\n\n      aab", 0, marker, listItemDoc) == 32
-  check listItemDoc == "a\n- aa\n  - aaa\n\n    aab"
+  check listItemDoc == "a\n- aa\n  - aaa\n\n\n    aab"
 
   # 281, separate items
   marker = ""

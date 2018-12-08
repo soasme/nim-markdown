@@ -119,6 +119,7 @@ Features:
 
 Released:
 
+* v0.6.1, 8 Dec 2018, various bugs fixed, gfm example coverage: 92%.
 * v0.6.0, 7 Dec 2018, refactor the codebase by mix using regex and verbatim scanning.
 * v0.5.2, 5 Nov 2018, bugfix: ambiguous call.
 * v0.5.1, 4 Nov 2018, inline email support; bugfix: \u00a0 causing build error [#16](https://github.com/soasme/nim-markdown/issues/16), etc.

@@ -1,6 +1,6 @@
 # Package
 
-version       = "0.5.2"
+version       = "0.5.3"
 author        = "Ju Lin"
 description   = "A Markdown Parser in Nimble World."
 license       = "MIT"

@@ -1,4 +1,5 @@
-import re, strutils, strformat, tables, sequtils, math, uri, htmlparser, lists, unicode
+import re, strutils, strformat, tables, sequtils, math, uri, htmlparser, lists
+import unicode except `strip`, `splitWhitespace`
 from sequtils import map
 from lists import DoublyLinkedList, prepend, append
 from htmlgen import nil, p, br, em, strong, a, img, code, del, blockquote, li, ul, ol, pre, code, table, thead, tbody, th, tr, td
@@ -2399,7 +2400,6 @@ proc renderToken(state: var State, token: Token): string =
   of CodeSpanToken: code(token.codeSpanVal.escapeAmpersandChar.escapeTag.escapeQuote)
   of SoftLineBreakToken: token.softLineBreakVal
   of DocumentToken: ""
-  else: raise newException(MarkdownError, fmt"{token.type} rendering not impleted.")
 
 proc render(state: var State, token: Token): string =
   var html: string

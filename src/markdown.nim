@@ -2421,8 +2421,19 @@ proc initMarkdownConfig*(
 
 proc markdown*(doc: string, config: MarkdownConfig = initMarkdownConfig()): string =
   var tokens: DoublyLinkedList[Token]
-  var state = State(doc: doc.strip(chars={'\n'}), tokens: tokens, ruleSet: simpleRuleSet, references: initTable[string, Reference](), loose: true)
-  var document = Token(type: DocumentToken, slice: (0 ..< doc.len), doc: doc.strip(chars={'\n'}), documentVal: "")
+  var state = State(
+    doc: doc.strip(chars={'\n'}),
+    tokens: tokens,
+    ruleSet: simpleRuleSet,
+    references: initTable[string, Reference](),
+    loose: true
+  )
+  var document = Token(
+    type: DocumentToken,
+    slice: (0 ..< doc.len),
+    doc: doc.strip(chars={'\n'}),
+    documentVal: ""
+  )
   parse(state, document)
   render(state, document)
 
@@ -2449,4 +2460,9 @@ proc readCLIOptions*(): MarkdownConfig =
       else: discard
 
 when isMainModule:
-  stdout.write(markdown(stdin.readAll, config=readCLIOptions()))
+  stdout.write(
+    markdown(
+      stdin.readAll,
+      config=readCLIOptions()
+    )
+  )

@@ -2340,6 +2340,48 @@ proc renderTable(state: var State, token: Token): string =
     tbody = "\n" & tbody.strip
   table("\n", thead, tbody)
 
+proc renderFenceCode(state: var State, token: Token): string =
+    var codeHTML = token.doc.removeFenceBlankLines.escapeCode.escapeQuote
+    if codeHTML != "":
+      codeHTML &= "\n"
+
+    if token.fenceCodeVal.info == "":
+      pre(code(codeHTML))
+    else:
+      pre(code(class=fmt"language-{token.fenceCodeVal.info.escapeBackslash.escapeHTMLEntity}", codeHTML))
+
+proc renderLink(state: var State, token: Token): string =
+    if token.linkVal.title == "":
+      a(
+        href=token.linkVal.url.escapeBackslash.escapeLinkUrl,
+        state.renderInline(token)
+      )
+    else:
+      a(
+        href=token.linkVal.url.escapeBackslash.escapeLinkUrl,
+        title=token.linkVal.title.escapeBackslash.escapeHTMLEntity.escapeAmpersandSeq.escapeQuote,
+        state.renderInline(token)
+      )
+
+proc renderImage(state: var State, token: Token): string =
+    if token.imageVal.title == "":
+      img(
+        src=token.imageVal.url.escapeBackslash.escapeLinkUrl,
+        alt=state.renderImageAlt(token)
+      )
+    else:
+      img(
+        src=token.imageVal.url.escapeBackslash.escapeLinkUrl,
+        alt=state.renderImageAlt(token),
+        title=token.imageVal.title.escapeBackslash.escapeHTMLEntity.escapeAmpersandSeq.escapeQuote,
+      )
+
+proc renderAutoLink(state: var State, token: Token): string =
+  a(
+    href=token.autoLinkVal.url.escapeLinkUrl.escapeAmpersandSeq,
+    token.autoLinkVal.text.escapeAmpersandSeq
+  )
+
 proc renderToken(state: var State, token: Token): string =
   case token.type
   of ReferenceToken: ""
@@ -2354,35 +2396,10 @@ proc renderToken(state: var State, token: Token): string =
   of TableRowToken: state.renderTableRow(token)
   of THeadCellToken: state.renderTableHeadCell(token)
   of TBodyCellToken: state.renderTableBodyCell(token)
-  of FenceCodeToken:
-    var codeHTML = token.doc.removeFenceBlankLines.escapeCode.escapeQuote
-    if codeHTML != "":
-      codeHTML &= "\n"
-    if token.fenceCodeVal.info == "":
-      pre(code(codeHTML))
-    else:
-      pre(code(class=fmt"language-{token.fenceCodeVal.info.escapeBackslash.escapeHTMLEntity}", codeHTML))
-  of LinkToken:
-    if token.linkVal.title == "": a(
-      href=token.linkVal.url.escapeBackslash.escapeLinkUrl,
-      state.renderInline(token)
-    )
-    else: a(
-      href=token.linkVal.url.escapeBackslash.escapeLinkUrl,
-      title=token.linkVal.title.escapeBackslash.escapeHTMLEntity.escapeAmpersandSeq.escapeQuote,
-      state.renderInline(token)
-    )
-  of ImageToken:
-    if token.imageVal.title == "": img(
-      src=token.imageVal.url.escapeBackslash.escapeLinkUrl,
-      alt=state.renderImageAlt(token)
-    )
-    else: img(
-      src=token.imageVal.url.escapeBackslash.escapeLinkUrl,
-      alt=state.renderImageAlt(token),
-      title=token.imageVal.title.escapeBackslash.escapeHTMLEntity.escapeAmpersandSeq.escapeQuote,
-    )
-  of AutoLinkToken: a(href=token.autoLinkVal.url.escapeLinkUrl.escapeAmpersandSeq, token.autoLinkVal.text.escapeAmpersandSeq)
+  of FenceCodeToken: state.renderFenceCode(token)
+  of LinkToken: state.renderLink(token)
+  of ImageToken: state.renderImage(token)
+  of AutoLinkToken: state.renderAutoLink(token)
   of HTMLBlockToken: token.doc.strip(chars={'\n'})
   of ListItemToken: state.renderListItem(token)
   of UnorderedListToken: state.renderUnorderedList(token)
@@ -2404,7 +2421,7 @@ proc renderToken(state: var State, token: Token): string =
 proc render(state: var State, token: Token): string =
   var html: string
   for token in token.children.items:
-    html = renderToken(state, token)
+    html = state.renderToken(token)
     if html != "":
       result &= html
       result &= "\n"

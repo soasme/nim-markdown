@@ -1576,7 +1576,7 @@ proc parseInlineLink(state: var State, token: var Token, start: int, labelSlice:
   pos += destinationLen
 
   # parse whitespace
-  whitespaceLen = token.doc[pos ..< token.doc.len].matchLen(re"^[ \t\n]*")
+  whitespaceLen = token.doc[pos ..< token.doc.len].matchLen(re"^[\x{0020}\x{0009}\x{000A}\x{000B}\x{000C}\x{000D}]*")
   if whitespaceLen != -1:
     pos += whitespaceLen
 
@@ -1979,11 +1979,10 @@ proc parseCodeSpan*(state: var State, token: var Token, start: int): int =
     ))
     return size
 
-
   token.children.append(Token(
     type: CodeSpanToken,
     slice: (start ..< start+size),
-    codeSpanVal: matches[2].strip.replace(re"[ \n]+", " ")
+    codeSpanVal: matches[2].strip.replace(re"[\n]+", " ")
   ))
   return size
 

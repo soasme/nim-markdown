@@ -1982,7 +1982,7 @@ proc parseCodeSpan*(state: var State, token: var Token, start: int): int =
 
   var codeSpanVal = matches[2].strip(chars={'\n'}).replace(re"[\n]+", " ")
   if codeSpanVal[0] == ' ' and codeSpanVal[codeSpanVal.len-1] == ' ' and not codeSpanVal.match(re"^[ ]+$"):
-    codeSpanVal = codeSpanVal.strip
+    codeSpanVal = codeSpanVal[1 ..< codeSpanVal.len-1]
 
   token.children.append(Token(
     type: CodeSpanToken,

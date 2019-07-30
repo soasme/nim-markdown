@@ -1401,7 +1401,7 @@ proc getLinkDestination*(doc: string, start: int, slice: var Slice[int]): int =
   # a sequence of zero or more characters between an opening < and a closing >
   # that contains no line breaks or unescaped < or > characters, or
   if doc[start] == '<':
-    result = doc[start ..< doc.len].matchLen(re"^<([^\n<>]*)>")
+    result = doc[start ..< doc.len].matchLen(re"^<([^\n<>\\]*)>")
     if result != -1:
       slice.a = start + 1
       slice.b = start + result - 2

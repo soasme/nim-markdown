@@ -643,6 +643,7 @@ proc parseFenceCode(state: var State, token: var Token): bool =
 
   var fenceSize = -1
   var fence = parseCodeFence(token.doc[start ..< token.doc.len], indent, fenceSize)
+
   if fenceSize == -1:
     return false
 
@@ -1979,10 +1980,14 @@ proc parseCodeSpan*(state: var State, token: var Token, start: int): int =
     ))
     return size
 
+  var codeSpanVal = matches[2].strip(chars={'\n'}).replace(re"[\n]+", " ")
+  if codeSpanVal[0] == ' ' and codeSpanVal[codeSpanVal.len-1] == ' ' and not codeSpanVal.match(re"^[ ]+$"):
+    codeSpanVal = codeSpanVal.strip
+
   token.children.append(Token(
     type: CodeSpanToken,
     slice: (start ..< start+size),
-    codeSpanVal: matches[2].strip.replace(re"[\n]+", " ")
+    codeSpanVal: codeSpanVal,
   ))
   return size
 

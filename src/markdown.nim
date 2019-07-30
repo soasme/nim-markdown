@@ -354,7 +354,7 @@ proc getBlockStart(token: Token): int =
   else:
     token.children.tail.value.slice.b
 
-let LAZINESS_TEXT = r"(?:(?! {0,3}>| {0,3}(?:\*|\+|-)(?: |\n|$)| {0,3}\d+(?:\.|\))(?: |\n|$)| {0,3}#| {0,3}`{3,}| {0,3}\*{3}| {0,3}-{3}| {0,3}_{3})[^\n]+(?:\n|$))+"
+let LAZINESS_TEXT = r"(?:(?! {0,3}>| {0,3}(?:\*|\+|-) | {0,3}\d+(?:\.|\)) | {0,3}#| {0,3}`{3,}| {0,3}\*{3}| {0,3}-{3}| {0,3}_{3})[^\n]+(?:\n|$))+"
 
 proc parseParagraph(state: var State, token: var Token): bool =
   let start = token.getBlockStart

@@ -86,7 +86,9 @@ Priorities:
 
 Notes:
 
-- [ ] The library `nim-markdown` was originally developed based on a loose set of markdown features. As proposed in [#4](https://github.com/soasme/nim-markdown/issues/4), the [GFM](https://github.github.com/gfm/) will be the cornerstone. As of now, the library implements a mixture of the old style and the new style. The goal of v1.0.0 is to fully support GFM.
+- **Important**: The library `nim-markdown` was originally developed for parsing a loose set of markdown features. As proposed in [#4](https://github.com/soasme/nim-markdown/issues/4), the [GFM](https://github.github.com/gfm/) will be the cornerstone. As of now, the library implements a mixture of the old style and the new style. The goal of v1.0.0 is to fully support GFM.
+- Currently, nim-markdown converts tab to four whitespaces. It'll be fixed in the future.
+- nim-markdown uses the built-in library `htmlparser` for parsing HTML5 entity names. Some entities are not properly supported, such as `&ngE;`. It'll need to be fixed from the nim-lang std code.
 
 Features:
 

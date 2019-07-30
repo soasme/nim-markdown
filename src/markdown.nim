@@ -2064,6 +2064,8 @@ proc processEmphasis*(state: var State, token: var Token, delimeterStack: var Do
       # the second * between `abc` and `d` makes oddMatch to true
       oddMatch = (
         closer.value.canOpen or opener.value.canClose
+      ) and (
+        closer.value.originalNum mod 3 != 0
       ) and (opener.value.originalNum + closer.value.originalNum) mod 3 == 0
 
       # found opener when opener has same kind with closer and iff it's not odd match

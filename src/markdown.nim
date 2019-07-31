@@ -63,6 +63,7 @@ type
     start: int
 
   ListItem = object
+    loose: bool
     marker: string
 
   Heading = object
@@ -375,6 +376,21 @@ proc parseParagraph(state: var State, token: var Token): bool =
   token.children.append(paragraph)
   return true
 
+proc endsWithBlankLine(token: Token): bool =
+  if token.type == ParagraphToken:
+    token.paragraphVal.doc.find(re"\n\n$") != -1
+  else:
+    token.doc.find(re"\n\n$") != -1
+
+proc parseLoose(token: Token): bool =
+  for node in token.children.nodes:
+    if node.next != nil and node.value.endsWithBlankLine:
+      return true
+    for itemNode in node.value.children.nodes:
+      if itemNode.next != nil and itemNode.value.endsWithBlankLine:
+        return true
+  return false
+
 proc parseOrderedListItem*(doc: string, start=0, marker: var string, listItemDoc: var string, index: var int = 1): int =
   let markerRegex = re"^(?P<leading> {0,3})(?<index>\d{1,9})(?P<marker>\.|\))(?: *$| *\n|(?P<indent> +)([^\n]+(?:\n|$)))"
   var matches: array[5, string]
@@ -530,7 +546,11 @@ proc parseUnorderedList(state: var State, token: var Token): bool =
   )
   for listItem in listItems:
     ulToken.children.append(listItem)
-  ulToken.ulVal.loose = ulToken.isLoose
+
+  ulToken.ulVal.loose = ulToken.parseLoose
+  for listItem in listItems:
+    listItem.listItemVal.loose = ulToken.ulVal.loose
+
   token.children.append(ulToken)
   result = true
 
@@ -580,7 +600,11 @@ proc parseOrderedList(state: var State, token: var Token): bool =
   )
   for listItem in listItems:
     olToken.children.append(listItem)
-  olToken.olVal.loose = olToken.isLoose
+
+  olToken.olVal.loose = olToken.parseLoose
+  for listItem in listItems:
+    listItem.listItemVal.loose = olToken.olVal.loose
+
   token.children.append(olToken)
   result = true
 
@@ -2265,35 +2289,32 @@ proc renderParagraph(state: var State, token: Token): string =
 proc renderListItemChildren(state: var State, token: Token): string =
   var html: string
   var results: seq[string]
-  for token in token.children.items:
-    html = renderToken(state, token)
-    if html != "":
-      results.add(html)
 
-  result = results.join("\n")
-  if state.loose:
-    result = result & "\n"
+  for child_node in token.children.nodes:
+    var child_token = child_node.value
+    html = renderToken(state, child_token)
+    if html != "":
+      result &= html
+      if not (child_token.type == ParagraphToken and not state.loose and child_node.next == nil):
+        result &= "\n"
 
 proc renderUnorderedList(state: var State, token: Token): string =
-  var origLoose = state.loose
-  state.loose = token.ulVal.loose
-  result = ul("\n", state.render(token))
-  state.loose = origLoose
+  ul("\n", state.render(token))
 
 proc renderOrderedList(state: var State, token: Token): string =
-  var origLoose = state.loose
-  state.loose = token.olVal.loose
   if token.olVal.start != 1:
     result = ol(start=fmt"{token.olVal.start}", "\n", state.render(token))
   else:
     result = ol("\n", state.render(token))
-  state.loose = origLoose
 
 proc renderListItem(state: var State, token: Token): string =
+  let originalLoose = state.loose
+  state.loose = token.listItemVal.loose
   if state.loose:
-    li("\n", state.renderListItemChildren(token))
+    result = li("\n", state.renderListItemChildren(token))
   else:
-    li(state.renderListItemChildren(token))
+    result = li(state.renderListItemChildren(token))
+  state.loose = originalLoose
 
 proc renderTableHeadCell(state: var State, token: Token): string =
   let align = token.theadCellVal.align

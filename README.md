@@ -14,7 +14,7 @@ Install via `nimble` in your project root.
 $ nimble install markdown
 
 # or with current stable version
-$ nimble install markdown@">= 0.5.3"
+$ nimble install markdown@">= 0.5.4"
 
 # or with the latest version
 $ nimble install markdown@#head
@@ -121,6 +121,7 @@ Features:
 
 Released:
 
+* v0.5.4, 1 Aug 2019, bugfix: improved the ul & ol parsing.
 * v0.5.3, 3 Jun 2019, bugfix: Added import exceptions for strip and splitWhitespace from unicode [#20](https://github.com/soasme/nim-markdown/issues/20).
 * v0.5.2, 5 Nov 2018, bugfix: ambiguous call.
 * v0.5.1, 4 Nov 2018, inline email support; bugfix: \u00a0 causing build error [#16](https://github.com/soasme/nim-markdown/issues/16), etc.

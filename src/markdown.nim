@@ -2296,6 +2296,8 @@ proc renderListItemChildren(state: var State, token: Token): string =
   for child_node in token.children.nodes:
     var child_token = child_node.value
     if child_token.type == ParagraphToken and not token.listItemVal.loose:
+      if child_node.prev != nil:
+        result &= "\n"
       result &= state.renderListItemTightParagraph(child_token)
       if child_node.next == nil:
         return result

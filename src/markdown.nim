@@ -264,8 +264,6 @@ proc render(state: var State, token: Token): string;
 
 proc preProcessing(state: var State, token: var Token) =
   token.doc = token.doc.replace(re"\r\n|\r", "\n")
-  token.doc = token.doc.replace(re"^\t", "    ")
-  token.doc = token.doc.replace(re"^ {1,3}\t", "    ")
   token.doc = token.doc.replace("\u2424", " ")
   token.doc = token.doc.replace("\u0000", "\uFFFD")
   token.doc = token.doc.replace("&#0;", "&#XFFFD;")
@@ -704,7 +702,7 @@ proc parseIndentedCode(state: var State, token: var Token): bool =
   )
   if size == -1:
     return false
-  var codeContent = matches[0].replace(re(r"^ {4}", {RegexFlag.reMultiLine}), "")
+  var codeContent = matches[0].replace(re(r"^( {4}| {0,3}\t)", {RegexFlag.reMultiLine}), "")
   var indentedCode = Token(
     type: IndentedCodeToken,
     slice: (start .. start+size),

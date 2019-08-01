@@ -2281,10 +2281,10 @@ proc renderImageAlt*(state: var State, token: Token): string =
   ).join("")
 
 proc renderParagraph(state: var State, token: Token): string =
-  if state.loose:
-    p(state.renderInline(token))
-  else:
-    state.renderInline(token)
+  p(state.renderInline(token))
+
+proc renderListItemTightParagraph(state: var State, token: Token): string =
+  state.renderInline(token)
 
 proc renderListItemChildren(state: var State, token: Token): string =
   var html: string
@@ -2292,10 +2292,14 @@ proc renderListItemChildren(state: var State, token: Token): string =
 
   for child_node in token.children.nodes:
     var child_token = child_node.value
-    html = renderToken(state, child_token)
-    if html != "":
-      result &= html
-      if not (child_token.type == ParagraphToken and not state.loose and child_node.next == nil):
+    if child_token.type == ParagraphToken and not token.listItemVal.loose:
+      result &= state.renderListItemTightParagraph(child_token)
+      if child_node.next != nil:
+        result &= "\n"
+    else:
+      html = renderToken(state, child_token)
+      if html != "":
+        result &= html
         result &= "\n"
 
 proc renderUnorderedList(state: var State, token: Token): string =

@@ -2306,7 +2306,8 @@ proc renderListItemChildren(state: var State, token: Token): string =
       if html != "":
         result &= "\n"
         result &= html
-  result &= "\n"
+  if token.listItemVal.loose or token.children.tail != nil:
+    result &= "\n"
 
 proc renderUnorderedList(state: var State, token: Token): string =
   ul("\n", state.render(token))

@@ -310,7 +310,7 @@ proc removeBlankLines(doc: string): string =
   doc.strip(leading=false, trailing=true, chars={'\n'})
   
 proc removeFenceBlankLines(doc: string): string =
-  doc.replace(re(r"^ {0,3}\n", {re.reMultiLine}), "\n").strip(leading=false, trailing=true, chars={'\n'})
+  doc.replace(re(r"^ {0,3}\n", {re.reMultiLine}), "\n")
 
 proc escapeInvalidHTMLTag(doc: string): string =
   doc.replacef(
@@ -681,6 +681,9 @@ proc parseFenceCode(state: var State, token: var Token): bool =
   var codeContent = ""
   var codeContentSize = parseCodeContent(token.doc[pos ..< token.doc.len], indent, fence, codeContent)
   pos += codeContentSize
+
+  if token.doc[pos ..< token.doc.len].matchLen(re"\n$") != -1:
+    pos += 1
 
   var codeToken = Token(
     type: FenceCodeToken,
@@ -2294,13 +2297,14 @@ proc renderListItemChildren(state: var State, token: Token): string =
     var child_token = child_node.value
     if child_token.type == ParagraphToken and not token.listItemVal.loose:
       result &= state.renderListItemTightParagraph(child_token)
-      if child_node.next != nil:
-        result &= "\n"
+      if child_node.next == nil:
+        return result
     else:
       html = renderToken(state, child_token)
       if html != "":
-        result &= html
         result &= "\n"
+        result &= html
+  result &= "\n"
 
 proc renderUnorderedList(state: var State, token: Token): string =
   ul("\n", state.render(token))
@@ -2314,10 +2318,7 @@ proc renderOrderedList(state: var State, token: Token): string =
 proc renderListItem(state: var State, token: Token): string =
   let originalLoose = state.loose
   state.loose = token.listItemVal.loose
-  if state.loose:
-    result = li("\n", state.renderListItemChildren(token))
-  else:
-    result = li(state.renderListItemChildren(token))
+  result = li(state.renderListItemChildren(token))
   state.loose = originalLoose
 
 proc renderTableHeadCell(state: var State, token: Token): string =
@@ -2372,40 +2373,38 @@ proc renderTable(state: var State, token: Token): string =
   table("\n", thead, tbody)
 
 proc renderFenceCode(state: var State, token: Token): string =
-    var codeHTML = token.doc.removeFenceBlankLines.escapeCode.escapeQuote
-    if codeHTML != "":
-      codeHTML &= "\n"
+  var codeHTML = token.doc.removeFenceBlankLines.escapeCode.escapeQuote
 
-    if token.fenceCodeVal.info == "":
-      pre(code(codeHTML))
-    else:
-      pre(code(class=fmt"language-{token.fenceCodeVal.info.escapeBackslash.escapeHTMLEntity}", codeHTML))
+  if token.fenceCodeVal.info == "":
+    pre(code(codeHTML))
+  else:
+    pre(code(class=fmt"language-{token.fenceCodeVal.info.escapeBackslash.escapeHTMLEntity}", codeHTML))
 
 proc renderLink(state: var State, token: Token): string =
-    if token.linkVal.title == "":
-      a(
-        href=token.linkVal.url.escapeBackslash.escapeLinkUrl,
-        state.renderInline(token)
-      )
-    else:
-      a(
-        href=token.linkVal.url.escapeBackslash.escapeLinkUrl,
-        title=token.linkVal.title.escapeBackslash.escapeHTMLEntity.escapeAmpersandSeq.escapeQuote,
-        state.renderInline(token)
-      )
+  if token.linkVal.title == "":
+    a(
+      href=token.linkVal.url.escapeBackslash.escapeLinkUrl,
+      state.renderInline(token)
+    )
+  else:
+    a(
+      href=token.linkVal.url.escapeBackslash.escapeLinkUrl,
+      title=token.linkVal.title.escapeBackslash.escapeHTMLEntity.escapeAmpersandSeq.escapeQuote,
+      state.renderInline(token)
+    )
 
 proc renderImage(state: var State, token: Token): string =
-    if token.imageVal.title == "":
-      img(
-        src=token.imageVal.url.escapeBackslash.escapeLinkUrl,
-        alt=state.renderImageAlt(token)
-      )
-    else:
-      img(
-        src=token.imageVal.url.escapeBackslash.escapeLinkUrl,
-        alt=state.renderImageAlt(token),
-        title=token.imageVal.title.escapeBackslash.escapeHTMLEntity.escapeAmpersandSeq.escapeQuote,
-      )
+  if token.imageVal.title == "":
+    img(
+      src=token.imageVal.url.escapeBackslash.escapeLinkUrl,
+      alt=state.renderImageAlt(token)
+    )
+  else:
+    img(
+      src=token.imageVal.url.escapeBackslash.escapeLinkUrl,
+      alt=state.renderImageAlt(token),
+      title=token.imageVal.title.escapeBackslash.escapeHTMLEntity.escapeAmpersandSeq.escapeQuote,
+    )
 
 proc renderAutoLink(state: var State, token: Token): string =
   a(

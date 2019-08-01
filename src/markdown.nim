@@ -206,7 +206,7 @@ var simpleRuleSet = RuleSet(
 )
 
 const THEMATIC_BREAK_RE* = r" {0,3}([-*_])(?:[ \t]*\1){2,}[ \t]*(?:\n+|$)"
-const ATX_HEADING_RE* = r" {0,3}(#{1,6})( +)?(?(2)([^\n]*?))( +)?(?(4)#*) *(?:\n+|$)"
+const ATX_HEADING_RE* = r" {0,3}(#{1,6})([ \t]+)?(?(2)([^\n]*?))([ \t]+)?(?(4)#*) *(?:\n+|$)"
 const SETEXT_HEADING_RE* = r"((?:(?:[^\n]+)\n)+) {0,3}(=|-)+ *(?:\n+|$)"
 const INDENTED_CODE_RE* = r"((?: {4}| {0,3}\t)[^\n]+\n*)+"
 

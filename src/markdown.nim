@@ -323,9 +323,6 @@ proc escapeCode*(doc: string): string =
 proc removeBlankLines(doc: string): string =
   doc.strip(leading=false, trailing=true, chars={'\n'})
 
-proc removeFencedBlankLines(doc: string): string =
-  doc.replace(re(r"^ {0,3}\n", {re.reMultiLine}), "\n")
-
 proc escapeInvalidHTMLTag(doc: string): string =
   doc.replacef(
     re(r"<(title|textarea|style|xmp|iframe|noembed|noframes|script|plaintext)>",
@@ -2470,7 +2467,7 @@ proc renderTable(state: State, token: Token): string =
   table("\n", thead, tbody)
 
 proc renderFencedCode(state: State, token: Token): string =
-  var codeHTML = token.doc.removeFencedBlankLines.escapeCode.escapeQuote
+  var codeHTML = token.doc.escapeCode.escapeQuote
   if codeHTML != "" and not codeHTML.endsWith("\n"):
     codeHTML &= "\n"
 

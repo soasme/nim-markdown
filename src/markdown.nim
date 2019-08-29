@@ -1269,7 +1269,8 @@ proc parseReference*(state: State, token: var Token): bool =
   pos += destinationLen
 
   # parse whitespace
-  whitespaceLen = token.doc[pos ..< token.doc.len].matchLen(re"^[ \t]*\n?[ \t]*")
+  var whitespaces: array[1, string]
+  whitespaceLen = token.doc[pos ..< token.doc.len].matchLen(re"^([ \t]*\n?[ \t]*)", matches=whitespaces)
   if whitespaceLen != -1:
     pos += whitespaceLen
 
@@ -1290,6 +1291,12 @@ proc parseReference*(state: State, token: var Token): bool =
     whitespaceLen = token.doc[pos ..< token.doc.len].matchLen(re"^\s*(?:\n|$)")
     if whitespaceLen != -1:
       pos += whitespaceLen
+    # title might have trailing characters, but the label and dest is already enough.
+    # [foo]: /url
+    # "title" ok
+    elif whitespaces[0].contains("\n"):
+      pos -= titleLen
+      titleLen = -1
     else:
       return false
 

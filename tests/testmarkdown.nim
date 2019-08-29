@@ -291,17 +291,17 @@ test "get link label":
 test "parse code fence":
   var codeIndent = 0
   var fenceSize = -1
-  check parseCodeFence("`", codeIndent, fenceSize) == ""
-  check parseCodeFence("~", codeIndent, fenceSize) == ""
-  check parseCodeFence("``", codeIndent, fenceSize) == ""
-  check parseCodeFence("~~", codeIndent, fenceSize) == ""
-  check parseCodeFence("```", codeIndent, fenceSize) == "```"
-  check parseCodeFence("~~~", codeIndent, fenceSize) == "~~~"
-  check parseCodeFence("````", codeIndent, fenceSize) == "````"
-  check parseCodeFence("~~~~", codeIndent, fenceSize) == "~~~~"
-  check parseCodeFence("````", codeIndent, fenceSize) == "````"
-  check parseCodeFence("~~~~", codeIndent, fenceSize) == "~~~~"
-  check parseCodeFence("   ```", codeIndent, fenceSize) == "```"
+  check parseFencedCode("`", codeIndent, fenceSize) == ""
+  check parseFencedCode("~", codeIndent, fenceSize) == ""
+  check parseFencedCode("``", codeIndent, fenceSize) == ""
+  check parseFencedCode("~~", codeIndent, fenceSize) == ""
+  check parseFencedCode("```", codeIndent, fenceSize) == "```"
+  check parseFencedCode("~~~", codeIndent, fenceSize) == "~~~"
+  check parseFencedCode("````", codeIndent, fenceSize) == "````"
+  check parseFencedCode("~~~~", codeIndent, fenceSize) == "~~~~"
+  check parseFencedCode("````", codeIndent, fenceSize) == "````"
+  check parseFencedCode("~~~~", codeIndent, fenceSize) == "~~~~"
+  check parseFencedCode("   ```", codeIndent, fenceSize) == "```"
   check codeIndent == 3
 
 test "parse code info":

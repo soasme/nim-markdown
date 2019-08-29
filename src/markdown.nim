@@ -706,6 +706,15 @@ proc parseCodeInfo*(doc: string, size: var int): string =
     return item
   return ""
 
+proc parseTildeBlockCodeInfo*(doc: string, size: var int): string =
+  var matches: array[1, string]
+  size = doc.matchLen(re"(?: |\t)*(.*)?(?:\n|$)", matches=matches)
+  if size == -1:
+    return ""
+  for item in matches[0].splitWhitespace:
+    return item
+  return ""
+
 proc parseFencedCode(state: State, token: var Token): bool =
   let start = token.getBlockStart
   var pos = start
@@ -719,7 +728,11 @@ proc parseFencedCode(state: State, token: var Token): bool =
 
   pos += fenceSize
   var infoSize = -1
-  var info = parseCodeInfo(token.doc[pos ..< token.doc.len], infoSize)
+  var info: string
+  if fence.startsWith("`"):
+    info = parseCodeInfo(token.doc[pos ..< token.doc.len], infoSize)
+  else:
+    info = parseTildeBlockCodeInfo(token.doc[pos ..< token.doc.len], infoSize)
   if infoSize == -1:
     return false
 

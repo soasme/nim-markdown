@@ -273,6 +273,19 @@ proc preProcessing(state: State, token: var Token) =
 proc isBlank*(doc: string): bool =
   doc.contains(re"^[ \t]*\n?$")
 
+proc firstLine*(doc: string): string =
+  for line in doc.splitLines(keepEol=true):
+    return line
+  return ""
+
+iterator restLines*(doc: string): string =
+  var isRestLines = false
+  for line in doc.splitLines(keepEol=true):
+    if isRestLines:
+      yield line
+    else:
+      isRestLines = true
+
 proc escapeTag*(doc: string): string =
   ## Replace `<` and `>` to HTML-safe characters.
   ## Example::
@@ -756,21 +769,30 @@ proc parseFencedCode(state: State, token: var Token): bool =
   token.children.append(codeToken)
   true
 
-proc parseIndentedCode(state: State, token: var Token): bool =
-  # FIXME: example 81 failed: 6 spaces were striped earlier.
+proc parseIndentedCode*(state: State, token: var Token): bool =
   let start = token.getBlockStart
-  var matches: array[5, string]
-  let size = token.doc[start..<token.doc.len].matchLen(
-    re(r"^(" & INDENTED_CODE_RE & ")"),
-    matches=matches
-  )
-  if size == -1:
-    return false
-  var codeContent = matches[0].replace(re(r"^( {4}| {0,3}\t)", {RegexFlag.reMultiLine}), "")
+  let reIndentedCode = re"^(?: {4}| {0,3}\t)(.*\n?)"
+  var size: int
+  var code: string
+  var matches: array[1, string]
+  let firstLine = token.doc[start..<token.doc.len].firstLine
+  if not firstLine.match(reIndentedCode, matches=matches): return false
+  if matches[0].isBlank: return false
+  size += firstLine.len
+  code = matches[0]
+  for line in token.doc[start..<token.doc.len].restLines:
+    if line.isBlank:
+      code &= line.replace(re"^ {0,4}", "")
+      size += line.len
+    elif line.match(reIndentedCode, matches=matches):
+      code &= matches[0]
+      size += line.len
+    else:
+      break
   var indentedCode = Token(
     type: IndentedCodeToken,
     slice: (start .. start+size),
-    doc: codeContent,
+    doc: code,
     indentedCodeVal: "",
   )
   token.children.append(indentedCode)

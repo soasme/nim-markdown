@@ -171,7 +171,7 @@ type
     references: Table[string, Reference]
     tokens: DoublyLinkedList[Token]
 
-var simpleRuleSet = RuleSet(
+var gfmRuleSet = RuleSet(
   preProcessingRules: @[],
   blockRules: @[
     ReferenceToken,
@@ -2472,7 +2472,7 @@ proc markdown*(doc: string, config: MarkdownConfig = initMarkdownConfig()): stri
   var state = State(
     doc: doc.strip(chars={'\n'}),
     tokens: tokens,
-    ruleSet: simpleRuleSet,
+    ruleSet: gfmRuleSet,
     references: initTable[string, Reference](),
     loose: true
   )

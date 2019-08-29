@@ -17,7 +17,7 @@ type
     inlineRules: seq[TokenType]
     postProcessingRules: seq[TokenType]
 
-  Delimeter* = object
+  Delimiter* = object
     token: Token
     kind: string
     num: int
@@ -354,6 +354,54 @@ proc getBlockStart(token: Token): int =
     token.children.tail.value.slice.b
 
 let LAZINESS_TEXT = r"(?:(?! {0,3}>| {0,3}(?:\*|\+|-) | {0,3}\d+(?:\.|\)) | {0,3}#| {0,3}`{3,}| {0,3}\*{3}| {0,3}-{3}| {0,3}_{3})[^\n]+(?:\n|$))+"
+
+const rThematicBreakLeading = r" {0,3}"
+const rThematicBreakMarker = r"[-*_]"
+const rThematicBreakSpace = r"[ \t]"
+const rFencedCodeLeading = " {0,3}"
+const rFencedCodeMarker = r"(`{3,}|~{3,})"
+const rFencedCodePadding = r"(?: |\t)*"
+const rFencedCodeInfo = r"([^`\n]*)?"
+
+proc reFmt(patterns: varargs[string]): Regex =
+  var s: string
+  for p in patterns:
+    s &= p
+  re(s)
+
+proc isLaziness(s: string): bool =
+  # setext
+  if s.contains(re"^ {0,3}(=|-)+ *(?:\n+|$)"): return false
+  # atx
+  if s.contains(re"^  {0,3}(#{1,6})([ \t]+)?(?(2)([^\n]*?))([ \t]+)?(?(4)#*) *(?:\n+|$)"): return false
+  # hr
+  if s.contains(reFmt("^",
+    rThematicBreakLeading,
+    fmt"({rThematicBreakMarker})",
+    fmt"(?:{rThematicBreakSpace}*\1)", "{2,}",
+    fmt"{rThematicBreakSpace}*",
+    "\n?$")):
+    return false
+  # indented code
+  if s.contains(re"^(?: {4}| {0,3}\t)(.*\n?)"):
+    return false
+  # fenced
+  if s.contains(reFmt("^",
+    rFencedCodeLeading,
+    rFencedCodeMarker,
+    rFencedCodePadding,
+    rFencedCodeInfo,
+    "(?:\n|$)")):
+    return false
+  # html block
+  if s.contains(re"^ {0,3}<"):
+    return false
+  # FIXME:
+  if s.contains(re(r"^" & LAZINESS_TEXT)):
+    return false
+
+  return true
+
 
 proc parseParagraph(state: State, token: var Token): bool =
   let start = token.getBlockStart
@@ -1342,7 +1390,7 @@ proc parseAutoLink(state: State, token: var Token, start: int): int =
     ))
     return result
 
-proc scanInlineDelimeters*(doc: string, start: int, delimeter: var Delimeter) =
+proc scanInlineDelimiters*(doc: string, start: int, delimeter: var Delimiter) =
   var charBefore = '\n'
   var charAfter = '\n'
   let charCurrent = doc[start]
@@ -1390,11 +1438,11 @@ proc scanInlineDelimeters*(doc: string, start: int, delimeter: var Delimeter) =
     delimeter.canOpen = isLeftFlanking
     delimeter.canClose = isRightFlanking
 
-proc parseDelimeter(state: State, token: var Token, start: int, delimeters: var DoublyLinkedList[Delimeter]): int =
+proc parseDelimiter(state: State, token: var Token, start: int, delimeters: var DoublyLinkedList[Delimiter]): int =
   if token.doc[start] != '*' and token.doc[start] != '_':
     return -1
 
-  var delimeter = Delimeter(
+  var delimeter = Delimiter(
     token: nil,
     kind: fmt"{token.doc[start]}",
     num: 0,
@@ -1404,7 +1452,7 @@ proc parseDelimeter(state: State, token: var Token, start: int, delimeters: var 
     canClose: false,
   )
 
-  scanInlineDelimeters(token.doc, start, delimeter)
+  scanInlineDelimiters(token.doc, start, delimeter)
   if delimeter.num == 0:
     return -1
 
@@ -2033,9 +2081,9 @@ proc parseStrikethrough*(state: State, token: var Token, start: int): int =
   ))
   return size
 
-proc findInlineToken(state: State, token: var Token, rule: TokenType, start: int, delimeters: var DoublyLinkedList[Delimeter]): int =
+proc findInlineToken(state: State, token: var Token, rule: TokenType, start: int, delimeters: var DoublyLinkedList[Delimiter]): int =
   case rule
-  of EmphasisToken: result = parseDelimeter(state, token, start, delimeters)
+  of EmphasisToken: result = parseDelimiter(state, token, start, delimeters)
   of AutoLinkToken: result = parseAutoLink(state, token, start)
   of LinkToken: result = parseLink(state, token, start)
   of ImageToken: result = parseImage(state, token, start)
@@ -2050,22 +2098,22 @@ proc findInlineToken(state: State, token: var Token, rule: TokenType, start: int
   else: raise newException(MarkdownError, fmt"{token.type} has no inline rule.")
 
 
-proc removeDelimeter*(delimeter: var DoublyLinkedNode[Delimeter]) =
+proc removeDelimiter*(delimeter: var DoublyLinkedNode[Delimiter]) =
   if delimeter.prev != nil:
     delimeter.prev.next = delimeter.next
   if delimeter.next != nil:
     delimeter.next.prev = delimeter.prev
   delimeter = delimeter.next
 
-proc processEmphasis*(state: State, token: var Token, delimeterStack: var DoublyLinkedList[Delimeter]) =
-  var opener: DoublyLinkedNode[Delimeter] = nil
-  var closer: DoublyLinkedNode[Delimeter] = nil
-  var oldCloser: DoublyLinkedNode[Delimeter] = nil
+proc processEmphasis*(state: State, token: var Token, delimeterStack: var DoublyLinkedList[Delimiter]) =
+  var opener: DoublyLinkedNode[Delimiter] = nil
+  var closer: DoublyLinkedNode[Delimiter] = nil
+  var oldCloser: DoublyLinkedNode[Delimiter] = nil
   var openerFound = false
   var oddMatch = false
   var useDelims = 0
-  var underscoreOpenerBottom: DoublyLinkedNode[Delimeter] = nil
-  var asteriskOpenerBottom: DoublyLinkedNode[Delimeter] = nil
+  var underscoreOpenerBottom: DoublyLinkedNode[Delimiter] = nil
+  var asteriskOpenerBottom: DoublyLinkedNode[Delimiter] = nil
 
   # find first closer above stack_bottom
   #
@@ -2157,12 +2205,12 @@ proc processEmphasis*(state: State, token: var Token, delimeterStack: var Doubly
         if opener != nil and childNode.value == opener.value.token:
           # remove opener if no text left
           if opener.value.num == 0:
-            removeDelimeter(opener)
+            removeDelimiter(opener)
         if closer != nil and childNode.value == closer.value.token:
           # remove closer if no text left
           if closer.value.num == 0:
             var tmp = closer.next
-            removeDelimeter(closer)
+            removeDelimiter(closer)
             closer = tmp
 
     # if none is found.
@@ -2177,14 +2225,14 @@ proc processEmphasis*(state: State, token: var Token, delimeterStack: var Doubly
       # If the closer at current_position is not a potential opener,
       # remove it from the delimiter stack (since we know it can’t be a closer either).
       if not oldCloser.value.canOpen:
-        removeDelimeter(oldCloser)
+        removeDelimiter(oldCloser)
 
   # after done, remove all delimiters
   while delimeterStack.head != nil:
-    removeDelimeter(delimeterStack.head)
+    removeDelimiter(delimeterStack.head)
 
 proc parseLinkInlines*(state: State, token: var Token, allowNested: bool = false) =
-  var delimeters: DoublyLinkedList[Delimeter]
+  var delimeters: DoublyLinkedList[Delimiter]
   var pos = 0
   var size = 0
   if token.type == LinkToken:
@@ -2216,7 +2264,7 @@ proc parseLinkInlines*(state: State, token: var Token, allowNested: bool = false
 
 proc parseLeafBlockInlines(state: State, token: var Token) =
   var pos = 0
-  var delimeters: DoublyLinkedList[Delimeter]
+  var delimeters: DoublyLinkedList[Delimiter]
 
   for index, ch in token.doc[0 ..< token.doc.len].strip:
     if index < pos:

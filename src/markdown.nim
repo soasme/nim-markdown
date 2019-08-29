@@ -252,17 +252,17 @@ const HTML_TAG* = (
 let HTML_OPEN_CLOSE_TAG_START* = "^ {0,3}(?:" & OPEN_TAG & "|" & CLOSE_TAG & r")\s*$"
 let HTML_OPEN_CLOSE_TAG_END* = r"^\n?$"
 
-proc parse(state: var State, token: var Token);
-proc parseBlock(state: var State, token: var Token);
-proc parseLeafBlockInlines(state: var State, token: var Token);
-proc parseLinkInlines*(state: var State, token: var Token, allowNested: bool = false);
+proc parse(state: State, token: var Token);
+proc parseBlock(state: State, token: var Token);
+proc parseLeafBlockInlines(state: State, token: var Token);
+proc parseLinkInlines*(state: State, token: var Token, allowNested: bool = false);
 proc getLinkText*(doc: string, start: int, slice: var Slice[int], allowNested: bool = false): int;
 proc getLinkLabel*(doc: string, start: int, label: var string): int;
 proc getLinkDestination*(doc: string, start: int, slice: var Slice[int]): int;
 proc getLinkTitle*(doc: string, start: int, slice: var Slice[int]): int;
-proc render(state: var State, token: Token): string;
+proc render(state: State, token: Token): string;
 
-proc preProcessing(state: var State, token: var Token) =
+proc preProcessing(state: State, token: var Token) =
   token.doc = token.doc.replace(re"\r\n|\r", "\n")
   token.doc = token.doc.replace("\u2424", " ")
   token.doc = token.doc.replace("\u0000", "\uFFFD")
@@ -355,7 +355,7 @@ proc getBlockStart(token: Token): int =
 
 let LAZINESS_TEXT = r"(?:(?! {0,3}>| {0,3}(?:\*|\+|-) | {0,3}\d+(?:\.|\)) | {0,3}#| {0,3}`{3,}| {0,3}\*{3}| {0,3}-{3}| {0,3}_{3})[^\n]+(?:\n|$))+"
 
-proc parseParagraph(state: var State, token: var Token): bool =
+proc parseParagraph(state: State, token: var Token): bool =
   let start = token.getBlockStart
   let size = token.doc[start..<token.doc.len].matchLen(re(r"^((?:[^\n]+\n?)(" & LAZINESS_TEXT & "|\n*))"))
 
@@ -505,7 +505,7 @@ proc isLoose(token: Token): bool =
       return true
   return false
 
-proc parseUnorderedList(state: var State, token: var Token): bool =
+proc parseUnorderedList(state: State, token: var Token): bool =
   let start = token.getBlockStart
   var pos = start
   var marker = ""
@@ -552,7 +552,7 @@ proc parseUnorderedList(state: var State, token: var Token): bool =
   token.children.append(ulToken)
   result = true
 
-proc parseOrderedList(state: var State, token: var Token): bool =
+proc parseOrderedList(state: State, token: var Token): bool =
   let start = token.getBlockStart
   var pos = start
   var marker = ""
@@ -606,7 +606,7 @@ proc parseOrderedList(state: var State, token: var Token): bool =
   token.children.append(olToken)
   result = true
 
-proc parseThematicBreak(state: var State, token: var Token): bool =
+proc parseThematicBreak(state: State, token: var Token): bool =
   let start = token.getBlockStart
   let size = token.doc[start..<token.doc.len].matchLen(re(r"^" & THEMATIC_BREAK_RE))
   if size == -1:
@@ -658,7 +658,7 @@ proc parseCodeInfo*(doc: string, size: var int): string =
     return item
   return ""
 
-proc parseFenceCode(state: var State, token: var Token): bool =
+proc parseFenceCode(state: State, token: var Token): bool =
   let start = token.getBlockStart
   var pos = start
   var indent = 0
@@ -692,7 +692,7 @@ proc parseFenceCode(state: var State, token: var Token): bool =
   token.children.append(codeToken)
   true
 
-proc parseIndentedCode(state: var State, token: var Token): bool =
+proc parseIndentedCode(state: State, token: var Token): bool =
   # FIXME: example 81 failed: 6 spaces were striped earlier.
   let start = token.getBlockStart
   var matches: array[5, string]
@@ -748,7 +748,7 @@ proc parseSetextHeadingContent*(doc: string, headingContent: var string, heading
     pos
 
 
-proc parseSetextHeading(state: var State, token: var Token): bool =
+proc parseSetextHeading(state: State, token: var Token): bool =
   let start = token.getBlockStart
   var content = ""
   var level = 0
@@ -769,7 +769,7 @@ proc parseSetextHeading(state: var State, token: var Token): bool =
   return true
 
 
-proc parseATXHeading(state: var State, token: var Token): bool =
+proc parseATXHeading(state: State, token: var Token): bool =
   let start = token.getBlockStart
   var matches: array[5, string]
   let size = token.doc[start..<token.doc.len].matchLen(re(r"^" & ATX_HEADING_RE), matches=matches)
@@ -789,7 +789,7 @@ proc parseATXHeading(state: var State, token: var Token): bool =
   token.children.append(heading)
   return true
 
-proc parseBlankLine(state: var State, token: var Token): bool =
+proc parseBlankLine(state: State, token: var Token): bool =
   let start = token.getBlockStart
   let size = token.doc[start..<token.doc.len].matchLen(re(r"^((?:\s*\n)+)"))
 
@@ -872,7 +872,7 @@ proc parseTableAligns*(doc: string, aligns: var seq[string]): bool =
       aligns.add("")
   true
 
-proc parseHTMLTable(state: var State, token: var Token): bool =
+proc parseHTMLTable(state: State, token: var Token): bool =
   # Algorithm:
   # fail fast if less than 2 lines.
   # second line: /^[-:|][-:|\s]*$/
@@ -1040,7 +1040,7 @@ proc genHTMLBlockToken(token: var Token, htmlContent: string, start: int, size: 
   token.children.append(htmlBlock)
   true
 
-proc parseHTMLBlock(state: var State, token: var Token): bool =
+proc parseHTMLBlock(state: State, token: var Token): bool =
   let start = token.getBlockStart
   var htmlContent = ""
   var size = parseHTMLBlockContent(
@@ -1107,7 +1107,7 @@ proc parseHTMLBlock(state: var State, token: var Token): bool =
 
   false
 
-proc parseBlockquote(state: var State, token: var Token): bool =
+proc parseBlockquote(state: State, token: var Token): bool =
   let markerContent = re(r"^(( {0,3}>([^\n]*(?:\n|$)))+)")
   var matches: array[3, string]
   let start = token.getBlockStart
@@ -1163,7 +1163,7 @@ proc parseBlockquote(state: var State, token: var Token): bool =
   token.children.append(blockquote)
   return true
 
-proc parseReference*(state: var State, token: var Token): bool =
+proc parseReference*(state: State, token: var Token): bool =
   var pos = token.getBlockStart
   var start = pos
   let lastSlice = token.getBlockStart
@@ -1256,7 +1256,7 @@ proc parseReference*(state: var State, token: var Token): bool =
     state.references[label] = reference.referenceVal
   return true
 
-proc parseBlock(state: var State, token: var Token) =
+proc parseBlock(state: State, token: var Token) =
   let doc = token.doc
   var ok: bool
   #while token.children.tail == nil or token.getBlockStart < doc.len:
@@ -1284,7 +1284,7 @@ proc parseBlock(state: var State, token: var Token) =
     if not ok:
       raise newException(MarkdownError, fmt"unknown rule. {token.children.tail.value.slice.b}")
 
-proc parseText(state: var State, token: var Token, start: int): int =
+proc parseText(state: State, token: var Token, start: int): int =
   let slice = token.slice
   var text = Token(
     type: TextToken,
@@ -1294,7 +1294,7 @@ proc parseText(state: var State, token: var Token, start: int): int =
   token.children.append(text)
   result = 1 # FIXME: should match aggresively.
 
-proc parseSoftLineBreak(state: var State, token: var Token, start: int): int =
+proc parseSoftLineBreak(state: State, token: var Token, start: int): int =
   result = token.doc[start ..< token.doc.len].matchLen(re"^ \n *")
   if result != -1:
     token.children.append(Token(
@@ -1303,7 +1303,7 @@ proc parseSoftLineBreak(state: var State, token: var Token, start: int): int =
       softLineBreakVal: "\n"
     ))
 
-proc parseAutoLink(state: var State, token: var Token, start: int): int =
+proc parseAutoLink(state: State, token: var Token, start: int): int =
   let slice = token.slice
   if token.doc[start] != '<':
     return -1
@@ -1390,7 +1390,7 @@ proc scanInlineDelimeters*(doc: string, start: int, delimeter: var Delimeter) =
     delimeter.canOpen = isLeftFlanking
     delimeter.canClose = isRightFlanking
 
-proc parseDelimeter(state: var State, token: var Token, start: int, delimeters: var DoublyLinkedList[Delimeter]): int =
+proc parseDelimeter(state: State, token: var Token, start: int, delimeters: var DoublyLinkedList[Delimeter]): int =
   if token.doc[start] != '*' and token.doc[start] != '_':
     return -1
 
@@ -1581,7 +1581,7 @@ proc getLinkText*(doc: string, start: int, slice: var Slice[int], allowNested: b
   return -1
 
 
-proc parseInlineLink(state: var State, token: var Token, start: int, labelSlice: Slice[int]): int =
+proc parseInlineLink(state: State, token: var Token, start: int, labelSlice: Slice[int]): int =
   if token.doc[start] != '[':
     return -1
 
@@ -1645,7 +1645,7 @@ proc parseInlineLink(state: var State, token: var Token, start: int, labelSlice:
   token.children.append(link)
   result = pos - start + 1
 
-proc parseFullReferenceLink(state: var State, token: var Token, start: int, textSlice: Slice[int]): int =
+proc parseFullReferenceLink(state: State, token: var Token, start: int, textSlice: Slice[int]): int =
   var pos = textSlice.b + 1
   var label: string
   var labelSize = getLinkLabel(token.doc, pos, label)
@@ -1674,7 +1674,7 @@ proc parseFullReferenceLink(state: var State, token: var Token, start: int, text
   token.children.append(link)
   return pos - start
 
-proc parseCollapsedReferenceLink(state: var State, token: var Token, start: int, label: Slice[int]): int =
+proc parseCollapsedReferenceLink(state: State, token: var Token, start: int, label: Slice[int]): int =
   var id = token.doc[label.a+1 ..< label.b].toLower.replace(re"\s+", " ")
   var text = token.doc[label.a+1 ..< label.b]
   if not state.references.contains(id):
@@ -1695,7 +1695,7 @@ proc parseCollapsedReferenceLink(state: var State, token: var Token, start: int,
   token.children.append(link)
   return label.b - start + 3
 
-proc parseShortcutReferenceLink(state: var State, token: var Token, start: int, label: Slice[int]): int =
+proc parseShortcutReferenceLink(state: State, token: var Token, start: int, label: Slice[int]): int =
   var id = token.doc[label.a+1 ..< label.b].toLower.replace(re"\s+", " ")
   var text = token.doc[label.a+1 ..< label.b]
   if not state.references.contains(id):
@@ -1717,7 +1717,7 @@ proc parseShortcutReferenceLink(state: var State, token: var Token, start: int, 
   return label.b - start + 1
 
 
-proc parseLink*(state: var State, token: var Token, start: int): int =
+proc parseLink*(state: State, token: var Token, start: int): int =
   # Link should start with [
   if token.doc[start] != '[':
     return -1
@@ -1750,7 +1750,7 @@ proc parseLink*(state: var State, token: var Token, start: int): int =
   # definition elsewhere in the document and is not followed by [] or a link label.
   return parseShortcutReferenceLink(state, token, start, labelSlice)
 
-proc parseInlineImage(state: var State, token: var Token, start: int, labelSlice: Slice[int]): int =
+proc parseInlineImage(state: State, token: var Token, start: int, labelSlice: Slice[int]): int =
   var pos = labelSlice.b + 2 # ![link](
 
   # parse whitespace
@@ -1810,7 +1810,7 @@ proc parseInlineImage(state: var State, token: var Token, start: int, labelSlice
   token.children.append(image)
   result = pos - start + 2
 
-proc parseFullReferenceImage(state: var State, token: var Token, start: int, altSlice: Slice[int]): int =
+proc parseFullReferenceImage(state: State, token: var Token, start: int, altSlice: Slice[int]): int =
   var pos = altSlice.b + 1
   var label: string
   var labelSize = getLinkLabel(token.doc, pos, label)
@@ -1839,7 +1839,7 @@ proc parseFullReferenceImage(state: var State, token: var Token, start: int, alt
   token.children.append(image)
   return pos - start + 1
 
-proc parseCollapsedReferenceImage(state: var State, token: var Token, start: int, label: Slice[int]): int =
+proc parseCollapsedReferenceImage(state: State, token: var Token, start: int, label: Slice[int]): int =
   var id = token.doc[label.a+1 ..< label.b].toLower.replace(re"\s+", " ")
   var alt = token.doc[label.a+1 ..< label.b]
   if not state.references.contains(id):
@@ -1860,7 +1860,7 @@ proc parseCollapsedReferenceImage(state: var State, token: var Token, start: int
   token.children.append(image)
   return label.b - start + 3
 
-proc parseShortcutReferenceImage(state: var State, token: var Token, start: int, label: Slice[int]): int =
+proc parseShortcutReferenceImage(state: State, token: var Token, start: int, label: Slice[int]): int =
   var id = token.doc[label.a+1 ..< label.b].toLower.replace(re"\s+", " ")
   var alt = token.doc[label.a+1 ..< label.b]
   if not state.references.contains(id):
@@ -1882,7 +1882,7 @@ proc parseShortcutReferenceImage(state: var State, token: var Token, start: int,
   return label.b - start + 1
 
 
-proc parseImage*(state: var State, token: var Token, start: int): int =
+proc parseImage*(state: State, token: var Token, start: int): int =
   # Image should start with ![
   if not token.doc[start ..< token.doc.len].match(re"^!\["):
     return -1
@@ -1914,7 +1914,7 @@ proc parseImage*(state: var State, token: var Token, start: int): int =
     return parseShortcutReferenceImage(state, token, start, labelSlice)
 
 const ENTITY = r"&(?:#x[a-f0-9]{1,6}|#[0-9]{1,7}|[a-z][a-z0-9]{1,31});"
-proc parseHTMLEntity*(state: var State, token: var Token, start: int): int =
+proc parseHTMLEntity*(state: State, token: var Token, start: int): int =
   if token.doc[start] != '&':
     return -1
 
@@ -1938,7 +1938,7 @@ proc parseHTMLEntity*(state: var State, token: var Token, start: int): int =
   ))
   return size
 
-proc parseEscape*(state: var State, token: var Token, start: int): int =
+proc parseEscape*(state: State, token: var Token, start: int): int =
   if token.doc[start] != '\\':
     return -1
 
@@ -1954,7 +1954,7 @@ proc parseEscape*(state: var State, token: var Token, start: int): int =
   ))
   return 2
 
-proc parseInlineHTML*(state: var State, token: var Token, start: int): int =
+proc parseInlineHTML*(state: State, token: var Token, start: int): int =
   if token.doc[start] != '<':
     return -1
   let regex = re("^(" & HTML_TAG & ")", {RegexFlag.reIgnoreCase})
@@ -1971,7 +1971,7 @@ proc parseInlineHTML*(state: var State, token: var Token, start: int): int =
   ))
   return size
 
-proc parseHardLineBreak*(state: var State, token: var Token, start: int): int =
+proc parseHardLineBreak*(state: State, token: var Token, start: int): int =
   if token.doc[start] != ' ' and token.doc[start] != '\\':
     return -1
 
@@ -1987,7 +1987,7 @@ proc parseHardLineBreak*(state: var State, token: var Token, start: int): int =
   ))
   return size
 
-proc parseCodeSpan*(state: var State, token: var Token, start: int): int =
+proc parseCodeSpan*(state: State, token: var Token, start: int): int =
   if token.doc[start] != '`':
     return -1
 
@@ -2016,7 +2016,7 @@ proc parseCodeSpan*(state: var State, token: var Token, start: int): int =
   ))
   return size
 
-proc parseStrikethrough*(state: var State, token: var Token, start: int): int =
+proc parseStrikethrough*(state: State, token: var Token, start: int): int =
   if token.doc[start] != '~':
     return -1
 
@@ -2033,7 +2033,7 @@ proc parseStrikethrough*(state: var State, token: var Token, start: int): int =
   ))
   return size
 
-proc findInlineToken(state: var State, token: var Token, rule: TokenType, start: int, delimeters: var DoublyLinkedList[Delimeter]): int =
+proc findInlineToken(state: State, token: var Token, rule: TokenType, start: int, delimeters: var DoublyLinkedList[Delimeter]): int =
   case rule
   of EmphasisToken: result = parseDelimeter(state, token, start, delimeters)
   of AutoLinkToken: result = parseAutoLink(state, token, start)
@@ -2057,7 +2057,7 @@ proc removeDelimeter*(delimeter: var DoublyLinkedNode[Delimeter]) =
     delimeter.next.prev = delimeter.prev
   delimeter = delimeter.next
 
-proc processEmphasis*(state: var State, token: var Token, delimeterStack: var DoublyLinkedList[Delimeter]) =
+proc processEmphasis*(state: State, token: var Token, delimeterStack: var DoublyLinkedList[Delimeter]) =
   var opener: DoublyLinkedNode[Delimeter] = nil
   var closer: DoublyLinkedNode[Delimeter] = nil
   var oldCloser: DoublyLinkedNode[Delimeter] = nil
@@ -2183,7 +2183,7 @@ proc processEmphasis*(state: var State, token: var Token, delimeterStack: var Do
   while delimeterStack.head != nil:
     removeDelimeter(delimeterStack.head)
 
-proc parseLinkInlines*(state: var State, token: var Token, allowNested: bool = false) =
+proc parseLinkInlines*(state: State, token: var Token, allowNested: bool = false) =
   var delimeters: DoublyLinkedList[Delimeter]
   var pos = 0
   var size = 0
@@ -2214,7 +2214,7 @@ proc parseLinkInlines*(state: var State, token: var Token, allowNested: bool = f
 
   processEmphasis(state, token, delimeters)
 
-proc parseLeafBlockInlines(state: var State, token: var Token) =
+proc parseLeafBlockInlines(state: State, token: var Token) =
   var pos = 0
   var delimeters: DoublyLinkedList[Delimeter]
 
@@ -2240,17 +2240,17 @@ proc isContainerToken(token: Token): bool =
   {DocumentToken, BlockquoteToken, ListItemToken, UnorderedListToken,
    OrderedListToken, TableToken, THeadToken, TBodyToken, TableRowToken, }.contains(token.type)
 
-proc parseInline(state: var State, token: var Token) =
+proc parseInline(state: State, token: var Token) =
   if isContainerToken(token):
     for childToken in token.children.mitems:
       parseInline(state, childToken)
   else:
     parseLeafBlockInlines(state, token)
 
-proc postProcessing(state: var State, token: var Token) =
+proc postProcessing(state: State, token: var Token) =
   discard
 
-proc parse(state: var State, token: var Token) =
+proc parse(state: State, token: var Token) =
   preProcessing(state, token)
   parseBlock(state, token)
   parseInline(state, token)
@@ -2261,15 +2261,15 @@ proc toSeq(tokens: DoublyLinkedList[Token]): seq[Token] =
   for token in tokens.items:
     result.add(token)
 
-proc renderToken(state: var State, token: Token): string;
-proc renderInline(state: var State, token: Token): string =
+proc renderToken(state: State, token: Token): string;
+proc renderInline(state: State, token: Token): string =
   var s = state
   token.children.toSeq.map(
     proc(x: Token): string =
       result = s.renderToken(x)
   ).join("")
 
-proc renderImageAlt*(state: var State, token: Token): string =
+proc renderImageAlt*(state: State, token: Token): string =
   var s = state
   token.children.toSeq.map(
     proc(x: Token): string =
@@ -2281,13 +2281,13 @@ proc renderImageAlt*(state: var State, token: Token): string =
       else: s.renderToken(x)
   ).join("")
 
-proc renderParagraph(state: var State, token: Token): string =
+proc renderParagraph(state: State, token: Token): string =
   p(state.renderInline(token))
 
-proc renderListItemTightParagraph(state: var State, token: Token): string =
+proc renderListItemTightParagraph(state: State, token: Token): string =
   state.renderInline(token)
 
-proc renderListItemChildren(state: var State, token: Token): string =
+proc renderListItemChildren(state: State, token: Token): string =
   var html: string
   var results: seq[string]
 
@@ -2307,36 +2307,36 @@ proc renderListItemChildren(state: var State, token: Token): string =
   if token.listItemVal.loose or token.children.tail != nil:
     result &= "\n"
 
-proc renderUnorderedList(state: var State, token: Token): string =
+proc renderUnorderedList(state: State, token: Token): string =
   ul("\n", state.render(token))
 
-proc renderOrderedList(state: var State, token: Token): string =
+proc renderOrderedList(state: State, token: Token): string =
   if token.olVal.start != 1:
     result = ol(start=fmt"{token.olVal.start}", "\n", state.render(token))
   else:
     result = ol("\n", state.render(token))
 
-proc renderListItem(state: var State, token: Token): string =
+proc renderListItem(state: State, token: Token): string =
   let originalLoose = state.loose
   state.loose = token.listItemVal.loose
   result = li(state.renderListItemChildren(token))
   state.loose = originalLoose
 
-proc renderTableHeadCell(state: var State, token: Token): string =
+proc renderTableHeadCell(state: State, token: Token): string =
   let align = token.theadCellVal.align
   if align == "":
     fmt"<th>{state.renderInline(token)}</th>"
   else:
     fmt("<th align=\"{align}\">{state.renderInline(token)}</th>")
 
-proc renderTableBodyCell(state: var State, token: Token): string =
+proc renderTableBodyCell(state: State, token: Token): string =
   let align = token.tbodyCellVal.align
   if align == "":
     fmt"<td>{state.renderInline(token)}</td>"
   else:
     fmt("<td align=\"{align}\">{state.renderInline(token)}</td>")
 
-proc renderTableRow(state: var State, token: Token): string =
+proc renderTableRow(state: State, token: Token): string =
   var s = state
   tr(
     "\n",
@@ -2347,14 +2347,14 @@ proc renderTableRow(state: var State, token: Token): string =
     "\n"
   )
 
-proc renderTableHead(state: var State, token: Token): string =
+proc renderTableHead(state: State, token: Token): string =
   thead(
     "\n",
     state.renderTableRow(token.children.head.value.children.head.value),
     "\n"
   )
 
-proc renderTableBody(state: var State, token: Token): string =
+proc renderTableBody(state: State, token: Token): string =
   if token.children.head.next == nil:
     return ""
   var s = state
@@ -2366,14 +2366,14 @@ proc renderTableBody(state: var State, token: Token): string =
     ).join("\n"),
   )
 
-proc renderTable(state: var State, token: Token): string =
+proc renderTable(state: State, token: Token): string =
   let thead = state.renderTableHead(token)
   var tbody = state.renderTableBody(token)
   if tbody != "":
     tbody = "\n" & tbody.strip
   table("\n", thead, tbody)
 
-proc renderFenceCode(state: var State, token: Token): string =
+proc renderFenceCode(state: State, token: Token): string =
   var codeHTML = token.doc.removeFenceBlankLines.escapeCode.escapeQuote
 
   if token.fenceCodeVal.info == "":
@@ -2381,7 +2381,7 @@ proc renderFenceCode(state: var State, token: Token): string =
   else:
     pre(code(class=fmt"language-{token.fenceCodeVal.info.escapeBackslash.escapeHTMLEntity}", codeHTML))
 
-proc renderLink(state: var State, token: Token): string =
+proc renderLink(state: State, token: Token): string =
   if token.linkVal.title == "":
     a(
       href=token.linkVal.url.escapeBackslash.escapeLinkUrl,
@@ -2394,7 +2394,7 @@ proc renderLink(state: var State, token: Token): string =
       state.renderInline(token)
     )
 
-proc renderImage(state: var State, token: Token): string =
+proc renderImage(state: State, token: Token): string =
   if token.imageVal.title == "":
     img(
       src=token.imageVal.url.escapeBackslash.escapeLinkUrl,
@@ -2407,13 +2407,13 @@ proc renderImage(state: var State, token: Token): string =
       title=token.imageVal.title.escapeBackslash.escapeHTMLEntity.escapeAmpersandSeq.escapeQuote,
     )
 
-proc renderAutoLink(state: var State, token: Token): string =
+proc renderAutoLink(state: State, token: Token): string =
   a(
     href=token.autoLinkVal.url.escapeLinkUrl.escapeAmpersandSeq,
     token.autoLinkVal.text.escapeAmpersandSeq
   )
 
-proc renderToken(state: var State, token: Token): string =
+proc renderToken(state: State, token: Token): string =
   case token.type
   of ReferenceToken: ""
   of ThematicBreakToken: "<hr />"
@@ -2449,7 +2449,7 @@ proc renderToken(state: var State, token: Token): string =
   of SoftLineBreakToken: token.softLineBreakVal
   of DocumentToken: ""
 
-proc render(state: var State, token: Token): string =
+proc render(state: State, token: Token): string =
   var html: string
   for token in token.children.items:
     html = state.renderToken(token)

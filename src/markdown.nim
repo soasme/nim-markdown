@@ -262,11 +262,25 @@ proc getLinkDestination*(doc: string, start: int, slice: var Slice[int]): int;
 proc getLinkTitle*(doc: string, start: int, slice: var Slice[int]): int;
 proc render(state: State, token: Token): string;
 
+proc replaceInitialTabs*(doc: string): string =
+  var res: seq[string]
+  var n: int
+  for line in doc.splitLines(keepEol=true):
+    n = 0
+    for ch in line:
+      if ch == '\t':
+        n += 1
+      else:
+        break
+    res.add(" ".repeat(n*4) & line[n..<line.len])
+  return res.join("")
+
 proc preProcessing(state: State, token: var Token) =
   token.doc = token.doc.replace(re"\r\n|\r", "\n")
   token.doc = token.doc.replace("\u2424", " ")
   token.doc = token.doc.replace("\u0000", "\uFFFD")
   token.doc = token.doc.replace("&#0;", "&#XFFFD;")
+  token.doc = token.doc.replaceInitialTabs
   # FIXME: it will aggressively clean empty line in code. 98
   #token.doc = token.doc.replace(re(r"^ +$", {RegexFlag.reMultiLine}), "")
 

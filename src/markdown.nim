@@ -1276,9 +1276,11 @@ proc parseReference*(state: State, token: var Token): bool =
 
   # parse title (optional)
   var titleSlice: Slice[int]
-  var titleLen = 0;
+  var titleLen = 0
   if pos<token.doc.len and( token.doc[pos] == '(' or token.doc[pos] == '\'' or token.doc[pos] == '"'):
-    # TODO: validate at least one whitespace before the optional title.
+    # at least one whitespace before the optional title.
+    if not {' ', '\t', '\n'}.contains(token.doc[pos-1]):
+      return false
 
     titleLen = getLinkTitle(token.doc, pos, titleSlice)
     if titleLen >= 0:

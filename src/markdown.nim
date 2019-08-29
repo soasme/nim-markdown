@@ -69,7 +69,7 @@ type
   Heading = object
     level: int
 
-  Fence = object
+  Fenced = object
     info: string
 
   HTMLTableCell = object
@@ -96,7 +96,7 @@ type
     SetextHeadingToken,
     ThematicBreakToken,
     IndentedCodeToken,
-    FenceCodeToken,
+    FencedCodeToken,
     BlockquoteToken,
     HTMLBlockToken,
     TableToken,
@@ -137,7 +137,7 @@ type
     of BlankLineToken: blankLineVal*: string
     of HTMLBlockToken: htmlBlockVal*: string
     of IndentedCodeToken: indentedCodeVal*: string
-    of FenceCodeToken: fenceCodeVal*: Fence
+    of FencedCodeToken: fenceCodeVal*: Fenced
     of BlockquoteToken: blockquoteVal*: Blockquote
     of UnorderedListToken: ulVal*: UnorderedList
     of OrderedListToken: olVal*: OrderedList
@@ -180,7 +180,7 @@ var gfmRuleSet = RuleSet(
     UnorderedListToken,
     OrderedListToken,
     IndentedCodeToken,
-    FenceCodeToken,
+    FencedCodeToken,
     HTMLBlockToken,
     TableToken,
     BlankLineToken,
@@ -306,8 +306,8 @@ proc escapeCode*(doc: string): string =
 
 proc removeBlankLines(doc: string): string =
   doc.strip(leading=false, trailing=true, chars={'\n'})
-  
-proc removeFenceBlankLines(doc: string): string =
+
+proc removeFencedBlankLines(doc: string): string =
   doc.replace(re(r"^ {0,3}\n", {re.reMultiLine}), "\n")
 
 proc escapeInvalidHTMLTag(doc: string): string =
@@ -668,7 +668,7 @@ proc parseThematicBreak(state: State, token: var Token): bool =
   token.children.append(hr)
   return true
 
-proc parseCodeFence*(doc: string, indent: var int, size: var int): string =
+proc parseFencedCode*(doc: string, indent: var int, size: var int): string =
   var matches: array[2, string]
   size = doc.matchLen(re"((?: {0,3})?)(`{3,}|~{3,})", matches=matches)
   if size == -1:
@@ -706,13 +706,13 @@ proc parseCodeInfo*(doc: string, size: var int): string =
     return item
   return ""
 
-proc parseFenceCode(state: State, token: var Token): bool =
+proc parseFencedCode(state: State, token: var Token): bool =
   let start = token.getBlockStart
   var pos = start
   var indent = 0
 
   var fenceSize = -1
-  var fence = parseCodeFence(token.doc[start ..< token.doc.len], indent, fenceSize)
+  var fence = parseFencedCode(token.doc[start ..< token.doc.len], indent, fenceSize)
 
   if fenceSize == -1:
     return false
@@ -732,10 +732,10 @@ proc parseFenceCode(state: State, token: var Token): bool =
     pos += 1
 
   var codeToken = Token(
-    type: FenceCodeToken,
+    type: FencedCodeToken,
     slice: (start .. pos),
     doc: codeContent,
-    fenceCodeVal: Fence(info: info),
+    fenceCodeVal: Fenced(info: info),
   )
   token.children.append(codeToken)
   true
@@ -1317,7 +1317,7 @@ proc parseBlock(state: State, token: var Token) =
       of ATXHeadingToken: ok = parseATXHeading(state, token)
       of SetextHeadingToken: ok = parseSetextHeading(state, token)
       of IndentedCodeToken: ok = parseIndentedCode(state, token)
-      of FenceCodeToken: ok = parseFenceCode(state, token)
+      of FencedCodeToken: ok = parseFencedCode(state, token)
       of BlockquoteToken: ok = parseBlockquote(state, token)
       of BlankLineToken: ok = parseBlankLine(state, token)
       of HTMLBlockToken: ok = parseHTMLBlock(state, token)
@@ -2421,8 +2421,8 @@ proc renderTable(state: State, token: Token): string =
     tbody = "\n" & tbody.strip
   table("\n", thead, tbody)
 
-proc renderFenceCode(state: State, token: Token): string =
-  var codeHTML = token.doc.removeFenceBlankLines.escapeCode.escapeQuote
+proc renderFencedCode(state: State, token: Token): string =
+  var codeHTML = token.doc.removeFencedBlankLines.escapeCode.escapeQuote
 
   if token.fenceCodeVal.info == "":
     pre(code(codeHTML))
@@ -2475,7 +2475,7 @@ proc renderToken(state: State, token: Token): string =
   of TableRowToken: state.renderTableRow(token)
   of THeadCellToken: state.renderTableHeadCell(token)
   of TBodyCellToken: state.renderTableBodyCell(token)
-  of FenceCodeToken: state.renderFenceCode(token)
+  of FencedCodeToken: state.renderFencedCode(token)
   of LinkToken: state.renderLink(token)
   of ImageToken: state.renderImage(token)
   of AutoLinkToken: state.renderAutoLink(token)

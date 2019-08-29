@@ -268,7 +268,10 @@ proc preProcessing(state: State, token: var Token) =
   token.doc = token.doc.replace("\u0000", "\uFFFD")
   token.doc = token.doc.replace("&#0;", "&#XFFFD;")
   # FIXME: it will aggressively clean empty line in code. 98
-  token.doc = token.doc.replace(re(r"^ +$", {RegexFlag.reMultiLine}), "")
+  #token.doc = token.doc.replace(re(r"^ +$", {RegexFlag.reMultiLine}), "")
+
+proc isBlank*(doc: string): bool =
+  doc.contains(re"^[ \t]*\n?$")
 
 proc escapeTag*(doc: string): string =
   ## Replace `<` and `>` to HTML-safe characters.
@@ -2352,7 +2355,8 @@ proc renderImageAlt*(state: State, token: Token): string =
   ).join("")
 
 proc renderParagraph(state: State, token: Token): string =
-  p(state.renderInline(token))
+  if token.children.head == nil: ""
+  else: p(state.renderInline(token))
 
 proc renderListItemTightParagraph(state: State, token: Token): string =
   state.renderInline(token)

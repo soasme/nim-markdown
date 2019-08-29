@@ -2436,11 +2436,16 @@ proc renderTable(state: State, token: Token): string =
 
 proc renderFencedCode(state: State, token: Token): string =
   var codeHTML = token.doc.removeFencedBlankLines.escapeCode.escapeQuote
+  if codeHTML != "" and not codeHTML.endsWith("\n"):
+    codeHTML &= "\n"
 
   if token.fenceCodeVal.info == "":
     pre(code(codeHTML))
   else:
-    pre(code(class=fmt"language-{token.fenceCodeVal.info.escapeBackslash.escapeHTMLEntity}", codeHTML))
+    pre(code(
+      class=fmt"language-{token.fenceCodeVal.info.escapeBackslash.escapeHTMLEntity}",
+      codeHTML,
+      ))
 
 proc renderLink(state: State, token: Token): string =
   if token.linkVal.title == "":

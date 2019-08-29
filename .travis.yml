@@ -1,25 +1,15 @@
+os:
+  - linux
+dist: trusty
 language: c
 install:
+  - export CHOOSENIM_CHOOSE_VERSION="0.20.0"
   - |
-    # Download the latest release of Nim into the "nim-master" folder
-    git clone -b master --depth 1 git://github.com/nim-lang/nim nim-master/
-    cd nim-master
-    # Download the latest release of Nim's prepared C sources, for bootstrapping
-    git clone -b master --depth 1 git://github.com/nim-lang/csources csources/
-    cd csources
-    # Build C sources
-    sh build.sh
-    cd ..
-    # This concludes the first step of bootstrapping, don't need C sources anymore
-    rm -rf csources
-    # Use the executable built from C sources to compile the build tool
-    bin/nim c koch
-    # Compile Nim in release mode, using the Nim compiler we already have
-    ./koch boot -d:release
-    cd ..
+      curl https://nim-lang.org/choosenim/init.sh -sSf > init.sh
+      sh init.sh -y
 before_script:
   # Add the 'bin' folder to PATH
-  - export PATH="nim-master/bin:$PATH"
+  - export PATH=$HOME/.nimble/bin:$PATH
 script:
   - nim compile --verbosity:0 --run tests/testmarkdown
   - nim doc --docSeeSrcUrl:https://github.com/soasme/nim-makrdown/blob/master --project src/markdown.nim

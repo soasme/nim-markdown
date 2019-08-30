@@ -163,6 +163,8 @@ type
     of HardLineBreakToken: hardLineBreakVal*: string
     of DocumentToken: documentVal*: string
 
+  ParseResult* = tuple[token: Token, pos: int]
+
   State* = ref object
     doc: string
     pos: int
@@ -423,24 +425,24 @@ proc isLaziness(s: string): bool =
 
   return true
 
+proc since*(s: string, i: int): string =
+  s[i..<s.len]
 
-proc parseParagraph(state: State, token: var Token): int =
-  let start = state.pos
-  let size = token.doc[start..<token.doc.len].matchLen(re(r"^((?:[^\n]+\n?)(" & LAZINESS_TEXT & "|\n*))"))
-
-  if size == -1:
-    return -1
-
-  var paragraph = Token(
-    type: ParagraphToken,
-    doc: token.doc[start ..< start+size].replace(re"\n\s*", "\n").strip,
-    paragraphVal: Paragraph(
-      doc: token.doc[start ..< start+size]
-    )
+proc parseParagraph(doc: string, start: int): ParseResult =
+  let size = doc.since(start).matchLen(
+    re(r"^((?:[^\n]+\n?)(" & LAZINESS_TEXT & "|\n*))"),
   )
-
-  token.children.append(paragraph)
-  return start+size
+  if size == -1: return (nil, -1)
+  return (
+    token: Token(
+      type: ParagraphToken,
+      doc: doc[start ..< start+size].replace(re"\n\s*", "\n").strip,
+      paragraphVal: Paragraph(
+        doc: doc[start ..< start+size]
+      )
+    ),
+    pos: start+size
+  )
 
 proc endsWithBlankLine(token: Token): bool =
   if token.type == ParagraphToken:
@@ -1340,6 +1342,7 @@ proc parseReference*(state: State, token: var Token): int =
 proc parseBlock(state: State, token: var Token) =
   let doc = token.doc
   var pos: int
+  var res: ParseResult
   state.pos = 0
   while state.pos < doc.len:
     for rule in state.ruleSet.blockRules:
@@ -1357,7 +1360,11 @@ proc parseBlock(state: State, token: var Token) =
       of UnorderedListToken: pos = parseUnorderedList(state, token)
       of OrderedListToken: pos = parseOrderedList(state, token)
       of TableToken: pos = parseHTMLTable(state, token)
-      of ParagraphToken: pos = parseParagraph(state, token)
+      of ParagraphToken:
+        res = parseParagraph(token.doc, state.pos)
+        pos = res.pos
+        if pos != -1:
+          token.children.append(res.token)
       else: raise newException(MarkdownError, fmt"unknown rule.")
       if pos != -1:
         state.pos = pos

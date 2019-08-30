@@ -166,6 +166,7 @@ type
 
   State* = ref object
     doc: string
+    pos: int
     ruleSet: RuleSet
     loose: bool
     references: Table[string, Reference]
@@ -430,12 +431,12 @@ proc isLaziness(s: string): bool =
   return true
 
 
-proc parseParagraph(state: State, token: var Token): bool =
-  let start = token.getBlockStart
+proc parseParagraph(state: State, token: var Token): int =
+  let start = state.pos
   let size = token.doc[start..<token.doc.len].matchLen(re(r"^((?:[^\n]+\n?)(" & LAZINESS_TEXT & "|\n*))"))
 
   if size == -1:
-    return false
+    return -1
 
   var paragraph = Token(
     type: ParagraphToken,
@@ -447,7 +448,7 @@ proc parseParagraph(state: State, token: var Token): bool =
   )
 
   token.children.append(paragraph)
-  return true
+  return start+size
 
 proc endsWithBlankLine(token: Token): bool =
   if token.type == ParagraphToken:
@@ -583,7 +584,7 @@ proc isLoose(token: Token): bool =
       return true
   return false
 
-proc parseUnorderedList(state: State, token: var Token): bool =
+proc parseUnorderedList(state: State, token: var Token): int =
   let start = token.getBlockStart
   var pos = start
   var marker = ""
@@ -610,7 +611,7 @@ proc parseUnorderedList(state: State, token: var Token): bool =
     pos += itemSize
 
   if marker == "":
-    return false
+    return -1
 
   var ulToken = Token(
     type: UnorderedListToken,
@@ -628,10 +629,10 @@ proc parseUnorderedList(state: State, token: var Token): bool =
     listItem.listItemVal.loose = ulToken.ulVal.loose
 
   token.children.append(ulToken)
-  result = true
+  return pos
 
-proc parseOrderedList(state: State, token: var Token): bool =
-  let start = token.getBlockStart
+proc parseOrderedList(state: State, token: var Token): int =
+  let start = state.pos
   var pos = start
   var marker = ""
   var startIndex = 1
@@ -663,7 +664,7 @@ proc parseOrderedList(state: State, token: var Token): bool =
     pos += itemSize
 
   if marker == "":
-    return false
+    return -1
 
   var olToken = Token(
     type: OrderedListToken,
@@ -682,13 +683,12 @@ proc parseOrderedList(state: State, token: var Token): bool =
     listItem.listItemVal.loose = olToken.olVal.loose
 
   token.children.append(olToken)
-  result = true
+  return pos
 
-proc parseThematicBreak(state: State, token: var Token): bool =
-  let start = token.getBlockStart
+proc parseThematicBreak(state: State, token: var Token): int =
+  let start = state.pos
   let size = token.doc[start..<token.doc.len].matchLen(re(r"^" & THEMATIC_BREAK_RE))
-  if size == -1:
-    return false
+  if size == -1: return -1
   var hr = Token(
     type: ThematicBreakToken,
     slice: (start .. start+size),
@@ -696,7 +696,7 @@ proc parseThematicBreak(state: State, token: var Token): bool =
     hrVal: ""
   )
   token.children.append(hr)
-  return true
+  return start+size
 
 proc parseFencedCode*(doc: string, indent: var int, size: var int): string =
   var matches: array[2, string]
@@ -745,8 +745,8 @@ proc parseTildeBlockCodeInfo*(doc: string, size: var int): string =
     return item
   return ""
 
-proc parseFencedCode(state: State, token: var Token): bool =
-  let start = token.getBlockStart
+proc parseFencedCode(state: State, token: var Token): int =
+  let start = state.pos
   var pos = start
   var indent = 0
 
@@ -754,9 +754,10 @@ proc parseFencedCode(state: State, token: var Token): bool =
   var fence = parseFencedCode(token.doc[start ..< token.doc.len], indent, fenceSize)
 
   if fenceSize == -1:
-    return false
+    return -1
 
   pos += fenceSize
+
   var infoSize = -1
   var info: string
   if fence.startsWith("`"):
@@ -764,9 +765,10 @@ proc parseFencedCode(state: State, token: var Token): bool =
   else:
     info = parseTildeBlockCodeInfo(token.doc[pos ..< token.doc.len], infoSize)
   if infoSize == -1:
-    return false
+    return -1
 
   pos += infoSize
+
   var codeContent = ""
   var codeContentSize = parseCodeContent(token.doc[pos ..< token.doc.len], indent, fence, codeContent)
   pos += codeContentSize
@@ -781,17 +783,17 @@ proc parseFencedCode(state: State, token: var Token): bool =
     fenceCodeVal: Fenced(info: info),
   )
   token.children.append(codeToken)
-  true
+  return pos
 
-proc parseIndentedCode*(state: State, token: var Token): bool =
+proc parseIndentedCode*(state: State, token: var Token): int =
   let start = token.getBlockStart
   let reIndentedCode = re"^(?: {4}| {0,3}\t)(.*\n?)"
   var size: int
   var code: string
   var matches: array[1, string]
   let firstLine = token.doc[start..<token.doc.len].firstLine
-  if not firstLine.match(reIndentedCode, matches=matches): return false
-  if matches[0].isBlank: return false
+  if not firstLine.match(reIndentedCode, matches=matches): return -1
+  if matches[0].isBlank: return -1
   size += firstLine.len
   code = matches[0]
   for line in token.doc[start..<token.doc.len].restLines:
@@ -810,7 +812,7 @@ proc parseIndentedCode*(state: State, token: var Token): bool =
     indentedCodeVal: "",
   )
   token.children.append(indentedCode)
-  return true
+  return start+size
 
 proc parseSetextHeadingContent*(doc: string, headingContent: var string, headingLevel: var int): int =
   var pos = 0
@@ -848,15 +850,15 @@ proc parseSetextHeadingContent*(doc: string, headingContent: var string, heading
     pos
 
 
-proc parseSetextHeading(state: State, token: var Token): bool =
-  let start = token.getBlockStart
+proc parseSetextHeading(state: State, token: var Token): int =
+  let start = state.pos
   var content = ""
   var level = 0
   let size = token.doc[start ..< token.doc.len].parseSetextHeadingContent(content, level)
   if size == -1:
-    return false
+    return -1
   if content.match(re"(?:\s*\n)+"):
-    return false
+    return -1
   var heading = Token(
     type: SetextHeadingToken,
     slice: (start .. start+size),
@@ -866,15 +868,14 @@ proc parseSetextHeading(state: State, token: var Token): bool =
     )
   )
   token.children.append(heading)
-  return true
+  return start+size
 
 
-proc parseATXHeading(state: State, token: var Token): bool =
-  let start = token.getBlockStart
+proc parseATXHeading(state: State, token: var Token): int =
+  let start = state.pos
   var matches: array[5, string]
   let size = token.doc[start..<token.doc.len].matchLen(re(r"^" & ATX_HEADING_RE), matches=matches)
-  if size == -1:
-    return false
+  if size == -1: return -1
   var doc = matches[2]
   if doc =~ re"#+":
     doc = ""
@@ -887,14 +888,14 @@ proc parseATXHeading(state: State, token: var Token): bool =
     )
   )
   token.children.append(heading)
-  return true
+  return start+size
 
-proc parseBlankLine(state: State, token: var Token): bool =
-  let start = token.getBlockStart
+proc parseBlankLine(state: State, token: var Token): int =
+  let start = state.pos
   let size = token.doc[start..<token.doc.len].matchLen(re(r"^((?:\s*\n)+)"))
 
   if size == -1:
-    return false
+    return -1
 
   var blankLine = Token(
     type: BlankLineToken,
@@ -904,7 +905,7 @@ proc parseBlankLine(state: State, token: var Token): bool =
   )
 
   token.children.append(blankLine)
-  return true
+  return start+size
 
 proc parseTableRow*(doc: string): seq[string] =
   var pos = 0
@@ -972,7 +973,7 @@ proc parseTableAligns*(doc: string, aligns: var seq[string]): bool =
       aligns.add("")
   true
 
-proc parseHTMLTable(state: State, token: var Token): bool =
+proc parseHTMLTable(state: State, token: var Token): int =
   # Algorithm:
   # fail fast if less than 2 lines.
   # second line: /^[-:|][-:|\s]*$/
@@ -983,26 +984,26 @@ proc parseHTMLTable(state: State, token: var Token): bool =
   # iterate the rest of lines.
   #   extract tbody
   # construct token.
-  let start = token.getBlockStart
+  let start = state.pos
   var pos = start
   let doc = token.doc[start ..< token.doc.len]
   let lines = doc.splitLines(keepEol=true)
   if lines.len < 2:
-    return false
+    return -1
 
   var aligns: seq[string]
   if not parseTableAligns(lines[1], aligns):
-    return false
+    return -1
 
   if lines[0].matchLen(re"^ {4,}") != -1:
-    return false
+    return -1
 
   if lines[0] == "" or lines[0].find('|') == -1:
-    return false
+    return -1
 
   var heads = parseTableRow(lines[0].replace(re"^\||\|$", ""))
   if heads.len > aligns.len:
-    return false
+    return -1
 
   var theadToken = Token(
     type: THeadToken,
@@ -1087,7 +1088,7 @@ proc parseHTMLTable(state: State, token: var Token): bool =
       tbodyToken.children.append(tbodyRowToken)
     tableToken.children.append(tbodyToken)
   token.children.append(tableToken)
-  true
+  return pos
 
 proc parseHTMLBlockContent*(doc: string, startPattern: string, endPattern: string, html: var string, ignoreCase = false): int =
   # Algorithm:
@@ -1130,7 +1131,7 @@ proc parseHTMLBlockContent*(doc: string, startPattern: string, endPattern: strin
       break
   return pos
 
-proc genHTMLBlockToken(token: var Token, htmlContent: string, start: int, size: int): bool =
+proc genHTMLBlockToken(token: var Token, htmlContent: string, start: int, size: int): int =
   var htmlBlock = Token(
     type: HTMLBlockToken,
     slice: (start .. start+size),
@@ -1138,9 +1139,9 @@ proc genHTMLBlockToken(token: var Token, htmlContent: string, start: int, size: 
     htmlBlockVal: ""
   )
   token.children.append(htmlBlock)
-  true
+  return start+size
 
-proc parseHTMLBlock(state: State, token: var Token): bool =
+proc parseHTMLBlock(state: State, token: var Token): int =
   let start = token.getBlockStart
   var htmlContent = ""
   var size = parseHTMLBlockContent(
@@ -1205,12 +1206,12 @@ proc parseHTMLBlock(state: State, token: var Token): bool =
   if size != -1:
     return token.genHTMLBlockToken(htmlContent, start, size)
 
-  false
+  return -1
 
-proc parseBlockquote(state: State, token: var Token): bool =
+proc parseBlockquote(state: State, token: var Token): int =
   let markerContent = re(r"^(( {0,3}>([^\n]*(?:\n|$)))+)")
   var matches: array[3, string]
-  let start = token.getBlockStart
+  let start = state.pos
   var pos = start
   var size = -1
   var document = ""
@@ -1248,7 +1249,7 @@ proc parseBlockquote(state: State, token: var Token): bool =
     document &= matches[0]
 
   if not found:
-    return false
+    return -1
 
   var blockquote = Token(
     type: BlockquoteToken,
@@ -1261,17 +1262,17 @@ proc parseBlockquote(state: State, token: var Token): bool =
   if document.strip != "":
     parseBlock(state, blockquote)
   token.children.append(blockquote)
-  return true
+  return pos
 
-proc parseReference*(state: State, token: var Token): bool =
-  var pos = token.getBlockStart
+proc parseReference*(state: State, token: var Token): int =
+  var pos = state.pos
   var start = pos
   let lastSlice = token.getBlockStart
   let doc = token.doc[pos ..< token.doc.len]
 
   var markStart = doc.matchLen(re"^ {0,3}\[")
   if markStart == -1:
-    return false
+    return -1
 
   pos += markStart - 1
 
@@ -1280,17 +1281,17 @@ proc parseReference*(state: State, token: var Token): bool =
 
   # Link should have matching ] for [.
   if labelSize == -1:
-    return false
+    return -1
 
   # A link label must contain at least one non-whitespace character.
   if label.find(re"\S") == -1:
-    return false
+    return -1
 
   # An inline link consists of a link text followed immediately by a left parenthesis (
   pos += labelSize # [link]
 
   if pos >= token.doc.len or token.doc[pos] != ':':
-    return false
+    return -1
   pos += 1
 
   # parse whitespace
@@ -1303,7 +1304,7 @@ proc parseReference*(state: State, token: var Token): bool =
   var destinationLen = getLinkDestination(token.doc, pos, destinationslice)
 
   if destinationLen <= 0:
-    return false
+    return -1
 
   pos += destinationLen
 
@@ -1319,14 +1320,14 @@ proc parseReference*(state: State, token: var Token): bool =
   if pos<token.doc.len and( token.doc[pos] == '(' or token.doc[pos] == '\'' or token.doc[pos] == '"'):
     # at least one whitespace before the optional title.
     if not {' ', '\t', '\n'}.contains(token.doc[pos-1]):
-      return false
+      return -1
 
     titleLen = getLinkTitle(token.doc, pos, titleSlice)
     if titleLen >= 0:
       pos += titleLen
       # link title may not contain a blank line
       if token.doc[titleSlice].find(re"\n{2,}") != -1:
-        return false
+        return -1
 
     # parse whitespace, no more non-whitespace is allowed from now.
     whitespaceLen = token.doc[pos ..< token.doc.len].matchLen(re"^\s*(?:\n|$)")
@@ -1339,7 +1340,7 @@ proc parseReference*(state: State, token: var Token): bool =
       pos -= titleLen
       titleLen = -1
     else:
-      return false
+      return -1
 
   # construct token
   var title = ""
@@ -1363,35 +1364,49 @@ proc parseReference*(state: State, token: var Token): bool =
 
   if not state.references.contains(label):
     state.references[label] = reference.referenceVal
-  return true
+  return pos
 
 proc parseBlock(state: State, token: var Token) =
   let doc = token.doc
-  var ok: bool
-  #while token.children.tail == nil or token.getBlockStart < doc.len:
-  while token.getBlockStart < doc.len:
-    ok = false
+  var pos: int
+  state.pos = token.getBlockStart
+  while state.pos < doc.len:
     for rule in state.ruleSet.blockRules:
+      pos = -1
       case rule
-      of ReferenceToken: ok = parseReference(state, token)
-      of ThematicBreakToken: ok = parseThematicBreak(state, token)
-      of ATXHeadingToken: ok = parseATXHeading(state, token)
-      of SetextHeadingToken: ok = parseSetextHeading(state, token)
-      of IndentedCodeToken: ok = parseIndentedCode(state, token)
-      of FencedCodeToken: ok = parseFencedCode(state, token)
-      of BlockquoteToken: ok = parseBlockquote(state, token)
-      of BlankLineToken: ok = parseBlankLine(state, token)
-      of HTMLBlockToken: ok = parseHTMLBlock(state, token)
-      of UnorderedListToken: ok = parseUnorderedList(state, token)
-      of OrderedListToken: ok = parseOrderedList(state, token)
-      of TableToken: ok = parseHTMLTable(state, token)
-      of ParagraphToken: ok = parseParagraph(state, token)
+      of ReferenceToken:
+        pos = parseReference(state, token)
+      of ThematicBreakToken:
+        pos = parseThematicBreak(state, token)
+      of ATXHeadingToken:
+        pos = parseATXHeading(state, token)
+      of SetextHeadingToken:
+        pos = parseSetextHeading(state, token)
+      of IndentedCodeToken:
+        pos = parseIndentedCode(state, token)
+      of FencedCodeToken:
+        pos = parseFencedCode(state, token)
+      of BlockquoteToken:
+        pos = parseBlockquote(state, token)
+      of BlankLineToken:
+        pos = parseBlankLine(state, token)
+      of HTMLBlockToken:
+        pos = parseHTMLBlock(state, token)
+      of UnorderedListToken:
+        pos = parseUnorderedList(state, token)
+      of OrderedListToken:
+        pos = parseOrderedList(state, token)
+      of TableToken:
+        pos = parseHTMLTable(state, token)
+      of ParagraphToken:
+        pos = parseParagraph(state, token)
       else:
-        raise newException(MarkdownError, fmt"unknown rule. {token.children.tail.value.slice.b}")
-      if ok:
+        raise newException(MarkdownError, fmt"unknown rule.")
+      if pos != -1:
+        state.pos = pos
         break
-    if not ok:
-      raise newException(MarkdownError, fmt"unknown rule. {token.children.tail.value.slice.b}")
+    if pos == -1:
+      raise newException(MarkdownError, fmt"unknown rule.")
 
 proc parseText(state: State, token: var Token, start: int): int =
   let slice = token.slice

@@ -264,8 +264,8 @@ proc getLinkDestination*(doc: string, start: int, slice: var Slice[int]): int;
 proc getLinkTitle*(doc: string, start: int, slice: var Slice[int]): int;
 proc render(state: State, token: Token): string;
 
-proc since*(s: string, i: int): string =
-  s[i..<s.len]
+proc since*(s: string, i: int, offset: int = -1): string =
+  if offset == -1: s[i..<s.len] else: s[i..<i+offset]
 
 proc replaceInitialTabs*(doc: string): string =
   var res: seq[string]
@@ -675,17 +675,17 @@ proc parseOrderedList(state: State, token: var Token): int =
   token.children.append(olToken)
   return pos
 
-proc parseThematicBreak(state: State, token: var Token): int =
-  let start = state.pos
-  let size = token.doc[start..<token.doc.len].matchLen(re(r"^" & THEMATIC_BREAK_RE))
-  if size == -1: return -1
-  var hr = Token(
-    type: ThematicBreakToken,
-    doc: token.doc[start ..< start+size],
-    hrVal: ""
+proc parseThematicBreak(doc: string, start: int): ParseResult =
+  let size = doc.since(start).matchLen(re(r"^" & THEMATIC_BREAK_RE))
+  if size == -1: return (nil, -1)
+  return (
+    token: Token(
+      type: ThematicBreakToken,
+      doc: doc.since(start, offset=size),
+      hrVal: ""
+    ),
+    pos: start+size
   )
-  token.children.append(hr)
-  return start+size
 
 proc parseFencedCode*(doc: string, indent: var int, size: var int): string =
   var matches: array[2, string]
@@ -1351,7 +1351,6 @@ proc parseBlock(state: State, token: var Token) =
       pos = -1
       case rule
       of ReferenceToken: pos = parseReference(state, token)
-      of ThematicBreakToken: pos = parseThematicBreak(state, token)
       of SetextHeadingToken: pos = parseSetextHeading(state, token)
       of IndentedCodeToken: pos = parseIndentedCode(state, token)
       of FencedCodeToken: pos = parseFencedCode(state, token)
@@ -1361,6 +1360,12 @@ proc parseBlock(state: State, token: var Token) =
       of UnorderedListToken: pos = parseUnorderedList(state, token)
       of OrderedListToken: pos = parseOrderedList(state, token)
       of TableToken: pos = parseHTMLTable(state, token)
+      of ThematicBreakToken:
+        res = parseThematicBreak(token.doc, state.pos)
+        pos = res.pos
+        if pos != -1:
+          token.children.append(res.token)
+
       of ATXHeadingToken:
         res = parseATXHeading(token.doc, state.pos)
         pos = res.pos

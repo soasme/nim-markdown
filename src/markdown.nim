@@ -521,7 +521,7 @@ proc parseUnorderedListItem*(doc: string, start=0, marker: var string, listItemD
   if doc[start ..< doc.len].matchLen(re(r"^" & THEMATIC_BREAK_RE)) != -1:
     return -1
 
-  let markerRegex = re"^(?P<leading> {0,3})(?P<marker>[*\-+])(?: *$| *\n|(?<indent> +)([^\n]+(?:\n|$)))"
+  let markerRegex = re"^(?P<leading> {0,3})(?P<marker>[*\-+])(?: *$| *\n|(?<indent>(?: +|\t+))([^\n]+(?:\n|$)))"
   var matches: array[5, string]
   var pos = start
 
@@ -540,7 +540,10 @@ proc parseUnorderedListItem*(doc: string, start=0, marker: var string, listItemD
   listItemDoc = matches[3]
 
   var indent = 1
-  if matches[2].len > 1 and matches[2].len <= 4:
+  if matches[2].contains(re"\t"):
+    indent = 1
+    listItemDoc = " ".repeat(matches[2].len * 4 - 2) & listItemDoc
+  elif matches[2].len > 1 and matches[2].len <= 4:
     indent = matches[2].len
   elif matches[2].len > 4: # code block indent is still 1.
     listItemDoc = matches[2][1 ..< matches[2].len] & listItemDoc

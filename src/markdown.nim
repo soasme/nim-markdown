@@ -375,12 +375,6 @@ proc escapeLinkUrl*(url: string): string =
 proc escapeBackslash*(doc: string): string =
   doc.replacef(re"\\([\\`*{}\[\]()#+\-.!_<>~|""$%&',/:;=?@^])", "$1")
 
-proc getBlockStart(token: Token): int =
-  if token.children.tail == nil:
-    0
-  else:
-    token.children.tail.value.slice.b
-
 let LAZINESS_TEXT = r"(?:(?! {0,3}>| {0,3}(?:\*|\+|-) | {0,3}\d+(?:\.|\)) | {0,3}#| {0,3}`{3,}| {0,3}\*{3}| {0,3}-{3}| {0,3}_{3})[^\n]+(?:\n|$))+"
 
 const rThematicBreakLeading = r" {0,3}"
@@ -585,7 +579,7 @@ proc isLoose(token: Token): bool =
   return false
 
 proc parseUnorderedList(state: State, token: var Token): int =
-  let start = token.getBlockStart
+  let start = state.pos
   var pos = start
   var marker = ""
   var listItems: seq[Token];
@@ -786,7 +780,7 @@ proc parseFencedCode(state: State, token: var Token): int =
   return pos
 
 proc parseIndentedCode*(state: State, token: var Token): int =
-  let start = token.getBlockStart
+  let start = state.pos
   let reIndentedCode = re"^(?: {4}| {0,3}\t)(.*\n?)"
   var size: int
   var code: string
@@ -1142,7 +1136,7 @@ proc genHTMLBlockToken(token: var Token, htmlContent: string, start: int, size: 
   return start+size
 
 proc parseHTMLBlock(state: State, token: var Token): int =
-  let start = token.getBlockStart
+  let start = state.pos
   var htmlContent = ""
   var size = parseHTMLBlockContent(
     token.doc[start..<token.doc.len],
@@ -1267,7 +1261,6 @@ proc parseBlockquote(state: State, token: var Token): int =
 proc parseReference*(state: State, token: var Token): int =
   var pos = state.pos
   var start = pos
-  let lastSlice = token.getBlockStart
   let doc = token.doc[pos ..< token.doc.len]
 
   var markStart = doc.matchLen(re"^ {0,3}\[")
@@ -1369,39 +1362,25 @@ proc parseReference*(state: State, token: var Token): int =
 proc parseBlock(state: State, token: var Token) =
   let doc = token.doc
   var pos: int
-  state.pos = token.getBlockStart
+  state.pos = 0
   while state.pos < doc.len:
     for rule in state.ruleSet.blockRules:
       pos = -1
       case rule
-      of ReferenceToken:
-        pos = parseReference(state, token)
-      of ThematicBreakToken:
-        pos = parseThematicBreak(state, token)
-      of ATXHeadingToken:
-        pos = parseATXHeading(state, token)
-      of SetextHeadingToken:
-        pos = parseSetextHeading(state, token)
-      of IndentedCodeToken:
-        pos = parseIndentedCode(state, token)
-      of FencedCodeToken:
-        pos = parseFencedCode(state, token)
-      of BlockquoteToken:
-        pos = parseBlockquote(state, token)
-      of BlankLineToken:
-        pos = parseBlankLine(state, token)
-      of HTMLBlockToken:
-        pos = parseHTMLBlock(state, token)
-      of UnorderedListToken:
-        pos = parseUnorderedList(state, token)
-      of OrderedListToken:
-        pos = parseOrderedList(state, token)
-      of TableToken:
-        pos = parseHTMLTable(state, token)
-      of ParagraphToken:
-        pos = parseParagraph(state, token)
-      else:
-        raise newException(MarkdownError, fmt"unknown rule.")
+      of ReferenceToken: pos = parseReference(state, token)
+      of ThematicBreakToken: pos = parseThematicBreak(state, token)
+      of ATXHeadingToken: pos = parseATXHeading(state, token)
+      of SetextHeadingToken: pos = parseSetextHeading(state, token)
+      of IndentedCodeToken: pos = parseIndentedCode(state, token)
+      of FencedCodeToken: pos = parseFencedCode(state, token)
+      of BlockquoteToken: pos = parseBlockquote(state, token)
+      of BlankLineToken: pos = parseBlankLine(state, token)
+      of HTMLBlockToken: pos = parseHTMLBlock(state, token)
+      of UnorderedListToken: pos = parseUnorderedList(state, token)
+      of OrderedListToken: pos = parseOrderedList(state, token)
+      of TableToken: pos = parseHTMLTable(state, token)
+      of ParagraphToken: pos = parseParagraph(state, token)
+      else: raise newException(MarkdownError, fmt"unknown rule.")
       if pos != -1:
         state.pos = pos
         break

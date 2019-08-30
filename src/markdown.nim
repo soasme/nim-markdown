@@ -126,7 +126,6 @@ type
     DocumentToken
 
   Token* = ref object
-    slice: Slice[int]
     doc: string
     children: DoublyLinkedList[Token]
     case type*: TokenType
@@ -434,7 +433,6 @@ proc parseParagraph(state: State, token: var Token): int =
 
   var paragraph = Token(
     type: ParagraphToken,
-    slice: (start .. start+size),
     doc: token.doc[start ..< start+size].replace(re"\n\s*", "\n").strip,
     paragraphVal: Paragraph(
       doc: token.doc[start ..< start+size]
@@ -592,7 +590,6 @@ proc parseUnorderedList(state: State, token: var Token): int =
 
     var listItem = Token(
       type: ListItemToken,
-      slice: (pos .. pos + itemSize),
       doc: listItemDoc,
       listItemVal: ListItem(
         marker: marker
@@ -609,7 +606,6 @@ proc parseUnorderedList(state: State, token: var Token): int =
 
   var ulToken = Token(
     type: UnorderedListToken,
-    slice: (start .. pos),
     doc: token.doc[start ..< pos],
     ulVal: UnorderedList(
       loose: false
@@ -645,7 +641,6 @@ proc parseOrderedList(state: State, token: var Token): int =
 
     var listItem = Token(
       type: ListItemToken,
-      slice: (pos .. pos + itemSize),
       doc: listItemDoc,
       listItemVal: ListItem(
         marker: marker
@@ -662,7 +657,6 @@ proc parseOrderedList(state: State, token: var Token): int =
 
   var olToken = Token(
     type: OrderedListToken,
-    slice: (start .. pos),
     doc: token.doc[start ..< pos],
     olVal: OrderedList(
       start: startIndex,
@@ -685,7 +679,6 @@ proc parseThematicBreak(state: State, token: var Token): int =
   if size == -1: return -1
   var hr = Token(
     type: ThematicBreakToken,
-    slice: (start .. start+size),
     doc: token.doc[start ..< start+size],
     hrVal: ""
   )
@@ -772,7 +765,6 @@ proc parseFencedCode(state: State, token: var Token): int =
 
   var codeToken = Token(
     type: FencedCodeToken,
-    slice: (start .. pos),
     doc: codeContent,
     fenceCodeVal: Fenced(info: info),
   )
@@ -801,7 +793,6 @@ proc parseIndentedCode*(state: State, token: var Token): int =
       break
   var indentedCode = Token(
     type: IndentedCodeToken,
-    slice: (start .. start+size),
     doc: code,
     indentedCodeVal: "",
   )
@@ -855,7 +846,6 @@ proc parseSetextHeading(state: State, token: var Token): int =
     return -1
   var heading = Token(
     type: SetextHeadingToken,
-    slice: (start .. start+size),
     doc: content.strip,
     setextHeadingVal: Heading(
       level: level
@@ -875,7 +865,6 @@ proc parseATXHeading(state: State, token: var Token): int =
     doc = ""
   var heading = Token(
     type: ATXHeadingToken,
-    slice: (start .. start+size),
     doc: doc,
     atxHeadingVal: Heading(
       level: matches[0].len,
@@ -893,7 +882,6 @@ proc parseBlankLine(state: State, token: var Token): int =
 
   var blankLine = Token(
     type: BlankLineToken,
-    slice: (start .. start+size),
     doc: token.doc[start ..< start+size],
     blankLineVal: token.doc[start ..< start+size]
   )
@@ -1001,20 +989,17 @@ proc parseHTMLTable(state: State, token: var Token): int =
 
   var theadToken = Token(
     type: THeadToken,
-    slice: (start .. start + lines[0].len),
     doc: lines[0],
     theadVal: HTMLTableHead(size: 1)
   )
   var theadRowToken = Token(
     type: TableRowToken,
-    slice: (start ..< start+lines[0].len),
     doc: lines[0],
     tableRowVal: HTMLTableRow(th: true, td: false),
   )
   for index, elem in heads:
     var thToken = Token(
       type: THeadCellToken,
-      slice: (0 ..< elem.len),
       doc: elem.strip,
       theadCellVal: HTMLTableCell(
         i: index,
@@ -1038,7 +1023,6 @@ proc parseHTMLTable(state: State, token: var Token): int =
 
     var tableRowToken = Token(
       type: TableRowToken,
-      slice: (0 .. 0),
       doc: "",
       tableRowVal: HTMLTableRow(th: false, td: true),
     )
@@ -1050,7 +1034,6 @@ proc parseHTMLTable(state: State, token: var Token): int =
           rowColumns[index]
       var tdToken = Token(
         type: TBodyCellToken,
-        slice: (0 .. 0),
         doc: doc.replace(re"\\\|", "|").strip,
         tbodyCellVal: HTMLTableCell(
           i: index,
@@ -1064,7 +1047,6 @@ proc parseHTMLTable(state: State, token: var Token): int =
 
   var tableToken = Token(
     type: TableToken,
-    slice: (start .. pos),
     doc: token.doc[start ..< pos],
     tableVal: HTMLTable(
       aligns: aligns,
@@ -1074,7 +1056,6 @@ proc parseHTMLTable(state: State, token: var Token): int =
   if tbodyRows.len > 0:
     var tbodyToken = Token(
       type: TBodyToken,
-      slice: (start+lines[0].len+lines[1].len .. pos),
       doc: token.doc[start+lines[0].len+lines[1].len ..< pos],
       tbodyVal: HTMLTableBody(size: tbodyRows.len)
     )
@@ -1128,7 +1109,6 @@ proc parseHTMLBlockContent*(doc: string, startPattern: string, endPattern: strin
 proc genHTMLBlockToken(token: var Token, htmlContent: string, start: int, size: int): int =
   var htmlBlock = Token(
     type: HTMLBlockToken,
-    slice: (start .. start+size),
     doc: htmlContent,
     htmlBlockVal: ""
   )
@@ -1247,7 +1227,6 @@ proc parseBlockquote(state: State, token: var Token): int =
 
   var blockquote = Token(
     type: BlockquoteToken,
-    slice: (start .. pos),
     doc: document,
     blockquoteVal: Blockquote(
       doc: document
@@ -1344,7 +1323,6 @@ proc parseReference*(state: State, token: var Token): int =
 
   var reference = Token(
     type: ReferenceToken,
-    slice: (start .. pos),
     doc: token.doc[start ..< pos],
     referenceVal: Reference(
       text: label,
@@ -1388,10 +1366,8 @@ proc parseBlock(state: State, token: var Token) =
       raise newException(MarkdownError, fmt"unknown rule.")
 
 proc parseText(state: State, token: var Token, start: int): int =
-  let slice = token.slice
   var text = Token(
     type: TextToken,
-    slice: (start .. start+1),
     textVal: token.doc[start ..< start+1],
   )
   token.children.append(text)
@@ -1402,12 +1378,10 @@ proc parseSoftLineBreak(state: State, token: var Token, start: int): int =
   if result != -1:
     token.children.append(Token(
       type: SoftLineBreakToken,
-      slice: (start .. start+result),
       softLineBreakVal: "\n"
     ))
 
 proc parseAutoLink(state: State, token: var Token, start: int): int =
-  let slice = token.slice
   if token.doc[start] != '<':
     return -1
 
@@ -1420,7 +1394,6 @@ proc parseAutoLink(state: State, token: var Token, start: int): int =
     # TODO: validate and normalize the link
     token.children.append(Token(
       type: AutoLinkToken,
-      slice: (start .. start+result),
       autoLinkVal: AutoLink(
         text: url,
         url: fmt"mailto:{url}"
@@ -1437,7 +1410,6 @@ proc parseAutoLink(state: State, token: var Token, start: int): int =
     var uri = linkMatches[1]
     token.children.append(Token(
       type: AutoLinkToken,
-      slice: (start .. start+result),
       autoLinkVal: AutoLink(
         text: fmt"{schema}:{uri}",
         url: fmt"{schema}:{uri}",
@@ -1515,7 +1487,6 @@ proc parseDelimiter(state: State, token: var Token, start: int, delimeters: var 
 
   var textToken = Token(
     type: TextToken,
-    slice: (start .. start+result),
     textVal: token.doc[start ..< start+result]
   )
   token.children.append(textToken)
@@ -1736,7 +1707,6 @@ proc parseInlineLink(state: State, token: var Token, start: int, labelSlice: Sli
   var text = token.doc[labelSlice.a+1 ..< labelSlice.b]
   var link = Token(
     type: LinkToken,
-    slice: (start .. pos + 1),
     doc: token.doc[start .. pos],
     linkVal: Link(
       text: text,
@@ -1765,7 +1735,6 @@ proc parseFullReferenceLink(state: State, token: var Token, start: int, textSlic
   var reference = state.references[label]
   var link = Token(
     type: LinkToken,
-    slice: (start ..< pos),
     doc: token.doc[start ..< pos],
     linkVal: Link(
       url: reference.url,
@@ -1786,7 +1755,6 @@ proc parseCollapsedReferenceLink(state: State, token: var Token, start: int, lab
   var reference = state.references[id]
   var link = Token(
     type: LinkToken,
-    slice: (start ..< label.b + 1),
     doc: token.doc[start ..< label.b+1],
     linkVal: Link(
       url: reference.url,
@@ -1807,7 +1775,6 @@ proc parseShortcutReferenceLink(state: State, token: var Token, start: int, labe
   var reference = state.references[id]
   var link = Token(
     type: LinkToken,
-    slice: (start ..< label.b + 1),
     doc: token.doc[start ..< label.b+1],
     linkVal: Link(
       url: reference.url,
@@ -1900,7 +1867,6 @@ proc parseInlineImage(state: State, token: var Token, start: int, labelSlice: Sl
 
   var image = Token(
     type: ImageToken,
-    slice: (start-1 .. pos+1),
     doc: token.doc[start-1 ..< pos+1],
     imageVal: Image(
       alt: text,
@@ -1930,7 +1896,6 @@ proc parseFullReferenceImage(state: State, token: var Token, start: int, altSlic
   var reference = state.references[label]
   var image = Token(
     type: ImageToken,
-    slice: (start ..< pos),
     doc: token.doc[start ..< pos-1],
     imageVal: Image(
       url: reference.url,
@@ -1951,7 +1916,6 @@ proc parseCollapsedReferenceImage(state: State, token: var Token, start: int, la
   var reference = state.references[id]
   var image = Token(
     type: ImageToken,
-    slice: (start ..< label.b + 3),
     doc: token.doc[start ..< label.b+2],
     imageVal: Image(
       url: reference.url,
@@ -1972,7 +1936,6 @@ proc parseShortcutReferenceImage(state: State, token: var Token, start: int, lab
   var reference = state.references[id]
   var image = Token(
     type: ImageToken,
-    slice: (start ..< label.b + 1),
     doc: token.doc[start ..< label.b+1],
     imageVal: Image(
       url: reference.url,
@@ -2036,7 +1999,6 @@ proc parseHTMLEntity*(state: State, token: var Token, start: int): int =
 
   token.children.append(Token(
     type: HTMLEntityToken,
-    slice: (start ..< start+size),
     htmlEntityVal: entity
   ))
   return size
@@ -2052,7 +2014,6 @@ proc parseEscape*(state: State, token: var Token, start: int): int =
 
   token.children.append(Token(
     type: EscapeToken,
-    slice: (start ..< start + 2),
     escapeVal: fmt"{token.doc[start+1]}"
   ))
   return 2
@@ -2069,7 +2030,6 @@ proc parseInlineHTML*(state: State, token: var Token, start: int): int =
 
   token.children.append(Token(
     type: InlineHTMLToken,
-    slice: (start ..< start+size),
     inlineHTMLVal: matches[0]
   ))
   return size
@@ -2085,7 +2045,6 @@ proc parseHardLineBreak*(state: State, token: var Token, start: int): int =
 
   token.children.append(Token(
     type: HardLineBreakToken,
-    slice: (start ..< start+size),
     hardLineBreakVal: ""
   ))
   return size
@@ -2103,7 +2062,6 @@ proc parseCodeSpan*(state: State, token: var Token, start: int): int =
       return -1
     token.children.append(Token(
       type: TextToken,
-      slice: (start ..< start+size),
       textVal: token.doc[start ..< start+size]
     ))
     return size
@@ -2114,7 +2072,6 @@ proc parseCodeSpan*(state: State, token: var Token, start: int): int =
 
   token.children.append(Token(
     type: CodeSpanToken,
-    slice: (start ..< start+size),
     codeSpanVal: codeSpanVal,
   ))
   return size
@@ -2131,7 +2088,6 @@ proc parseStrikethrough*(state: State, token: var Token, start: int): int =
 
   token.children.append(Token(
     type: StrikethroughToken,
-    slice: (start ..< start+size),
     strikethroughVal: matches[1]
   ))
   return size
@@ -2312,7 +2268,7 @@ proc parseLinkInlines*(state: State, token: var Token, allowNested: bool = false
         pos += size
         break
     if size == -1:
-      token.children.append(Token(type: TextToken, slice: (index .. index+1), textVal: fmt"{ch}"))
+      token.children.append(Token(type: TextToken, textVal: fmt"{ch}"))
       pos += 1
 
   processEmphasis(state, token, delimeters)
@@ -2334,7 +2290,7 @@ proc parseLeafBlockInlines(state: State, token: var Token) =
         pos += size
         break
     if size == -1:
-      token.children.append(Token(type: TextToken, slice: (index .. index+1), textVal: fmt"{ch}"))
+      token.children.append(Token(type: TextToken, textVal: fmt"{ch}"))
       pos += 1
 
   processEmphasis(state, token, delimeters)
@@ -2587,7 +2543,6 @@ proc markdown*(doc: string, config: MarkdownConfig = initMarkdownConfig()): stri
   )
   var document = Token(
     type: DocumentToken,
-    slice: (0 ..< doc.len),
     doc: doc.strip(chars={'\n'}),
     documentVal: ""
   )

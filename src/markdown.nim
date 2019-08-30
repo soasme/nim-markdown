@@ -264,6 +264,9 @@ proc getLinkDestination*(doc: string, start: int, slice: var Slice[int]): int;
 proc getLinkTitle*(doc: string, start: int, slice: var Slice[int]): int;
 proc render(state: State, token: Token): string;
 
+proc since*(s: string, i: int): string =
+  s[i..<s.len]
+
 proc replaceInitialTabs*(doc: string): string =
   var res: seq[string]
   var n: int
@@ -424,9 +427,6 @@ proc isLaziness(s: string): bool =
     return false
 
   return true
-
-proc since*(s: string, i: int): string =
-  s[i..<s.len]
 
 proc parseParagraph(doc: string, start: int): ParseResult =
   let size = doc.since(start).matchLen(
@@ -857,23 +857,25 @@ proc parseSetextHeading(state: State, token: var Token): int =
   return start+size
 
 
-proc parseATXHeading(state: State, token: var Token): int =
-  let start = state.pos
+proc parseATXHeading(doc: string, start: int): ParseResult =
   var matches: array[5, string]
-  let size = token.doc[start..<token.doc.len].matchLen(re(r"^" & ATX_HEADING_RE), matches=matches)
-  if size == -1: return -1
-  var doc = matches[2]
-  if doc =~ re"#+":
-    doc = ""
-  var heading = Token(
-    type: ATXHeadingToken,
-    doc: doc,
-    atxHeadingVal: Heading(
-      level: matches[0].len,
-    )
+  let size = doc.since(start).matchLen(
+    re(r"^" & ATX_HEADING_RE),
+    matches=matches
   )
-  token.children.append(heading)
-  return start+size
+  if size == -1: return (nil, -1)
+  let lit = if matches[2] =~ re"#+": "" else: matches[2]
+  return (
+    token: Token(
+      type: ATXHeadingToken,
+      doc: lit,
+      atxHeadingVal: Heading(
+        level: matches[0].len,
+      )
+    ),
+    pos: start+size
+  )
+
 
 proc parseBlankLine(state: State, token: var Token): int =
   let start = state.pos
@@ -1350,7 +1352,6 @@ proc parseBlock(state: State, token: var Token) =
       case rule
       of ReferenceToken: pos = parseReference(state, token)
       of ThematicBreakToken: pos = parseThematicBreak(state, token)
-      of ATXHeadingToken: pos = parseATXHeading(state, token)
       of SetextHeadingToken: pos = parseSetextHeading(state, token)
       of IndentedCodeToken: pos = parseIndentedCode(state, token)
       of FencedCodeToken: pos = parseFencedCode(state, token)
@@ -1360,12 +1361,21 @@ proc parseBlock(state: State, token: var Token) =
       of UnorderedListToken: pos = parseUnorderedList(state, token)
       of OrderedListToken: pos = parseOrderedList(state, token)
       of TableToken: pos = parseHTMLTable(state, token)
+      of ATXHeadingToken:
+        res = parseATXHeading(token.doc, state.pos)
+        pos = res.pos
+        if pos != -1:
+          token.children.append(res.token)
+
       of ParagraphToken:
         res = parseParagraph(token.doc, state.pos)
         pos = res.pos
         if pos != -1:
           token.children.append(res.token)
-      else: raise newException(MarkdownError, fmt"unknown rule.")
+
+      else:
+        raise newException(MarkdownError, fmt"unknown rule.")
+
       if pos != -1:
         state.pos = pos
         break

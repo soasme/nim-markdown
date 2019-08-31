@@ -996,7 +996,8 @@ proc parseHTMLTable(doc: string, start: int): ParseResult =
     tableToken.children.append(tbodyToken)
   return (token: tableToken, pos: pos)
 
-proc parseHTMLBlockContent*(doc: string, startPattern: string, endPattern: string, html: var string, ignoreCase = false): int =
+proc parseHTMLBlockContent*(doc: string, startPattern: string, endPattern: string,
+  ignoreCase = false): tuple[html: string, size: int] =
   # Algorithm:
   # firstLine: detectOpenTag
   # fail fast.
@@ -1005,29 +1006,22 @@ proc parseHTMLBlockContent*(doc: string, startPattern: string, endPattern: strin
   # rest of the lines:
   #   detectCloseTag
   #   success fast.
-  let startRe =
-    if ignoreCase:
-      re(startPattern, {RegexFlag.reIgnoreCase})
-    else:
-      re(startPattern)
-  let endRe =
-    if ignoreCase:
-      re(endPattern, {RegexFlag.reIgnoreCase})
-    else:
-      re(endPattern)
+  var html = ""
+  let startRe = if ignoreCase: re(startPattern, {RegexFlag.reIgnoreCase}) else: re(startPattern)
+  let endRe = if ignoreCase: re(endPattern, {RegexFlag.reIgnoreCase}) else: re(endPattern)
   var pos = 0
   var size = -1
   let docLines = doc.splitLines(keepEol=true)
   if docLines.len == 0:
-    return -1
+    return ("", -1)
   let firstLine = docLines[0]
   size = firstLine.matchLen(startRe)
   if size == -1:
-    return -1
+    return ("", -1)
   html = firstLine
   size = firstLine.find(endRe)
   if size != -1:
-    return firstLine.len
+    return (html, html.len)
   else:
     pos = firstLine.len
   for line in docLines[1 ..< docLines.len]:
@@ -1035,51 +1029,31 @@ proc parseHTMLBlockContent*(doc: string, startPattern: string, endPattern: strin
     html &= line
     if line.find(endRe) != -1:
       break
-  return pos
+  return (html, pos)
 
 proc parseHtmlScript(s: string): tuple[html: string, size: int] =
-  var html: string
-  let size = s.parseHTMLBlockContent(
-    HTML_SCRIPT_START,
-    HTML_SCRIPT_END,
-    html
-  )
-  return (html: html, size: size)
+  return s.parseHTMLBlockContent(HTML_SCRIPT_START, HTML_SCRIPT_END)
 
 proc parseHtmlComment*(s: string): tuple[html: string, size: int] =
-  var html: string
-  let size = s.parseHTMLBlockContent(HTML_COMMENT_START, HTML_COMMENT_END, html)
-  return (html: html, size: size)
+  return s.parseHTMLBlockContent(HTML_COMMENT_START, HTML_COMMENT_END)
 
 proc parseProcessingInstruction*(s: string): tuple[html: string, size: int] =
-  var html: string
-  let size = s.parseHTMLBlockContent(
+  return s.parseHTMLBlockContent(
     HTML_PROCESSING_INSTRUCTION_START,
-    HTML_PROCESSING_INSTRUCTION_END,
-    html)
-  return (html: html, size: size)
+    HTML_PROCESSING_INSTRUCTION_END)
 
 proc parseHtmlCData*(s: string): tuple[html: string, size: int] =
-  var html: string
-  let size = s.parseHTMLBlockContent(HTML_CDATA_START, HTML_CDATA_END, html)
-  return (html: html, size: size)
+  return s.parseHTMLBlockContent(HTML_CDATA_START, HTML_CDATA_END)
 
 proc parseHtmlOpenCloseTag*(s: string): tuple[html: string, size: int] =
-  var html: string
-  let size = s.parseHTMLBlockContent(
-    HTML_OPEN_CLOSE_TAG_START, HTML_OPEN_CLOSE_TAG_END, html)
-  return (html: html, size: size)
+  return s.parseHTMLBlockContent(
+    HTML_OPEN_CLOSE_TAG_START, HTML_OPEN_CLOSE_TAG_END)
 
 proc parseHtmlDeclaration*(s: string): tuple[html: string, size: int] =
-  var html: string
-  let size = s.parseHTMLBlockContent(
-    HTML_DECLARATION_START, HTML_DECLARATION_END, html)
-  return (html: html, size: size)
+  return s.parseHTMLBlockContent(HTML_DECLARATION_START, HTML_DECLARATION_END)
 
 proc parseHtmlTag*(s: string): tuple[html: string, size: int] =
-  var html: string
-  let size = s.parseHTMLBlockContent(HTML_TAG_START, HTML_TAG_END, html)
-  return (html: html, size: size)
+  return s.parseHTMLBlockContent(HTML_TAG_START, HTML_TAG_END)
 
 proc parseHTMLBlock(doc: string, start: int): ParseResult =
   var htmlContent: string

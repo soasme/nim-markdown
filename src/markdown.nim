@@ -383,8 +383,6 @@ proc escapeLinkUrl*(url: string): string =
 proc escapeBackslash*(doc: string): string =
   doc.replacef(re"\\([\\`*{}\[\]()#+\-.!_<>~|""$%&',/:;=?@^])", "$1")
 
-let LAZINESS_TEXT = r"(?:(?! {0,3}>| {0,3}(?:\*|\+|-) | {0,3}\d+(?:\.|\)) | {0,3}#| {0,3}`{3,}| {0,3}\*{3}| {0,3}-{3}| {0,3}_{3})[^\n]+(?:\n|$))+"
-
 const rThematicBreakLeading* = r" {0,3}"
 const rThematicBreakMarker* = r"[-*_]"
 const rThematicBreakSpace* = r"[ \t]"
@@ -1156,15 +1154,11 @@ proc parseBlockquote(doc: string, start: int): ParseResult =
       break
 
     # find the laziness text
-    size = doc.since(pos).matchLen(re("^(" & LAZINESS_TEXT & ")"), matches=matches)
-
-    # blank line in laziness text always breaks the blockquote
-    if size == -1:
-      break
-
-    # concat the laziness text
-    pos += size
-    document &= matches[0]
+    for line in doc.since(pos).splitLines(keepEol=true):
+      if line.isBlank: break
+      if not line.isContinuationText: break
+      pos += line.len
+      document &= line
 
   if not found:
     return (nil, -1)

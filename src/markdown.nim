@@ -204,7 +204,6 @@ var gfmRuleSet = RuleSet(
 )
 
 const THEMATIC_BREAK_RE* = r" {0,3}([-*_])(?:[ \t]*\1){2,}[ \t]*(?:\n+|$)"
-const ATX_HEADING_RE* = r" {0,3}(#{1,6})([ \t]+)?(?(2)([^\n]*?))([ \t]+)?(?(4)#*) *(?:\n+|$)"
 const SETEXT_HEADING_RE* = r"((?:(?:[^\n]+)\n)+) {0,3}(=|-)+ *(?:\n+|$)"
 const INDENTED_CODE_RE* = r"((?: {4}| {0,3}\t)[^\n]+\n*)+"
 
@@ -335,7 +334,7 @@ proc escapeCode*(doc: string): string =
   ## Make code block in markdown document HTML-safe.
   result = doc.escapeAmpersandChar.escapeTag
 
-proc removeBlankLines(doc: string): string =
+proc removeBlankLines*(doc: string): string =
   doc.strip(leading=false, trailing=true, chars={'\n'})
 
 proc escapeInvalidHTMLTag(doc: string): string =
@@ -377,15 +376,15 @@ proc escapeBackslash*(doc: string): string =
 
 let LAZINESS_TEXT = r"(?:(?! {0,3}>| {0,3}(?:\*|\+|-) | {0,3}\d+(?:\.|\)) | {0,3}#| {0,3}`{3,}| {0,3}\*{3}| {0,3}-{3}| {0,3}_{3})[^\n]+(?:\n|$))+"
 
-const rThematicBreakLeading = r" {0,3}"
-const rThematicBreakMarker = r"[-*_]"
-const rThematicBreakSpace = r"[ \t]"
-const rFencedCodeLeading = " {0,3}"
-const rFencedCodeMarker = r"(`{3,}|~{3,})"
-const rFencedCodePadding = r"(?: |\t)*"
-const rFencedCodeInfo = r"([^`\n]*)?"
+const rThematicBreakLeading* = r" {0,3}"
+const rThematicBreakMarker* = r"[-*_]"
+const rThematicBreakSpace* = r"[ \t]"
+const rFencedCodeLeading* = " {0,3}"
+const rFencedCodeMarker* = r"(`{3,}|~{3,})"
+const rFencedCodePadding* = r"(?: |\t)*"
+const rFencedCodeInfo* = r"([^`\n]*)?"
 
-proc reFmt(patterns: varargs[string]): Regex =
+proc reFmt*(patterns: varargs[string]): Regex =
   var s: string
   for p in patterns:
     s &= p
@@ -787,26 +786,34 @@ proc parseSetextHeading(doc: string, start: int): ParseResult =
     pos: start+size
   )
 
+const ATX_HEADING_RE* = r" {0,3}(#{1,6})([ \t]+)?(?(2)([^\n]*?))([ \t]+)?(?(4)#*) *(?:\n+|$)"
 
-proc parseATXHeading(doc: string, start: int): ParseResult =
-  var matches: array[5, string]
-  let size = doc.since(start).matchLen(
+proc getAtxHeading*(s: string): tuple[level: int, doc: string, size: int] =
+  var matches: array[4, string]
+  let size = s.matchLen(
     re(r"^" & ATX_HEADING_RE),
     matches=matches
   )
-  if size == -1: return (nil, -1)
-  let lit = if matches[2] =~ re"#+": "" else: matches[2]
+  if size == -1:
+    return (level: 0, doc: "", size: -1)
+
+  let level = matches[0].len
+  let doc = if matches[2] =~ re"#+": "" else: matches[2]
+  return (level: level, doc: doc, size: size)
+
+proc parseATXHeading(doc: string, start: int = 0): ParseResult =
+  let res = doc.since(start).getAtxHeading()
+  if res.size == -1: return (nil, -1)
   return (
     token: Token(
       type: ATXHeadingToken,
-      doc: lit,
+      doc: res.doc,
       atxHeadingVal: Heading(
-        level: matches[0].len,
+        level: res.level
       )
     ),
-    pos: start+size
+    pos: start+res.size
   )
-
 
 proc parseBlankLine*(doc: string, start: int): ParseResult =
   let size = doc.since(start).matchLen(re(r"^((?:\s*\n)+)"))
@@ -1290,61 +1297,36 @@ proc parseBlock(state: State, token: Token) =
           for listItem in res.token.children.items:
             if listItem.doc != "":
               parseBlock(state, listItem)
-
           res.token.ulVal.loose = res.token.parseLoose
           for listItem in res.token.children.items:
             listItem.listItemVal.loose = res.token.ulVal.loose
-
       of OrderedListToken:
         res = parseOrderedList(doc, pos)
         if res.pos != -1:
           for listItem in res.token.children.items:
             if listItem.doc != "":
               parseBlock(state, listItem)
-
           res.token.olVal.loose = res.token.parseLoose
           for listItem in res.token.children.items:
             listItem.listItemVal.loose = res.token.olVal.loose
-
       of ReferenceToken:
         res = parseReference(doc, pos)
         if res.pos != -1 and not state.references.contains(res.token.referenceVal.text):
           state.references[res.token.referenceVal.text] = res.token.referenceVal
-
       of BlockquoteToken:
         res = parseBlockquote(doc, pos)
         if res.pos != -1 and res.token.doc.strip != "":
           parseBlock(state, res.token)
-
-      of TableToken:
-        res = parseHTMLTable(doc, pos)
-
-      of FencedCodeToken:
-        res = parseFencedCode(doc, pos)
-
-      of IndentedCodeToken:
-        res = parseIndentedCode(doc, pos)
-
-      of HTMLBlockToken:
-        res = parseHTMLBlock(doc, pos)
-
-      of SetextHeadingToken:
-        res = parseSetextHeading(doc, pos)
-
-      of BlankLineToken:
-        res = parseBlankLine(doc, pos)
-
-      of ThematicBreakToken:
-        res = parseThematicBreak(doc, pos)
-
-      of ATXHeadingToken:
-        res = parseATXHeading(doc, pos)
-
-      of ParagraphToken:
-        res = parseParagraph(doc, pos)
-
-      else:
-        raise newException(MarkdownError, fmt"unknown rule.")
+      of TableToken: res = parseHTMLTable(doc, pos)
+      of FencedCodeToken: res = parseFencedCode(doc, pos)
+      of IndentedCodeToken: res = parseIndentedCode(doc, pos)
+      of HTMLBlockToken: res = parseHTMLBlock(doc, pos)
+      of SetextHeadingToken: res = parseSetextHeading(doc, pos)
+      of BlankLineToken: res = parseBlankLine(doc, pos)
+      of ThematicBreakToken: res = parseThematicBreak(doc, pos)
+      of ATXHeadingToken: res = parseATXHeading(doc, pos)
+      of ParagraphToken: res = parseParagraph(doc, pos)
+      else: raise newException(MarkdownError, fmt"unknown rule.")
 
       if res.pos != -1:
         pos = res.pos

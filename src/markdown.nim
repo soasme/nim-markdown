@@ -610,16 +610,15 @@ proc parseOrderedList(doc: string, start: int): ParseResult =
 
   return (token: olToken, pos: pos)
 
+proc getThematicBreak(s: string): tuple[size: int] =
+  return (size: s.matchLen(re(r"^" & THEMATIC_BREAK_RE)))
+
 proc parseThematicBreak(doc: string, start: int): ParseResult =
-  let size = doc.since(start).matchLen(re(r"^" & THEMATIC_BREAK_RE))
-  if size == -1: return (nil, -1)
+  let res = doc.since(start).getThematicBreak()
+  if res.size == -1: return (nil, -1)
   return (
-    token: Token(
-      type: ThematicBreakToken,
-      doc: doc.since(start, offset=size),
-      hrVal: ""
-    ),
-    pos: start+size
+    token: Token(type: ThematicBreakToken),
+    pos: start+res.size
   )
 
 proc parseFencedCode*(doc: string, indent: var int, size: var int): string =

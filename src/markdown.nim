@@ -1292,10 +1292,29 @@ proc isContinuationText*(doc: string): bool =
   return true
 
 proc parseParagraph(doc: string, start: int): ParseResult =
-  let size = doc.since(start).matchLen(
+  var size = doc.since(start).matchLen(
     re(r"^((?:[^\n]+\n?)(" & LAZINESS_TEXT & "|\n*))"),
   )
   if size == -1: return (nil, -1)
+  let firstLine = doc.since(start).firstLine
+  var p = firstLine
+  for line in doc.since(start).restLines:
+    # empty list item is continuation text
+    if line.match(re"^ {0,3}(?:[\-+*]|\d+[.)])[ \t]*\n?$"):
+      p &= line
+      continue
+    # ol should start with 1.
+    if line.contains(re" {0,3}\d+[.(][ \t]+[^\n]"):
+      if not line.strip.startsWith("1.") and not line.strip.startsWith("1)"):
+        p &= line
+        continue
+    if line.isBlank:
+      p &= line
+      break
+    if not line.isContinuationText:
+      break
+    p &= line
+  size = p.len
   return (
     token: Token(
       type: ParagraphToken,

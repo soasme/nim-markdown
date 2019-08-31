@@ -530,15 +530,14 @@ proc parseUnorderedListItem*(doc: string, start=0, marker: var string, listItemD
 
   return pos - start
 
-proc parseUnorderedList(state: State, token: Token): int =
-  let start = state.pos
+proc parseUnorderedList(doc: string, start: int): ParseResult =
   var pos = start
   var marker = ""
-  var listItems: seq[Token];
+  var listItems: seq[Token]
 
-  while pos < token.doc.len:
+  while pos < doc.len:
     var listItemDoc = ""
-    var itemSize = parseUnorderedListItem(token.doc, pos, marker, listItemDoc)
+    var itemSize = parseUnorderedListItem(doc, pos, marker, listItemDoc)
     if itemSize == -1:
       break
 
@@ -549,18 +548,16 @@ proc parseUnorderedList(state: State, token: Token): int =
         marker: marker
       )
     )
-    if listItemDoc != "":
-      parseBlock(state, listItem)
     listItems.add(listItem)
 
     pos += itemSize
 
   if marker == "":
-    return -1
+    return (nil, -1)
 
   var ulToken = Token(
     type: UnorderedListToken,
-    doc: token.doc[start ..< pos],
+    doc: doc[start ..< pos],
     ulVal: UnorderedList(
       loose: false
     )
@@ -568,25 +565,19 @@ proc parseUnorderedList(state: State, token: Token): int =
   for listItem in listItems:
     ulToken.children.append(listItem)
 
-  ulToken.ulVal.loose = ulToken.parseLoose
-  for listItem in listItems:
-    listItem.listItemVal.loose = ulToken.ulVal.loose
+  return (token: ulToken, pos: pos)
 
-  token.children.append(ulToken)
-  return pos
-
-proc parseOrderedList(state: State, token: Token): int =
-  let start = state.pos
+proc parseOrderedList(doc: string, start: int): ParseResult =
   var pos = start
   var marker = ""
   var startIndex = 1
   var found = false
   var index = 1
-  var listItems: seq[Token];
+  var listItems: seq[Token]
 
-  while pos < token.doc.len:
+  while pos < doc.len:
     var listItemDoc = ""
-    var itemSize = parseOrderedListItem(token.doc, pos, marker, listItemDoc, index)
+    var itemSize = parseOrderedListItem(doc, pos, marker, listItemDoc, index)
     if itemSize == -1:
       break
     if not found:
@@ -600,18 +591,16 @@ proc parseOrderedList(state: State, token: Token): int =
         marker: marker
       )
     )
-    if listItemDoc != "":
-      parseBlock(state, listItem)
     listItems.add(listItem)
 
     pos += itemSize
 
   if marker == "":
-    return -1
+    return (nil, -1)
 
   var olToken = Token(
     type: OrderedListToken,
-    doc: token.doc[start ..< pos],
+    doc: doc[start ..< pos],
     olVal: OrderedList(
       start: startIndex,
       loose: false
@@ -620,12 +609,7 @@ proc parseOrderedList(state: State, token: Token): int =
   for listItem in listItems:
     olToken.children.append(listItem)
 
-  olToken.olVal.loose = olToken.parseLoose
-  for listItem in listItems:
-    listItem.listItemVal.loose = olToken.olVal.loose
-
-  token.children.append(olToken)
-  return pos
+  return (token: olToken, pos: pos)
 
 proc parseThematicBreak(doc: string, start: int): ParseResult =
   let size = doc.since(start).matchLen(re(r"^" & THEMATIC_BREAK_RE))
@@ -1299,8 +1283,34 @@ proc parseBlock(state: State, token: Token) =
     for rule in state.ruleSet.blockRules:
       pos = -1
       case rule
-      of UnorderedListToken: pos = parseUnorderedList(state, token)
-      of OrderedListToken: pos = parseOrderedList(state, token)
+      of UnorderedListToken:
+        res = parseUnorderedList(token.doc, state.pos)
+        pos = res.pos
+        if pos != -1:
+          for listItem in res.token.children.items:
+            if listItem.doc != "":
+              parseBlock(state, listItem)
+
+          res.token.ulVal.loose = res.token.parseLoose
+          for listItem in res.token.children.items:
+            listItem.listItemVal.loose = res.token.ulVal.loose
+
+          token.children.append(res.token)
+
+      of OrderedListToken:
+        res = parseOrderedList(token.doc, state.pos)
+        pos = res.pos
+        if pos != -1:
+          for listItem in res.token.children.items:
+            if listItem.doc != "":
+              parseBlock(state, listItem)
+
+          res.token.olVal.loose = res.token.parseLoose
+          for listItem in res.token.children.items:
+            listItem.listItemVal.loose = res.token.olVal.loose
+
+          token.children.append(res.token)
+
       of ReferenceToken:
         res = parseReference(token.doc, state.pos)
         pos = res.pos

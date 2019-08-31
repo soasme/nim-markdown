@@ -61,6 +61,7 @@ type
   ListItem = object
     loose: bool
     marker: string
+    verbatim: string
 
   Heading = object
     level: int
@@ -401,6 +402,8 @@ proc reFmt*(patterns: varargs[string]): Regex =
 proc endsWithBlankLine(token: Token): bool =
   if token.type == ParagraphToken:
     token.paragraphVal.doc.find(re"\n\n$") != -1
+  elif token.type == ListItemToken:
+    token.listItemVal.verbatim.find(re"\n\n$") != -1
   else:
     token.doc.find(re"\n\n$") != -1
 
@@ -488,8 +491,10 @@ proc parseUnorderedListItem*(doc: string, start=0, marker: var string, listItemD
   if marker != matches[1]:
     return -1
 
-  listItemDoc = matches[2]
-  listItemDoc &= matches[4]
+  if matches[2] != "":
+    listItemDoc = "\n"
+  else:
+    listItemDoc = matches[4]
 
   var indent = 1
   if matches[3].contains(re"\t"):
@@ -538,8 +543,9 @@ proc parseUnorderedList(doc: string, start: int): ParseResult =
 
     var listItem = Token(
       type: ListItemToken,
-      doc: listItemDoc,
+      doc: listItemDoc.strip(chars={'\n'}),
       listItemVal: ListItem(
+        verbatim: listItemDoc,
         marker: marker
       )
     )
@@ -581,8 +587,9 @@ proc parseOrderedList(doc: string, start: int): ParseResult =
 
     var listItem = Token(
       type: ListItemToken,
-      doc: listItemDoc,
+      doc: listItemDoc.strip(chars={'\n'}),
       listItemVal: ListItem(
+        verbatim: listItemDoc,
         marker: marker
       )
     )
@@ -2378,6 +2385,7 @@ proc renderListItemTightParagraph(state: State, token: Token): string =
 
 proc renderListItemChildren(state: State, token: Token): string =
   var html: string
+  if token.children.head == nil: return ""
 
   for child_node in token.children.nodes:
     var child_token = child_node.value

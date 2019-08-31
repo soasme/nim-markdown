@@ -703,32 +703,42 @@ proc parseFencedCode(doc: string, start: int): ParseResult =
   )
   return (token: codeToken, pos: pos)
 
+const rIndentedCode = r"^(?: {4}| {0,3}\t)(.*\n?)"
 
-proc parseIndentedCode*(doc: string, start: int): ParseResult =
-  let reIndentedCode = re"^(?: {4}| {0,3}\t)(.*\n?)"
-  var size: int
-  var code: string
+proc getIndentedCodeFirstLine*(s: string): tuple[code: string, size: int]=
   var matches: array[1, string]
-  let firstLine = doc.since(start).firstLine
-  if not firstLine.match(reIndentedCode, matches=matches): return (nil, -1)
-  if matches[0].isBlank: return (nil, -1)
-  size += firstLine.len
-  code = matches[0]
-  for line in doc.since(start).restLines:
+  let firstLine = s.firstLine
+  if not firstLine.match(re(rIndentedCode), matches=matches): return ("", -1)
+  if matches[0].isBlank: return ("", -1)
+  return (code: matches[0], size: firstLine.len)
+
+proc getIndentedCodeRestLines*(s: string): tuple[code: string, size: int] =
+  var code: string
+  var size: int
+  var matches: array[1, string]
+  for line in s.restLines:
     if line.isBlank:
       code &= line.replace(re"^ {0,4}", "")
       size += line.len
-    elif line.match(reIndentedCode, matches=matches):
+    elif line.match(re(rIndentedCode), matches=matches):
       code &= matches[0]
       size += line.len
     else:
       break
-  let indentedCode = Token(
-    type: IndentedCodeToken,
-    doc: code,
-    indentedCodeVal: "",
+  return (code: code, size: size)
+
+proc parseIndentedCode*(doc: string, start: int): ParseResult =
+  var res = doc.since(start).getIndentedCodeFirstLine()
+  if res.size == -1: return (nil, -1)
+  var code = res.code
+  var pos = start + res.size
+  res = doc.since(start).getIndentedCodeRestLines()
+  code &= res.code
+  pos += res.size
+  return (
+    token: Token(type: IndentedCodeToken, doc: code),
+    pos: pos
   )
-  return (token: indentedCode, pos: start+size)
 
 proc getSetextHeading*(s: string): tuple[level: int, doc: string, size: int] =
   var size = 0

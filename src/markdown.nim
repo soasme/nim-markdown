@@ -1295,8 +1295,6 @@ proc parseBlock(state: State, token: Token) =
           for listItem in res.token.children.items:
             listItem.listItemVal.loose = res.token.ulVal.loose
 
-          token.children.append(res.token)
-
       of OrderedListToken:
         res = parseOrderedList(token.doc, state.pos)
         pos = res.pos
@@ -1309,83 +1307,60 @@ proc parseBlock(state: State, token: Token) =
           for listItem in res.token.children.items:
             listItem.listItemVal.loose = res.token.olVal.loose
 
-          token.children.append(res.token)
-
       of ReferenceToken:
         res = parseReference(token.doc, state.pos)
         pos = res.pos
-        if pos != -1:
-          if not state.references.contains(res.token.referenceVal.text):
-            state.references[res.token.referenceVal.text] = res.token.referenceVal
-          token.children.append(res.token)
+        if pos != -1 and not state.references.contains(res.token.referenceVal.text):
+          state.references[res.token.referenceVal.text] = res.token.referenceVal
 
       of BlockquoteToken:
         res = parseBlockquote(token.doc, state.pos)
         pos = res.pos
-        if pos != -1:
-          if res.token.doc.strip != "":
-            parseBlock(state, res.token)
-          token.children.append(res.token)
+        if pos != -1 and res.token.doc.strip != "":
+          parseBlock(state, res.token)
 
       of TableToken:
         res = parseHTMLTable(token.doc, state.pos)
         pos = res.pos
-        if pos != -1:
-          token.children.append(res.token)
 
       of FencedCodeToken:
         res = parseFencedCode(token.doc, state.pos)
         pos = res.pos
-        if pos != -1:
-          token.children.append(res.token)
 
       of IndentedCodeToken:
         res = parseIndentedCode(token.doc, state.pos)
         pos = res.pos
-        if pos != -1:
-          token.children.append(res.token)
 
       of HTMLBlockToken:
         res = parseHTMLBlock(token.doc, state.pos)
         pos = res.pos
-        if pos != -1:
-          token.children.append(res.token)
 
       of SetextHeadingToken:
         res = parseSetextHeading(token.doc, state.pos)
         pos = res.pos
-        if pos != -1:
-          token.children.append(res.token)
 
       of BlankLineToken:
         res = parseBlankLine(token.doc, state.pos)
         pos = res.pos
-        if pos != -1:
-          token.children.append(res.token)
 
       of ThematicBreakToken:
         res = parseThematicBreak(token.doc, state.pos)
         pos = res.pos
-        if pos != -1:
-          token.children.append(res.token)
 
       of ATXHeadingToken:
         res = parseATXHeading(token.doc, state.pos)
         pos = res.pos
-        if pos != -1:
-          token.children.append(res.token)
 
       of ParagraphToken:
         res = parseParagraph(token.doc, state.pos)
         pos = res.pos
-        if pos != -1:
-          token.children.append(res.token)
 
       else:
         raise newException(MarkdownError, fmt"unknown rule.")
 
       if pos != -1:
         state.pos = pos
+        token.children.append(res.token)
         break
     if pos == -1:
       raise newException(MarkdownError, fmt"unknown rule.")

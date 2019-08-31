@@ -1196,72 +1196,70 @@ proc parseBlockquote(doc: string, start: int): ParseResult =
   #token.children.append(blockquote)
   #return pos
 
-proc parseReference*(state: State, token: Token): int =
-  var pos = state.pos
-  var start = pos
-  let doc = token.doc[pos ..< token.doc.len]
+proc parseReference*(doc: string, start: int): ParseResult =
+  var pos = start
 
-  var markStart = doc.matchLen(re"^ {0,3}\[")
+  var markStart = doc.since(pos).matchLen(re"^ {0,3}\[")
   if markStart == -1:
-    return -1
+    return (nil, -1)
 
   pos += markStart - 1
 
   var label: string
-  var labelSize = getLinkLabel(token.doc, pos, label)
+  var labelSize = getLinkLabel(doc, pos, label)
 
   # Link should have matching ] for [.
   if labelSize == -1:
-    return -1
+    return (nil, -1)
 
   # A link label must contain at least one non-whitespace character.
   if label.find(re"\S") == -1:
-    return -1
+    return (nil, -1)
 
   # An inline link consists of a link text followed immediately by a left parenthesis (
   pos += labelSize # [link]
 
-  if pos >= token.doc.len or token.doc[pos] != ':':
-    return -1
+  if pos >= doc.len or doc[pos] != ':':
+    return (nil, -1)
   pos += 1
 
   # parse whitespace
-  var whitespaceLen = token.doc[pos ..< token.doc.len].matchLen(re"^[ \t]*\n?[ \t]*")
+  var whitespaceLen = doc.since(pos).matchLen(re"^[ \t]*\n?[ \t]*")
   if whitespaceLen != -1:
     pos += whitespaceLen
 
   # parse destination
   var destinationSlice: Slice[int]
-  var destinationLen = getLinkDestination(token.doc, pos, destinationslice)
+  var destinationLen = getLinkDestination(doc, pos, destinationslice)
 
   if destinationLen <= 0:
-    return -1
+    return (nil, -1)
 
   pos += destinationLen
 
   # parse whitespace
   var whitespaces: array[1, string]
-  whitespaceLen = token.doc[pos ..< token.doc.len].matchLen(re"^([ \t]*\n?[ \t]*)", matches=whitespaces)
+  whitespaceLen = doc.since(pos).matchLen(re"^([ \t]*\n?[ \t]*)", matches=whitespaces)
   if whitespaceLen != -1:
     pos += whitespaceLen
 
   # parse title (optional)
   var titleSlice: Slice[int]
   var titleLen = 0
-  if pos<token.doc.len and( token.doc[pos] == '(' or token.doc[pos] == '\'' or token.doc[pos] == '"'):
+  if pos<doc.len and (doc[pos] == '(' or doc[pos] == '\'' or doc[pos] == '"'):
     # at least one whitespace before the optional title.
-    if not {' ', '\t', '\n'}.contains(token.doc[pos-1]):
-      return -1
+    if not {' ', '\t', '\n'}.contains(doc[pos-1]):
+      return (nil, -1)
 
-    titleLen = getLinkTitle(token.doc, pos, titleSlice)
+    titleLen = getLinkTitle(doc, pos, titleSlice)
     if titleLen >= 0:
       pos += titleLen
       # link title may not contain a blank line
-      if token.doc[titleSlice].find(re"\n{2,}") != -1:
-        return -1
+      if doc[titleSlice].find(re"\n{2,}") != -1:
+        return (nil, -1)
 
     # parse whitespace, no more non-whitespace is allowed from now.
-    whitespaceLen = token.doc[pos ..< token.doc.len].matchLen(re"^\s*(?:\n|$)")
+    whitespaceLen = doc[pos ..< doc.len].matchLen(re"^\s*(?:\n|$)")
     if whitespaceLen != -1:
       pos += whitespaceLen
     # title might have trailing characters, but the label and dest is already enough.
@@ -1271,30 +1269,26 @@ proc parseReference*(state: State, token: Token): int =
       pos -= titleLen
       titleLen = -1
     else:
-      return -1
+      return (nil, -1)
 
   # construct token
   var title = ""
   if titleLen > 0:
-    title = token.doc[titleSlice]
+    title = doc[titleSlice]
 
-  var url = token.doc[destinationSlice]
+  var url = doc[destinationSlice]
 
   var reference = Token(
     type: ReferenceToken,
-    doc: token.doc[start ..< pos],
+    doc: doc[start ..< pos],
     referenceVal: Reference(
       text: label,
       url: url,
       title: title,
     )
   )
+  return (token: reference, pos: pos)
 
-  token.children.append(reference)
-
-  if not state.references.contains(label):
-    state.references[label] = reference.referenceVal
-  return pos
 
 proc parseBlock(state: State, token: Token) =
   let doc = token.doc
@@ -1305,9 +1299,16 @@ proc parseBlock(state: State, token: Token) =
     for rule in state.ruleSet.blockRules:
       pos = -1
       case rule
-      of ReferenceToken: pos = parseReference(state, token)
       of UnorderedListToken: pos = parseUnorderedList(state, token)
       of OrderedListToken: pos = parseOrderedList(state, token)
+      of ReferenceToken:
+        res = parseReference(token.doc, state.pos)
+        pos = res.pos
+        if pos != -1:
+          if not state.references.contains(res.token.referenceVal.text):
+            state.references[res.token.referenceVal.text] = res.token.referenceVal
+          token.children.append(res.token)
+
       of BlockquoteToken:
         res = parseBlockquote(token.doc, state.pos)
         pos = res.pos

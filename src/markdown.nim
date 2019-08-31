@@ -258,6 +258,7 @@ proc getLinkLabel*(doc: string, start: int, label: var string): int;
 proc getLinkDestination*(doc: string, start: int, slice: var Slice[int]): int;
 proc getLinkTitle*(doc: string, start: int, slice: var Slice[int]): int;
 proc render(state: State, token: Token): string;
+proc isContinuationText*(doc: string): bool;
 
 proc since*(s: string, i: int, offset: int = -1): string =
   if offset == -1: s[i..<s.len] else: s[i..<i+offset]
@@ -390,22 +391,6 @@ proc reFmt*(patterns: varargs[string]): Regex =
     s &= p
   re(s)
 
-proc parseParagraph(doc: string, start: int): ParseResult =
-  let size = doc.since(start).matchLen(
-    re(r"^((?:[^\n]+\n?)(" & LAZINESS_TEXT & "|\n*))"),
-  )
-  if size == -1: return (nil, -1)
-  return (
-    token: Token(
-      type: ParagraphToken,
-      doc: doc[start ..< start+size].replace(re"\n\s*", "\n").strip,
-      paragraphVal: Paragraph(
-        doc: doc[start ..< start+size]
-      )
-    ),
-    pos: start+size
-  )
-
 proc endsWithBlankLine(token: Token): bool =
   if token.type == ParagraphToken:
     token.paragraphVal.doc.find(re"\n\n$") != -1
@@ -461,11 +446,12 @@ proc parseOrderedListItem*(doc: string, start=0, marker: var string, listItemDoc
         pos += size
         break
     elif listItemDoc.find(re"\n{2,}$") == -1:
-      size = doc[pos ..< doc.len].matchLen(re("^(" & LAZINESS_TEXT & ")"), matches=matches)
-      if size != -1:
-        listItemDoc &= matches[0]
+      var line = doc.since(pos).firstLine
+      if line.isContinuationText:
+        listItemDoc &= line
+        size = line.len
       else:
-          break
+        break
     else:
       break
 
@@ -621,21 +607,21 @@ proc parseThematicBreak(doc: string, start: int): ParseResult =
     pos: start+res.size
   )
 
-proc parseFencedCode*(doc: string, indent: var int, size: var int): string =
+proc getFence*(doc: string): tuple[indent: int, fence: string, size: int] =
   var matches: array[2, string]
-  size = doc.matchLen(re"((?: {0,3})?)(`{3,}|~{3,})", matches=matches)
-  if size == -1:
-    return ""
-  indent = matches[0].len
-  doc[0 ..< size].strip
+  let size = doc.matchLen(re"((?: {0,3})?)(`{3,}|~{3,})", matches=matches)
+  if size == -1: return (-1, "", -1)
+  return (
+    indent: matches[0].len,
+    fence: doc[0 ..< size].strip,
+    size: size
+  )
 
-proc parseCodeContent*(doc: string, indent: int, fence: string, codeContent: var string): int =
+proc parseCodeContent*(doc: string, indent: int, fence: string): tuple[code: string, size: int]=
   var closeSize = -1
   var pos = 0
-  var indentPrefix = ""
-  codeContent = ""
-  for i in (0 ..< indent):
-    indentPrefix &= " "
+  var indentPrefix = " ".repeat(indent)
+  var codeContent = ""
   let closeRe = re(r"(?: {0,3})" & fence & fmt"{fence[0]}" & "{0,}(?:$|\n)")
   for line in doc.splitLines(keepEol=true):
     closeSize = line.matchLen(closeRe)
@@ -648,7 +634,7 @@ proc parseCodeContent*(doc: string, indent: int, fence: string, codeContent: var
     else:
       codeContent &= line
     pos += line.len
-  pos
+  return (codeContent, pos)
 
 proc parseCodeInfo*(doc: string, size: var int): string =
   var matches: array[1, string]
@@ -670,14 +656,11 @@ proc parseTildeBlockCodeInfo*(doc: string, size: var int): string =
 
 proc parseFencedCode(doc: string, start: int): ParseResult =
   var pos = start
-  var indent = 0
-
-  var fenceSize = -1
-  var fence = doc.since(start).parseFencedCode(indent, fenceSize)
-
-  if fenceSize == -1: return (nil, -1)
-
-  pos += fenceSize
+  var fenceRes = doc.since(start).getFence()
+  if fenceRes.size == -1: return (nil, -1)
+  var indent = fenceRes.indent
+  var fence = fenceRes.fence
+  pos += fenceRes.size
 
   var infoSize = -1
   var info: string
@@ -689,9 +672,9 @@ proc parseFencedCode(doc: string, start: int): ParseResult =
 
   pos += infoSize
 
-  var codeContent = ""
-  var codeContentSize = doc.since(pos).parseCodeContent(indent, fence, codeContent)
-  pos += codeContentSize
+  var res = doc.since(pos).parseCodeContent(indent, fence)
+  var codeContent = res.code
+  pos += res.size
 
   if doc.since(pos).matchLen(re"\n$") != -1:
     pos += 1
@@ -1123,6 +1106,10 @@ proc parseHTMLBlock(doc: string, start: int): ParseResult =
   return (nil, -1)
 
 
+const rBlockquoteMarker = r"^( {0,3}>)"
+
+proc isBlockquote*(s: string): bool = s.contains(re(rBlockquoteMarker))
+
 proc parseBlockquote(doc: string, start: int): ParseResult =
   let markerContent = re(r"^(( {0,3}>([^\n]*(?:\n|$)))+)")
   var matches: array[3, string]
@@ -1267,6 +1254,57 @@ proc parseReference*(doc: string, start: int): ParseResult =
   )
   return (token: reference, pos: pos)
 
+proc isContinuationText*(doc: string): bool =
+  let atxRes = doc.getAtxHeading()
+  if atxRes.size != -1: return false
+
+  let brRes = doc.getThematicBreak()
+  if brRes.size != -1: return false
+
+  let setextRes = doc.getSetextHeading()
+  if setextRes.size != -1: return false
+
+  # All HTML blocks can interrupt a paragraph except open&closing tags.
+  var htmlRes = doc.parseHtmlOpenCloseTag()
+  if htmlRes.size != -1: return true
+  var htmlBlockRes = doc.parseHTMLBlock(0)
+  if htmlBlockRes.pos != -1: return false
+
+  # Indented code cannot interrupt a paragraph.
+
+  var fenceRes = doc.getFence()
+  if fenceRes.size != -1: return false
+
+  if doc.isBlockquote: return false
+
+  var ulMarker: string
+  var ulDoc: string
+  if doc.parseUnorderedListItem(marker=ulMarker, listItemDoc=ulDoc) != -1: return false
+
+  var olMarker: string
+  var olDoc: string
+  var olIndex: int
+  let olOffset = doc.parseOrderedListItem(marker=olMarker,
+    listItemDoc=olDoc, index=olIndex)
+  if olOffset != -1: return false
+
+  return true
+
+proc parseParagraph(doc: string, start: int): ParseResult =
+  let size = doc.since(start).matchLen(
+    re(r"^((?:[^\n]+\n?)(" & LAZINESS_TEXT & "|\n*))"),
+  )
+  if size == -1: return (nil, -1)
+  return (
+    token: Token(
+      type: ParagraphToken,
+      doc: doc[start ..< start+size].replace(re"\n\s*", "\n").strip,
+      paragraphVal: Paragraph(
+        doc: doc[start ..< start+size]
+      )
+    ),
+    pos: start+size
+  )
 
 proc isContainerBlock(tokenType: TokenType): bool =
   return {

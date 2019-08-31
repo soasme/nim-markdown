@@ -1310,10 +1310,7 @@ proc isContinuationText*(doc: string): bool =
   return true
 
 proc parseParagraph(doc: string, start: int): ParseResult =
-  var size = doc.since(start).matchLen(
-    re(r"^((?:[^\n]+\n?)(" & LAZINESS_TEXT & "|\n*))"),
-  )
-  if size == -1: return (nil, -1)
+  var size: int
   let firstLine = doc.since(start).firstLine
   var p = firstLine
   for line in doc.since(start).restLines:

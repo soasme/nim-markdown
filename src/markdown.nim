@@ -1037,93 +1037,104 @@ proc parseHTMLBlockContent*(doc: string, startPattern: string, endPattern: strin
       break
   return pos
 
+proc parseHtmlScript(s: string): tuple[html: string, size: int] =
+  var html: string
+  let size = s.parseHTMLBlockContent(
+    HTML_SCRIPT_START,
+    HTML_SCRIPT_END,
+    html
+  )
+  return (html: html, size: size)
+
+proc parseHtmlComment*(s: string): tuple[html: string, size: int] =
+  var html: string
+  let size = s.parseHTMLBlockContent(HTML_COMMENT_START, HTML_COMMENT_END, html)
+  return (html: html, size: size)
+
+proc parseProcessingInstruction*(s: string): tuple[html: string, size: int] =
+  var html: string
+  let size = s.parseHTMLBlockContent(
+    HTML_PROCESSING_INSTRUCTION_START,
+    HTML_PROCESSING_INSTRUCTION_END,
+    html)
+  return (html: html, size: size)
+
+proc parseHtmlCData*(s: string): tuple[html: string, size: int] =
+  var html: string
+  let size = s.parseHTMLBlockContent(HTML_CDATA_START, HTML_CDATA_END, html)
+  return (html: html, size: size)
+
+proc parseHtmlOpenCloseTag*(s: string): tuple[html: string, size: int] =
+  var html: string
+  let size = s.parseHTMLBlockContent(
+    HTML_OPEN_CLOSE_TAG_START, HTML_OPEN_CLOSE_TAG_END, html)
+  return (html: html, size: size)
+
+proc parseHtmlDeclaration*(s: string): tuple[html: string, size: int] =
+  var html: string
+  let size = s.parseHTMLBlockContent(
+    HTML_DECLARATION_START, HTML_DECLARATION_END, html)
+  return (html: html, size: size)
+
+proc parseHtmlTag*(s: string): tuple[html: string, size: int] =
+  var html: string
+  let size = s.parseHTMLBlockContent(HTML_TAG_START, HTML_TAG_END, html)
+  return (html: html, size: size)
+
 proc parseHTMLBlock(doc: string, start: int): ParseResult =
   var htmlContent: string
   var size: int
+  var lit = doc.since(start)
 
-  size = doc.since(start).parseHTMLBlockContent(
-    HTML_SCRIPT_START, HTML_SCRIPT_END, htmlContent)
-  if size != -1:
+  var res = lit.parseHtmlScript()
+  if res.size != -1:
     return (
-      token: Token(
-        type: HTMLBlockToken,
-        doc: htmlContent,
-        htmlBlockVal: ""
-      ),
-      pos: start+size
+      token: Token(type: HTMLBlockToken, doc: res.html),
+      pos: start+res.size
     )
 
-  size = doc.since(start).parseHTMLBlockContent(
-    HTML_COMMENT_START, HTML_COMMENT_END, htmlContent)
-  if size != -1:
+  res = lit.parseHtmlComment()
+  if res.size != -1:
     return (
-      token: Token(
-        type: HTMLBlockToken,
-        doc: htmlContent,
-        htmlBlockVal: ""
-      ),
-      pos: start+size
+      token: Token(type: HTMLBlockToken, doc: res.html),
+      pos: start+res.size
     )
 
-  size = doc.since(start).parseHTMLBlockContent(
-    HTML_PROCESSING_INSTRUCTION_START, HTML_PROCESSING_INSTRUCTION_END, htmlContent)
-  if size != -1:
+  res = lit.parseProcessingInstruction()
+  if res.size != -1:
     return (
-      token: Token(
-        type: HTMLBlockToken,
-        doc: htmlContent,
-        htmlBlockVal: ""
-      ),
-      pos: start+size
+      token: Token(type: HTMLBlockToken, doc: res.html),
+      pos: start+res.size
     )
 
-  size = doc.since(start).parseHTMLBlockContent(
-    HTML_DECLARATION_START, HTML_DECLARATION_END, htmlContent)
-  if size != -1:
+  res = lit.parseHtmlDeclaration()
+  if res.size != -1:
     return (
-      token: Token(
-        type: HTMLBlockToken,
-        doc: htmlContent,
-        htmlBlockVal: ""
-      ),
-      pos: start+size
+      token: Token(type: HTMLBlockToken, doc: res.html),
+      pos: start+res.size
     )
 
-  size = doc.since(start).parseHTMLBlockContent(
-    HTML_CDATA_START, HTML_CDATA_END, htmlContent)
-  if size != -1:
+  res = lit.parseHtmlCData()
+  if res.size != -1:
     return (
-      token: Token(
-        type: HTMLBlockToken,
-        doc: htmlContent,
-        htmlBlockVal: ""
-      ),
-      pos: start+size
+      token: Token(type: HTMLBlockToken, doc: res.html),
+      pos: start+res.size
     )
 
-  size = doc.since(start).parseHTMLBlockContent(
-    HTML_TAG_START, HTML_TAG_END, htmlContent)
-  if size != -1:
+  res = lit.parseHtmlTag()
+  if res.size != -1:
     return (
-      token: Token(
-        type: HTMLBlockToken,
-        doc: htmlContent,
-        htmlBlockVal: ""
-      ),
-      pos: start+size
+      token: Token(type: HTMLBlockToken, doc: res.html),
+      pos: start+res.size
     )
 
-  size = doc.since(start).parseHTMLBlockContent(
-    HTML_OPEN_CLOSE_TAG_START, HTML_OPEN_CLOSE_TAG_END, htmlContent)
-  if size != -1:
+  res = lit.parseHtmlOpenCloseTag()
+  if res.size != -1:
     return (
-      token: Token(
-        type: HTMLBlockToken,
-        doc: htmlContent,
-        htmlBlockVal: ""
-      ),
-      pos: start+size
+      token: Token(type: HTMLBlockToken, doc: res.html),
+      pos: start+res.size
     )
+
 
   return (nil, -1)
 

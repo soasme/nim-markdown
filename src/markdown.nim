@@ -734,57 +734,53 @@ proc parseTildeBlockCodeInfo*(doc: string, size: var int): string =
     return item
   return ""
 
-proc parseFencedCode(state: State, token: var Token): int =
-  let start = state.pos
+proc parseFencedCode(doc: string, start: int): ParseResult =
   var pos = start
   var indent = 0
 
   var fenceSize = -1
-  var fence = parseFencedCode(token.doc[start ..< token.doc.len], indent, fenceSize)
+  var fence = doc.since(start).parseFencedCode(indent, fenceSize)
 
-  if fenceSize == -1:
-    return -1
+  if fenceSize == -1: return (nil, -1)
 
   pos += fenceSize
 
   var infoSize = -1
   var info: string
   if fence.startsWith("`"):
-    info = parseCodeInfo(token.doc[pos ..< token.doc.len], infoSize)
+    info = doc.since(pos).parseCodeInfo(infoSize)
   else:
-    info = parseTildeBlockCodeInfo(token.doc[pos ..< token.doc.len], infoSize)
-  if infoSize == -1:
-    return -1
+    info = doc.since(pos).parseTildeBlockCodeInfo(infoSize)
+  if infoSize == -1: return (nil, -1)
 
   pos += infoSize
 
   var codeContent = ""
-  var codeContentSize = parseCodeContent(token.doc[pos ..< token.doc.len], indent, fence, codeContent)
+  var codeContentSize = doc.since(pos).parseCodeContent(indent, fence, codeContent)
   pos += codeContentSize
 
-  if token.doc[pos ..< token.doc.len].matchLen(re"\n$") != -1:
+  if doc.since(pos).matchLen(re"\n$") != -1:
     pos += 1
 
-  var codeToken = Token(
+  let codeToken = Token(
     type: FencedCodeToken,
     doc: codeContent,
     fenceCodeVal: Fenced(info: info),
   )
-  token.children.append(codeToken)
-  return pos
+  return (token: codeToken, pos: pos)
 
-proc parseIndentedCode*(state: State, token: var Token): int =
-  let start = state.pos
+
+proc parseIndentedCode*(doc: string, start: int): ParseResult =
   let reIndentedCode = re"^(?: {4}| {0,3}\t)(.*\n?)"
   var size: int
   var code: string
   var matches: array[1, string]
-  let firstLine = token.doc[start..<token.doc.len].firstLine
-  if not firstLine.match(reIndentedCode, matches=matches): return -1
-  if matches[0].isBlank: return -1
+  let firstLine = doc.since(start).firstLine
+  if not firstLine.match(reIndentedCode, matches=matches): return (nil, -1)
+  if matches[0].isBlank: return (nil, -1)
   size += firstLine.len
   code = matches[0]
-  for line in token.doc[start..<token.doc.len].restLines:
+  for line in doc.since(start).restLines:
     if line.isBlank:
       code &= line.replace(re"^ {0,4}", "")
       size += line.len
@@ -793,13 +789,12 @@ proc parseIndentedCode*(state: State, token: var Token): int =
       size += line.len
     else:
       break
-  var indentedCode = Token(
+  let indentedCode = Token(
     type: IndentedCodeToken,
     doc: code,
     indentedCodeVal: "",
   )
-  token.children.append(indentedCode)
-  return start+size
+  return (token: indentedCode, pos: start+size)
 
 proc parseSetextHeadingContent*(doc: string, headingContent: var string, headingLevel: var int): int =
   var pos = 0
@@ -836,6 +831,25 @@ proc parseSetextHeadingContent*(doc: string, headingContent: var string, heading
     headingContent = doc[0 ..< pos - markerLen]
     pos
 
+
+proc parseSetextHeading(doc: string, start: int): ParseResult =
+  var content: string
+  var level: int
+
+  let size = doc.since(start).parseSetextHeadingContent(content, level)
+  if size == -1: return (nil, -1)
+  if content.match(re"(?:\s*\n)+"): return (nil, -1)
+
+  return (
+    token: Token(
+      type: SetextHeadingToken,
+      doc: content.strip,
+      setextHeadingVal: Heading(
+        level: level
+      )
+    ),
+    pos: start+size
+  )
 
 proc parseSetextHeading(state: State, token: var Token): int =
   let start = state.pos
@@ -877,21 +891,17 @@ proc parseATXHeading(doc: string, start: int): ParseResult =
   )
 
 
-proc parseBlankLine(state: State, token: var Token): int =
-  let start = state.pos
-  let size = token.doc[start..<token.doc.len].matchLen(re(r"^((?:\s*\n)+)"))
-
-  if size == -1:
-    return -1
-
-  var blankLine = Token(
-    type: BlankLineToken,
-    doc: token.doc[start ..< start+size],
-    blankLineVal: token.doc[start ..< start+size]
+proc parseBlankLine*(doc: string, start: int): ParseResult =
+  let size = doc.since(start).matchLen(re(r"^((?:\s*\n)+)"))
+  if size == -1: return (nil, -1)
+  return (
+    token: Token(
+      type: BlankLineToken,
+      doc: doc.since(start, offset=size),
+      blankLineVal: doc.since(start, offset=size)
+    ),
+    pos: start+size
   )
-
-  token.children.append(blankLine)
-  return start+size
 
 proc parseTableRow*(doc: string): seq[string] =
   var pos = 0
@@ -959,7 +969,7 @@ proc parseTableAligns*(doc: string, aligns: var seq[string]): bool =
       aligns.add("")
   true
 
-proc parseHTMLTable(state: State, token: var Token): int =
+proc parseHTMLTable(doc: string, start: int): ParseResult =
   # Algorithm:
   # fail fast if less than 2 lines.
   # second line: /^[-:|][-:|\s]*$/
@@ -970,26 +980,24 @@ proc parseHTMLTable(state: State, token: var Token): int =
   # iterate the rest of lines.
   #   extract tbody
   # construct token.
-  let start = state.pos
   var pos = start
-  let doc = token.doc[start ..< token.doc.len]
-  let lines = doc.splitLines(keepEol=true)
+  let lines = doc.since(start).splitLines(keepEol=true)
   if lines.len < 2:
-    return -1
+    return (nil, -1)
 
   var aligns: seq[string]
   if not parseTableAligns(lines[1], aligns):
-    return -1
+    return (nil, -1)
 
   if lines[0].matchLen(re"^ {4,}") != -1:
-    return -1
+    return (nil, -1)
 
   if lines[0] == "" or lines[0].find('|') == -1:
-    return -1
+    return (nil, -1)
 
   var heads = parseTableRow(lines[0].replace(re"^\||\|$", ""))
   if heads.len > aligns.len:
-    return -1
+    return (nil, -1)
 
   var theadToken = Token(
     type: THeadToken,
@@ -1051,7 +1059,7 @@ proc parseHTMLTable(state: State, token: var Token): int =
 
   var tableToken = Token(
     type: TableToken,
-    doc: token.doc[start ..< pos],
+    doc: doc[start ..< pos],
     tableVal: HTMLTable(
       aligns: aligns,
     )
@@ -1060,14 +1068,13 @@ proc parseHTMLTable(state: State, token: var Token): int =
   if tbodyRows.len > 0:
     var tbodyToken = Token(
       type: TBodyToken,
-      doc: token.doc[start+lines[0].len+lines[1].len ..< pos],
+      doc: doc[start+lines[0].len+lines[1].len ..< pos],
       tbodyVal: HTMLTableBody(size: tbodyRows.len)
     )
     for tbodyRowToken in tbodyRows:
       tbodyToken.children.append(tbodyRowToken)
     tableToken.children.append(tbodyToken)
-  token.children.append(tableToken)
-  return pos
+  return (token: tableToken, pos: pos)
 
 proc parseHTMLBlockContent*(doc: string, startPattern: string, endPattern: string, html: var string, ignoreCase = false): int =
   # Algorithm:
@@ -1119,72 +1126,96 @@ proc genHTMLBlockToken(token: var Token, htmlContent: string, start: int, size: 
   token.children.append(htmlBlock)
   return start+size
 
-proc parseHTMLBlock(state: State, token: var Token): int =
-  let start = state.pos
-  var htmlContent = ""
-  var size = parseHTMLBlockContent(
-    token.doc[start..<token.doc.len],
-    HTML_SCRIPT_START, HTML_SCRIPT_END,
-    htmlContent)
-  if size != -1:
-    return token.genHTMLBlockToken(htmlContent, start, size)
+proc parseHTMLBlock(doc: string, start: int): ParseResult =
+  var htmlContent: string
+  var size: int
 
-  size = parseHTMLBlockContent(
-    token.doc[start..<token.doc.len],
-    HTML_COMMENT_START,
-    HTML_COMMENT_END,
-    htmlContent
-  )
+  size = doc.since(start).parseHTMLBlockContent(
+    HTML_SCRIPT_START, HTML_SCRIPT_END, htmlContent)
   if size != -1:
-    return token.genHTMLBlockToken(htmlContent, start, size)
+    return (
+      token: Token(
+        type: HTMLBlockToken,
+        doc: htmlContent,
+        htmlBlockVal: ""
+      ),
+      pos: start+size
+    )
 
-  size = parseHTMLBlockContent(
-    token.doc[start..<token.doc.len],
-    HTML_PROCESSING_INSTRUCTION_START,
-    HTML_PROCESSING_INSTRUCTION_END,
-    htmlContent
-  )
+  size = doc.since(start).parseHTMLBlockContent(
+    HTML_COMMENT_START, HTML_COMMENT_END, htmlContent)
   if size != -1:
-    return token.genHTMLBlockToken(htmlContent, start, size)
+    return (
+      token: Token(
+        type: HTMLBlockToken,
+        doc: htmlContent,
+        htmlBlockVal: ""
+      ),
+      pos: start+size
+    )
 
-  size = parseHTMLBlockContent(
-    token.doc[start..<token.doc.len],
-    HTML_DECLARATION_START,
-    HTML_DECLARATION_END,
-    htmlContent
-  )
+  size = doc.since(start).parseHTMLBlockContent(
+    HTML_PROCESSING_INSTRUCTION_START, HTML_PROCESSING_INSTRUCTION_END, htmlContent)
   if size != -1:
-    return token.genHTMLBlockToken(htmlContent, start, size)
+    return (
+      token: Token(
+        type: HTMLBlockToken,
+        doc: htmlContent,
+        htmlBlockVal: ""
+      ),
+      pos: start+size
+    )
 
-  size = parseHTMLBlockContent(
-    token.doc[start..<token.doc.len],
-    HTML_CDATA_START,
-    HTML_CDATA_END,
-    htmlContent
-  )
+  size = doc.since(start).parseHTMLBlockContent(
+    HTML_DECLARATION_START, HTML_DECLARATION_END, htmlContent)
   if size != -1:
-    return token.genHTMLBlockToken(htmlContent, start, size)
+    return (
+      token: Token(
+        type: HTMLBlockToken,
+        doc: htmlContent,
+        htmlBlockVal: ""
+      ),
+      pos: start+size
+    )
 
-  size = parseHTMLBlockContent(
-    token.doc[start..<token.doc.len],
-    HTML_TAG_START,
-    HTML_TAG_END,
-    htmlContent,
-    ignoreCase=true
-  )
+  size = doc.since(start).parseHTMLBlockContent(
+    HTML_CDATA_START, HTML_CDATA_END, htmlContent)
   if size != -1:
-    return token.genHTMLBlockToken(htmlContent, start, size)
+    return (
+      token: Token(
+        type: HTMLBlockToken,
+        doc: htmlContent,
+        htmlBlockVal: ""
+      ),
+      pos: start+size
+    )
 
-  size = parseHTMLBlockContent(
-    token.doc[start..<token.doc.len],
-    HTML_OPEN_CLOSE_TAG_START,
-    HTML_OPEN_CLOSE_TAG_END,
-    htmlContent
-  )
+  size = doc.since(start).parseHTMLBlockContent(
+    HTML_TAG_START, HTML_TAG_END, htmlContent)
   if size != -1:
-    return token.genHTMLBlockToken(htmlContent, start, size)
+    return (
+      token: Token(
+        type: HTMLBlockToken,
+        doc: htmlContent,
+        htmlBlockVal: ""
+      ),
+      pos: start+size
+    )
 
-  return -1
+  size = doc.since(start).parseHTMLBlockContent(
+    HTML_OPEN_CLOSE_TAG_START, HTML_OPEN_CLOSE_TAG_END, htmlContent)
+  if size != -1:
+    return (
+      token: Token(
+        type: HTMLBlockToken,
+        doc: htmlContent,
+        htmlBlockVal: ""
+      ),
+      pos: start+size
+    )
+
+  return (nil, -1)
+
 
 proc parseBlockquote(state: State, token: var Token): int =
   let markerContent = re(r"^(( {0,3}>([^\n]*(?:\n|$)))+)")
@@ -1351,15 +1382,45 @@ proc parseBlock(state: State, token: var Token) =
       pos = -1
       case rule
       of ReferenceToken: pos = parseReference(state, token)
-      of SetextHeadingToken: pos = parseSetextHeading(state, token)
-      of IndentedCodeToken: pos = parseIndentedCode(state, token)
-      of FencedCodeToken: pos = parseFencedCode(state, token)
       of BlockquoteToken: pos = parseBlockquote(state, token)
-      of BlankLineToken: pos = parseBlankLine(state, token)
-      of HTMLBlockToken: pos = parseHTMLBlock(state, token)
       of UnorderedListToken: pos = parseUnorderedList(state, token)
       of OrderedListToken: pos = parseOrderedList(state, token)
-      of TableToken: pos = parseHTMLTable(state, token)
+      of TableToken:
+        res = parseHTMLTable(token.doc, state.pos)
+        pos = res.pos
+        if pos != -1:
+          token.children.append(res.token)
+
+      of FencedCodeToken:
+        res = parseFencedCode(token.doc, state.pos)
+        pos = res.pos
+        if pos != -1:
+          token.children.append(res.token)
+
+      of IndentedCodeToken:
+        res = parseIndentedCode(token.doc, state.pos)
+        pos = res.pos
+        if pos != -1:
+          token.children.append(res.token)
+
+      of HTMLBlockToken:
+        res = parseHTMLBlock(token.doc, state.pos)
+        pos = res.pos
+        if pos != -1:
+          token.children.append(res.token)
+
+      of SetextHeadingToken:
+        res = parseSetextHeading(token.doc, state.pos)
+        pos = res.pos
+        if pos != -1:
+          token.children.append(res.token)
+
+      of BlankLineToken:
+        res = parseBlankLine(token.doc, state.pos)
+        pos = res.pos
+        if pos != -1:
+          token.children.append(res.token)
+
       of ThematicBreakToken:
         res = parseThematicBreak(token.doc, state.pos)
         pos = res.pos

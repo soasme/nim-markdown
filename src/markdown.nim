@@ -39,10 +39,6 @@ type
     url: string ## A link contains destination (the URI that is the link destination).
     title: string ## A link contains a optional title.
 
-  ReferenceLink = object
-    id: string
-    text: string
-
   Image = object
     url: string
     alt: string
@@ -395,39 +391,6 @@ proc reFmt(patterns: varargs[string]): Regex =
     s &= p
   re(s)
 
-proc isLaziness(s: string): bool =
-  # setext
-  if s.contains(re"^ {0,3}(=|-)+ *(?:\n+|$)"): return false
-  # atx
-  if s.contains(re"^  {0,3}(#{1,6})([ \t]+)?(?(2)([^\n]*?))([ \t]+)?(?(4)#*) *(?:\n+|$)"): return false
-  # hr
-  if s.contains(reFmt("^",
-    rThematicBreakLeading,
-    fmt"({rThematicBreakMarker})",
-    fmt"(?:{rThematicBreakSpace}*\1)", "{2,}",
-    fmt"{rThematicBreakSpace}*",
-    "\n?$")):
-    return false
-  # indented code
-  if s.contains(re"^(?: {4}| {0,3}\t)(.*\n?)"):
-    return false
-  # fenced
-  if s.contains(reFmt("^",
-    rFencedCodeLeading,
-    rFencedCodeMarker,
-    rFencedCodePadding,
-    rFencedCodeInfo,
-    "(?:\n|$)")):
-    return false
-  # html block
-  if s.contains(re"^ {0,3}<"):
-    return false
-  # FIXME:
-  if s.contains(re(r"^" & LAZINESS_TEXT)):
-    return false
-
-  return true
-
 proc parseParagraph(doc: string, start: int): ParseResult =
   let size = doc.since(start).matchLen(
     re(r"^((?:[^\n]+\n?)(" & LAZINESS_TEXT & "|\n*))"),
@@ -566,17 +529,6 @@ proc parseUnorderedListItem*(doc: string, start=0, marker: var string, listItemD
     pos += size
 
   return pos - start
-
-proc isLoose(token: Token): bool =
-  for node in token.children.nodes:
-    # any of its constituent list items are separated by blank lines
-    if node.next != nil:
-      if node.value.doc.find(re"\n\n$") != -1:
-        return true
-    # any of its constituent list items are separated by blank lines
-    if node.value.doc.find(re"\n\n(?!$)") != -1:
-      return true
-  return false
 
 proc parseUnorderedList(state: State, token: Token): int =
   let start = state.pos
@@ -851,25 +803,6 @@ proc parseSetextHeading(doc: string, start: int): ParseResult =
     pos: start+size
   )
 
-proc parseSetextHeading(state: State, token: Token): int =
-  let start = state.pos
-  var content = ""
-  var level = 0
-  let size = token.doc[start ..< token.doc.len].parseSetextHeadingContent(content, level)
-  if size == -1:
-    return -1
-  if content.match(re"(?:\s*\n)+"):
-    return -1
-  var heading = Token(
-    type: SetextHeadingToken,
-    doc: content.strip,
-    setextHeadingVal: Heading(
-      level: level
-    )
-  )
-  token.children.append(heading)
-  return start+size
-
 
 proc parseATXHeading(doc: string, start: int): ParseResult =
   var matches: array[5, string]
@@ -1116,15 +1049,6 @@ proc parseHTMLBlockContent*(doc: string, startPattern: string, endPattern: strin
     if line.find(endRe) != -1:
       break
   return pos
-
-proc genHTMLBlockToken(token: Token, htmlContent: string, start: int, size: int): int =
-  var htmlBlock = Token(
-    type: HTMLBlockToken,
-    doc: htmlContent,
-    htmlBlockVal: ""
-  )
-  token.children.append(htmlBlock)
-  return start+size
 
 proc parseHTMLBlock(doc: string, start: int): ParseResult =
   var htmlContent: string
@@ -2348,7 +2272,6 @@ proc parseLinkInlines*(state: State, token: Token, allowNested: bool = false) =
   for index, ch in token.doc[pos .. pos+size]:
     if 1+index < pos:
       continue
-    var ok = false
     var size = -1
     for rule in state.ruleSet.inlineRules:
       if not allowNested and rule == LinkToken:
@@ -2370,7 +2293,6 @@ proc parseLeafBlockInlines(state: State, token: Token) =
   for index, ch in token.doc[0 ..< token.doc.len].strip:
     if index < pos:
       continue
-    var ok = false
     var size = -1
     for rule in state.ruleSet.inlineRules:
       if token.type == rule:
@@ -2439,7 +2361,6 @@ proc renderListItemTightParagraph(state: State, token: Token): string =
 
 proc renderListItemChildren(state: State, token: Token): string =
   var html: string
-  var results: seq[string]
 
   for child_node in token.children.nodes:
     var child_token = child_node.value

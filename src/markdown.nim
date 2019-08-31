@@ -503,11 +503,12 @@ proc parseUnorderedListItem*(doc: string, start=0, marker: var string, listItemD
         pos += size
         break
     elif listItemDoc.find(re"\n{2,}$") == -1:
-      size = doc[pos ..< doc.len].matchLen(re("^(" & LAZINESS_TEXT & ")"), matches=matches)
-      if size != -1:
-        listItemDoc &= matches[0]
+      var line = doc.since(pos).firstLine
+      if line.isContinuationText:
+        listItemDoc &= line
+        size = line.len
       else:
-          break
+        break
     else:
       break
 

@@ -259,6 +259,13 @@ proc getLinkDestination*(doc: string, start: int, slice: var Slice[int]): int;
 proc getLinkTitle*(doc: string, start: int, slice: var Slice[int]): int;
 proc render(state: State, token: Token): string;
 proc isContinuationText*(doc: string): bool;
+proc parseHtmlScript(s: string): tuple[html: string, size: int];
+proc parseHtmlComment*(s: string): tuple[html: string, size: int];
+proc parseProcessingInstruction*(s: string): tuple[html: string, size: int];
+proc parseHtmlCData*(s: string): tuple[html: string, size: int];
+proc parseHtmlDeclaration*(s: string): tuple[html: string, size: int];
+proc parseHtmlTag*(s: string): tuple[html: string, size: int];
+proc parseHtmlOpenCloseTag*(s: string): tuple[html: string, size: int];
 
 proc since*(s: string, i: int, offset: int = -1): string =
   if offset == -1: s[i..<s.len] else: s[i..<i+offset]
@@ -1266,10 +1273,12 @@ proc isContinuationText*(doc: string): bool =
   if setextRes.size != -1: return false
 
   # All HTML blocks can interrupt a paragraph except open&closing tags.
-  var htmlRes = doc.parseHtmlOpenCloseTag()
-  if htmlRes.size != -1: return true
-  var htmlBlockRes = doc.parseHTMLBlock(0)
-  if htmlBlockRes.pos != -1: return false
+  if doc.parseHtmlScript.size != -1: return false
+  if doc.parseHtmlComment.size != -1: return false
+  if doc.parseProcessingInstruction.size != -1: return false
+  if doc.parseHtmlDeclaration.size != -1: return false
+  if doc.parseHtmlCData.size != -1: return false
+  if doc.parseHtmlTag.size != -1: return false
 
   # Indented code cannot interrupt a paragraph.
 

@@ -1217,17 +1217,16 @@ proc parseHTMLBlock(doc: string, start: int): ParseResult =
   return (nil, -1)
 
 
-proc parseBlockquote(state: State, token: var Token): int =
+proc parseBlockquote(doc: string, start: int): ParseResult =
   let markerContent = re(r"^(( {0,3}>([^\n]*(?:\n|$)))+)")
   var matches: array[3, string]
-  let start = state.pos
   var pos = start
   var size = -1
   var document = ""
   var found = false
-  
-  while pos < token.doc.len:
-    size = token.doc[pos ..< token.doc.len].matchLen(markerContent, matches=matches)
+
+  while pos < doc.len:
+    size = doc.since(pos).matchLen(markerContent, matches=matches)
 
     if size == -1:
       break
@@ -1243,11 +1242,11 @@ proc parseBlockquote(state: State, token: var Token): int =
       break
 
     # find the empty line in lazy content
-    if token.doc[start ..< pos].find(re" {4,}[^\n]+\n") != -1 and token.doc[pos ..< token.doc.len].matchLen(re"^\n|^ {4,}|$") > -1:
+    if doc[start ..< pos].find(re" {4,}[^\n]+\n") != -1 and doc.since(pos).matchLen(re"^\n|^ {4,}|$") > -1:
       break
 
     # find the laziness text
-    size = token.doc[pos ..< token.doc.len].matchLen(re("^(" & LAZINESS_TEXT & ")"), matches=matches)
+    size = doc.since(pos).matchLen(re("^(" & LAZINESS_TEXT & ")"), matches=matches)
 
     # blank line in laziness text always breaks the blockquote
     if size == -1:
@@ -1258,19 +1257,20 @@ proc parseBlockquote(state: State, token: var Token): int =
     document &= matches[0]
 
   if not found:
-    return -1
+    return (nil, -1)
 
-  var blockquote = Token(
+  let blockquote = Token(
     type: BlockquoteToken,
     doc: document,
     blockquoteVal: Blockquote(
       doc: document
     )
   )
-  if document.strip != "":
-    parseBlock(state, blockquote)
-  token.children.append(blockquote)
-  return pos
+  return (token: blockquote, pos: pos)
+  #if document.strip != "":
+  #  parseBlock(state, blockquote)
+  #token.children.append(blockquote)
+  #return pos
 
 proc parseReference*(state: State, token: var Token): int =
   var pos = state.pos
@@ -1382,9 +1382,16 @@ proc parseBlock(state: State, token: var Token) =
       pos = -1
       case rule
       of ReferenceToken: pos = parseReference(state, token)
-      of BlockquoteToken: pos = parseBlockquote(state, token)
       of UnorderedListToken: pos = parseUnorderedList(state, token)
       of OrderedListToken: pos = parseOrderedList(state, token)
+      of BlockquoteToken:
+        res = parseBlockquote(token.doc, state.pos)
+        pos = res.pos
+        if pos != -1:
+          if res.token.doc.strip != "":
+            parseBlock(state, res.token)
+          token.children.append(res.token)
+
       of TableToken:
         res = parseHTMLTable(token.doc, state.pos)
         pos = res.pos

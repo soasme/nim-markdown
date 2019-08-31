@@ -471,7 +471,8 @@ proc parseUnorderedListItem*(doc: string, start=0, marker: var string, listItemD
   if doc[start ..< doc.len].matchLen(re(r"^" & THEMATIC_BREAK_RE)) != -1:
     return -1
 
-  let markerRegex = re"^(?P<leading> {0,3})(?P<marker>[*\-+])(?: *$| *\n|(?<indent>(?: +|\t+))([^\n]+(?:\n|$)))"
+  # OL needs to include <empty> as well.
+  let markerRegex = re"^(?P<leading> {0,3})(?P<marker>[*\-+])(?:(?P<empty> *(?:\n|$))|(?<indent>(?: +|\t+))([^\n]+(?:\n|$)))"
   var matches: array[5, string]
   var pos = start
 
@@ -487,16 +488,17 @@ proc parseUnorderedListItem*(doc: string, start=0, marker: var string, listItemD
   if marker != matches[1]:
     return -1
 
-  listItemDoc = matches[3]
+  listItemDoc = matches[2]
+  listItemDoc &= matches[4]
 
   var indent = 1
-  if matches[2].contains(re"\t"):
+  if matches[3].contains(re"\t"):
     indent = 1
-    listItemDoc = " ".repeat(matches[2].len * 4 - 2) & listItemDoc
-  elif matches[2].len > 1 and matches[2].len <= 4:
-    indent = matches[2].len
-  elif matches[2].len > 4: # code block indent is still 1.
-    listItemDoc = matches[2][1 ..< matches[2].len] & listItemDoc
+    listItemDoc = " ".repeat(matches[3].len * 4 - 2) & listItemDoc
+  elif matches[3].len > 1 and matches[3].len <= 4:
+    indent = matches[3].len
+  elif matches[3].len > 4: # code block indent is still 1.
+    listItemDoc = matches[3][1 ..< matches[3].len] & listItemDoc
 
   var padding = marker.len + leading.len + indent
 

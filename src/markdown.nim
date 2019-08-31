@@ -731,16 +731,16 @@ proc parseIndentedCode*(doc: string, start: int): ParseResult =
   )
   return (token: indentedCode, pos: start+size)
 
-proc parseSetextHeadingContent*(doc: string, headingContent: var string, headingLevel: var int): int =
-  var pos = 0
+proc getSetextHeading*(s: string): tuple[level: int, doc: string, size: int] =
+  var size = 0
   var markerLen = 0
   var lineNumber = 0
   var matches: array[1, string]
   let pattern = re(r" {0,3}(=|-)+ *(?:\n+|$)")
-  headingLevel = 0
-  for line in doc.splitLines(keepEol=true):
+  var level = 0
+  for line in s.splitLines(keepEol=true):
     if lineNumber == 0:
-      pos += line.len
+      size += line.len
       lineNumber += 1
       continue
     else:
@@ -748,42 +748,39 @@ proc parseSetextHeadingContent*(doc: string, headingContent: var string, heading
     if line.match(re"^(?:\n|$)"): # empty line: break
       break
     if line.matchLen(re"^ {4,}") != -1: # not a code block anymore.
-      pos += line.len
+      size += line.len
       continue
     if line.match(pattern, matches=matches):
-      pos += line.len
+      size += line.len
       markerLen = line.len
       if matches[0] == "=":
-        headingLevel = 1
+        level = 1
       elif matches[0] == "-":
-        headingLevel = 2
+        level = 2
       break
     else:
-      pos += line.len
-  if headingLevel == 0:
-    -1
-  else:
-    headingContent = doc[0 ..< pos - markerLen]
-    pos
+      size += line.len
+  if level == 0:
+    return (level: 0, doc: "", size: -1)
 
+  let doc = s[0..<size-markerLen].strip
+  if doc.match(re"(?:\s*\n)+"):
+    return (level: 0, doc: "", size: -1)
+
+  return (level: level, doc: doc, size: size)
 
 proc parseSetextHeading(doc: string, start: int): ParseResult =
-  var content: string
-  var level: int
-
-  let size = doc.since(start).parseSetextHeadingContent(content, level)
-  if size == -1: return (nil, -1)
-  if content.match(re"(?:\s*\n)+"): return (nil, -1)
-
+  let res = doc.since(start).getSetextHeading()
+  if res.size == -1: return (nil, -1)
   return (
     token: Token(
       type: SetextHeadingToken,
-      doc: content.strip,
+      doc: res.doc,
       setextHeadingVal: Heading(
-        level: level
+        level: res.level
       )
     ),
-    pos: start+size
+    pos: start+res.size
   )
 
 const ATX_HEADING_RE* = r" {0,3}(#{1,6})([ \t]+)?(?(2)([^\n]*?))([ \t]+)?(?(4)#*) *(?:\n+|$)"

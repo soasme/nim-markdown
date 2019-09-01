@@ -1153,6 +1153,7 @@ proc parseBlockquote(doc: string, start: int): ParseResult =
     if doc[start ..< pos].find(re" {4,}[^\n]+\n") != -1 and doc.since(pos).matchLen(re"^\n|^ {4,}|$") > -1:
       break
 
+    # TODO laziness only applies to when the tip token is a paragraph.
     # find the laziness text
     for line in doc.since(pos).splitLines(keepEol=true):
       if line.isBlank: break

@@ -276,8 +276,6 @@ proc preProcessing(state: State, token: Token) =
   token.doc = token.doc.replace("\u0000", "\uFFFD")
   token.doc = token.doc.replace("&#0;", "&#XFFFD;")
   token.doc = token.doc.replaceInitialTabs
-  # FIXME: it will aggressively clean empty line in code. 98
-  #token.doc = token.doc.replace(re(r"^ +$", {RegexFlag.reMultiLine}), "")
 
 proc isBlank*(doc: string): bool =
   doc.contains(re"^[ \t]*\n?$")
@@ -1376,7 +1374,7 @@ proc parseText(state: State, token: Token, start: int): int =
     doc: token.doc[start ..< start+1],
   )
   token.appendChild(text)
-  result = 1 # FIXME: should match aggresively.
+  result = 1
 
 proc parseSoftLineBreak(state: State, token: Token, start: int): int =
   result = token.doc[start ..< token.doc.len].matchLen(re"^ \n *")

@@ -125,11 +125,6 @@ type
   Token* = ref object
     doc: string
     children: DoublyLinkedList[Token]
-    parent: Token
-    prev: Token
-    next: Token
-    head: Token
-    tail: Token
     case type*: TokenType
     of ParagraphToken: paragraphVal*: Paragraph
     of ATXHeadingToken, SetextHeadingToken: headingVal*: Heading

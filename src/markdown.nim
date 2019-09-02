@@ -163,7 +163,6 @@ type
   ParseResult* = tuple[token: Token, pos: int]
 
   State* = ref object
-    doc: string
     pos: int
     ruleSet: RuleSet
     loose: bool
@@ -2563,7 +2562,6 @@ proc initMarkdownConfig*(
 proc markdown*(doc: string, config: MarkdownConfig = initMarkdownConfig()): string =
   var tokens: DoublyLinkedList[Token]
   var state = State(
-    doc: doc.strip(chars={'\n'}),
     tokens: tokens,
     ruleSet: gfmRuleSet,
     references: initTable[string, Reference](),

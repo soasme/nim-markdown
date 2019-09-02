@@ -129,10 +129,6 @@ type
     of ParagraphToken: paragraphVal*: Paragraph
     of ATXHeadingToken: atxHeadingVal*: Heading
     of SetextHeadingToken: setextHeadingVal*: Heading
-    of ThematicBreakToken: hrVal*: string
-    of BlankLineToken: blankLineVal*: string
-    of HTMLBlockToken: htmlBlockVal*: string
-    of IndentedCodeToken: indentedCodeVal*: string
     of FencedCodeToken: fenceCodeVal*: Fenced
     of BlockquoteToken: blockquoteVal*: Blockquote
     of UnorderedListToken: ulVal*: UnorderedList
@@ -145,20 +141,11 @@ type
     of THeadCellToken: theadCellVal*: HTMLTableCell
     of TBodyCellToken: tbodyCellVal*: HTMLTableCell
     of ReferenceToken: referenceVal*: Reference
-    of TextToken: textVal*: string
-    of EmphasisToken: emphasisVal*: string
     of AutoLinkToken: autoLinkVal*: AutoLink
     of LinkToken: linkVal*: Link
     of EscapeToken: escapeVal*: string
-    of InlineHTMLToken: inlineHTMLVal*: string
     of ImageToken: imageVal*: Image
-    of HTMLEntityToken: htmlEntityVal*: string
-    of CodeSpanToken: codeSpanVal*: string
-    of StrongToken: strongVal*: string
-    of StrikethroughToken: strikethroughVal*: string
-    of SoftLineBreakToken: softLineBreakVal*: string
-    of HardLineBreakToken: hardLineBreakVal*: string
-    of DocumentToken: documentVal*: string
+    else: discard
 
   ParseResult* = tuple[token: Token, pos: int]
 
@@ -824,7 +811,6 @@ proc parseBlankLine*(doc: string, start: int): ParseResult =
     token: Token(
       type: BlankLineToken,
       doc: doc.since(start, offset=size),
-      blankLineVal: doc.since(start, offset=size)
     ),
     pos: start+size
   )
@@ -1396,7 +1382,7 @@ proc parseBlock(state: State, token: Token) =
 proc parseText(state: State, token: Token, start: int): int =
   var text = Token(
     type: TextToken,
-    textVal: token.doc[start ..< start+1],
+    doc: token.doc[start ..< start+1],
   )
   token.children.append(text)
   result = 1 # FIXME: should match aggresively.
@@ -1404,10 +1390,7 @@ proc parseText(state: State, token: Token, start: int): int =
 proc parseSoftLineBreak(state: State, token: Token, start: int): int =
   result = token.doc[start ..< token.doc.len].matchLen(re"^ \n *")
   if result != -1:
-    token.children.append(Token(
-      type: SoftLineBreakToken,
-      softLineBreakVal: "\n"
-    ))
+    token.children.append(Token(type: SoftLineBreakToken))
 
 proc parseAutoLink(state: State, token: Token, start: int): int =
   if token.doc[start] != '<':
@@ -1515,7 +1498,7 @@ proc parseDelimiter(state: State, token: Token, start: int, delimeters: var Doub
 
   var textToken = Token(
     type: TextToken,
-    textVal: token.doc[start ..< start+result]
+    doc: token.doc[start ..< start+result]
   )
   token.children.append(textToken)
   delimeter.token = textToken
@@ -2027,7 +2010,7 @@ proc parseHTMLEntity*(state: State, token: Token, start: int): int =
 
   token.children.append(Token(
     type: HTMLEntityToken,
-    htmlEntityVal: entity
+    doc: entity
   ))
   return size
 
@@ -2058,7 +2041,7 @@ proc parseInlineHTML*(state: State, token: Token, start: int): int =
 
   token.children.append(Token(
     type: InlineHTMLToken,
-    inlineHTMLVal: matches[0]
+    doc: matches[0]
   ))
   return size
 
@@ -2071,10 +2054,7 @@ proc parseHardLineBreak*(state: State, token: Token, start: int): int =
   if size == -1:
     return -1
 
-  token.children.append(Token(
-    type: HardLineBreakToken,
-    hardLineBreakVal: ""
-  ))
+  token.children.append(Token(type: HardLineBreakToken))
   return size
 
 proc parseCodeSpan*(state: State, token: Token, start: int): int =
@@ -2090,7 +2070,7 @@ proc parseCodeSpan*(state: State, token: Token, start: int): int =
       return -1
     token.children.append(Token(
       type: TextToken,
-      textVal: token.doc[start ..< start+size]
+      doc : token.doc[start ..< start+size]
     ))
     return size
 
@@ -2100,7 +2080,7 @@ proc parseCodeSpan*(state: State, token: Token, start: int): int =
 
   token.children.append(Token(
     type: CodeSpanToken,
-    codeSpanVal: codeSpanVal,
+    doc: codeSpanVal,
   ))
   return size
 
@@ -2116,7 +2096,7 @@ proc parseStrikethrough*(state: State, token: Token, start: int): int =
 
   token.children.append(Token(
     type: StrikethroughToken,
-    strikethroughVal: matches[1]
+    doc: matches[1],
   ))
   return size
 
@@ -2209,8 +2189,8 @@ proc processEmphasis*(state: State, token: Token, delimeterStack: var DoublyLink
       # remove used delimiters from stack elts and inlines
       opener.value.num -= useDelims
       closer.value.num -= useDelims
-      openerInlineText.textVal = openerInlineText.textVal[0 .. ^(useDelims+1)]
-      closerInlineText.textVal = closerInlineText.textVal[0 .. ^(useDelims+1)]
+      openerInlineText.doc = openerInlineText.doc[0 .. ^(useDelims+1)]
+      closerInlineText.doc = closerInlineText.doc[0 .. ^(useDelims+1)]
 
       # build contents for new emph element
       # add emph element to tokens
@@ -2295,7 +2275,7 @@ proc parseLinkInlines*(state: State, token: Token, allowNested: bool = false) =
         pos += size
         break
     if size == -1:
-      token.children.append(Token(type: TextToken, textVal: fmt"{ch}"))
+      token.children.append(Token(type: TextToken, doc: fmt"{ch}"))
       pos += 1
 
   processEmphasis(state, token, delimeters)
@@ -2316,7 +2296,7 @@ proc parseLeafBlockInlines(state: State, token: Token) =
         pos += size
         break
     if size == -1:
-      token.children.append(Token(type: TextToken, textVal: fmt"{ch}"))
+      token.children.append(Token(type: TextToken, doc: fmt"{ch}"))
       pos += 1
 
   processEmphasis(state, token, delimeters)
@@ -2528,16 +2508,16 @@ proc renderToken(state: State, token: Token): string =
   of OrderedListToken: state.renderOrderedList(token)
   of BlankLineToken: ""
   of BlockquoteToken: blockquote("\n", state.render(token))
-  of TextToken: token.textVal.escapeAmpersandSeq.escapeTag.escapeQuote
-  of HTMLEntityToken: token.htmlEntityVal.escapeHTMLEntity.escapeQuote
-  of InlineHTMLToken: token.inlineHTMLVal.escapeInvalidHTMLTag
+  of TextToken: token.doc.escapeAmpersandSeq.escapeTag.escapeQuote
+  of HTMLEntityToken: token.doc.escapeHTMLEntity.escapeQuote
+  of InlineHTMLToken: token.doc.escapeInvalidHTMLTag
   of EscapeToken: token.escapeVal.escapeAmpersandSeq.escapeTag.escapeQuote
   of EmphasisToken: em(state.renderInline(token))
   of StrongToken: strong(state.renderInline(token))
-  of StrikethroughToken: del(token.strikethroughVal)
+  of StrikethroughToken: del(token.doc)
   of HardLineBreakToken: br() & "\n"
-  of CodeSpanToken: code(token.codeSpanVal.escapeAmpersandChar.escapeTag.escapeQuote)
-  of SoftLineBreakToken: token.softLineBreakVal
+  of CodeSpanToken: code(token.doc.escapeAmpersandChar.escapeTag.escapeQuote)
+  of SoftLineBreakToken: "\n"
   of DocumentToken: ""
 
 proc render(state: State, token: Token): string =
@@ -2568,8 +2548,7 @@ proc markdown*(doc: string, config: MarkdownConfig = initMarkdownConfig()): stri
   )
   var document = Token(
     type: DocumentToken,
-    doc: doc.strip(chars={'\n'}),
-    documentVal: ""
+    doc: doc.strip(chars={'\n'})
   )
   parse(state, document)
   render(state, document)

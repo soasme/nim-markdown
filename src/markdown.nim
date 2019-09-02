@@ -127,8 +127,7 @@ type
     children: DoublyLinkedList[Token]
     case type*: TokenType
     of ParagraphToken: paragraphVal*: Paragraph
-    of ATXHeadingToken: atxHeadingVal*: Heading
-    of SetextHeadingToken: setextHeadingVal*: Heading
+    of ATXHeadingToken, SetextHeadingToken: headingVal*: Heading
     of FencedCodeToken: fenceCodeVal*: Fenced
     of BlockquoteToken: blockquoteVal*: Blockquote
     of UnorderedListToken: ulVal*: UnorderedList
@@ -768,7 +767,7 @@ proc parseSetextHeading(doc: string, start: int): ParseResult =
     token: Token(
       type: SetextHeadingToken,
       doc: res.doc,
-      setextHeadingVal: Heading(
+      headingVal: Heading(
         level: res.level
       )
     ),
@@ -797,7 +796,7 @@ proc parseATXHeading(doc: string, start: int = 0): ParseResult =
     token: Token(
       type: ATXHeadingToken,
       doc: res.doc,
-      atxHeadingVal: Heading(
+      headingVal: Heading(
         level: res.level
       )
     ),
@@ -2484,13 +2483,15 @@ proc renderAutoLink(state: State, token: Token): string =
     token.autoLinkVal.text.escapeAmpersandSeq
   )
 
+proc renderHeading(state: State, token: Token): string =
+  fmt"<h{token.headingVal.level}>{state.renderInline(token)}</h{token.headingVal.level}>"
+
 proc renderToken(state: State, token: Token): string =
   case token.type
   of ReferenceToken: ""
   of ThematicBreakToken: "<hr />"
   of ParagraphToken: state.renderParagraph(token)
-  of ATXHeadingToken: fmt"<h{token.atxHeadingVal.level}>{state.renderInline(token)}</h{token.atxHeadingVal.level}>"
-  of SetextHeadingToken: fmt"<h{token.setextHeadingVal.level}>{state.renderInline(token)}</h{token.setextHeadingVal.level}>"
+  of ATXHeadingToken, SetextHeadingToken: state.renderHeading(token)
   of IndentedCodeToken: pre(code(token.doc.removeBlankLines.escapeCode.escapeQuote, "\n"))
   of TableToken: state.renderTable(token)
   of THeadToken: state.renderTableHead(token)

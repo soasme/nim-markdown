@@ -125,6 +125,11 @@ type
   Token* = ref object
     doc: string
     children: DoublyLinkedList[Token]
+    parent: Token
+    prev: Token
+    next: Token
+    head: Token
+    tail: Token
     case type*: TokenType
     of ParagraphToken: paragraphVal*: Paragraph
     of ATXHeadingToken, SetextHeadingToken: headingVal*: Heading
@@ -153,6 +158,9 @@ type
     loose: bool
     references: Table[string, Reference]
     tokens: DoublyLinkedList[Token]
+
+proc appendChild*(token: Token, child: Token) =
+  token.children.append(child)
 
 var gfmRuleSet = RuleSet(
   preProcessingRules: @[],
@@ -546,7 +554,7 @@ proc parseUnorderedList(doc: string, start: int): ParseResult =
     )
   )
   for listItem in listItems:
-    ulToken.children.append(listItem)
+    ulToken.appendChild(listItem)
 
   return (token: ulToken, pos: pos)
 
@@ -591,7 +599,7 @@ proc parseOrderedList(doc: string, start: int): ParseResult =
     )
   )
   for listItem in listItems:
-    olToken.children.append(listItem)
+    olToken.appendChild(listItem)
 
   return (token: olToken, pos: pos)
 
@@ -930,8 +938,8 @@ proc parseHTMLTable(doc: string, start: int): ParseResult =
         align: aligns[index],
       )
     )
-    theadRowToken.children.append(thToken)
-  theadToken.children.append(theadRowToken)
+    theadRowToken.appendChild(thToken)
+  theadToken.appendChild(theadRowToken)
 
   pos += lines[0].len + lines[1].len
 
@@ -964,7 +972,7 @@ proc parseHTMLTable(doc: string, start: int): ParseResult =
           align: aligns[index]
         )
       )
-      tableRowToken.children.append(tdToken)
+      tableRowToken.appendChild(tdToken)
     tbodyRows.add(tableRowToken)
     pos += line.len
 
@@ -975,7 +983,7 @@ proc parseHTMLTable(doc: string, start: int): ParseResult =
       aligns: aligns,
     )
   )
-  tableToken.children.append(theadToken)
+  tableToken.appendChild(theadToken)
   if tbodyRows.len > 0:
     var tbodyToken = Token(
       type: TBodyToken,
@@ -983,8 +991,8 @@ proc parseHTMLTable(doc: string, start: int): ParseResult =
       tbodyVal: HTMLTableBody(size: tbodyRows.len)
     )
     for tbodyRowToken in tbodyRows:
-      tbodyToken.children.append(tbodyRowToken)
-    tableToken.children.append(tbodyToken)
+      tbodyToken.appendChild(tbodyRowToken)
+    tableToken.appendChild(tbodyToken)
   return (token: tableToken, pos: pos)
 
 proc parseHTMLBlockContent*(doc: string, startPattern: string, endPattern: string,
@@ -1372,7 +1380,7 @@ proc parseBlock(state: State, token: Token) =
 
       if res.pos != -1:
         pos = res.pos
-        token.children.append(res.token)
+        token.appendChild(res.token)
         break
 
     if pos == -1:
@@ -1383,13 +1391,13 @@ proc parseText(state: State, token: Token, start: int): int =
     type: TextToken,
     doc: token.doc[start ..< start+1],
   )
-  token.children.append(text)
+  token.appendChild(text)
   result = 1 # FIXME: should match aggresively.
 
 proc parseSoftLineBreak(state: State, token: Token, start: int): int =
   result = token.doc[start ..< token.doc.len].matchLen(re"^ \n *")
   if result != -1:
-    token.children.append(Token(type: SoftLineBreakToken))
+    token.appendChild(Token(type: SoftLineBreakToken))
 
 proc parseAutoLink(state: State, token: Token, start: int): int =
   if token.doc[start] != '<':
@@ -1402,7 +1410,7 @@ proc parseAutoLink(state: State, token: Token, start: int): int =
   if result != -1:
     var url = emailMatches[0]
     # TODO: validate and normalize the link
-    token.children.append(Token(
+    token.appendChild(Token(
       type: AutoLinkToken,
       autoLinkVal: AutoLink(
         text: url,
@@ -1418,7 +1426,7 @@ proc parseAutoLink(state: State, token: Token, start: int): int =
   if result != -1:
     var schema = linkMatches[0]
     var uri = linkMatches[1]
-    token.children.append(Token(
+    token.appendChild(Token(
       type: AutoLinkToken,
       autoLinkVal: AutoLink(
         text: fmt"{schema}:{uri}",
@@ -1499,7 +1507,7 @@ proc parseDelimiter(state: State, token: Token, start: int, delimeters: var Doub
     type: TextToken,
     doc: token.doc[start ..< start+result]
   )
-  token.children.append(textToken)
+  token.appendChild(textToken)
   delimeter.token = textToken
   delimeters.append(delimeter)
 
@@ -1725,7 +1733,7 @@ proc parseInlineLink(state: State, token: Token, start: int, labelSlice: Slice[i
     )
   )
   parseLinkInlines(state, link)
-  token.children.append(link)
+  token.appendChild(link)
   result = pos - start + 1
 
 proc parseFullReferenceLink(state: State, token: Token, start: int, textSlice: Slice[int]): int =
@@ -1753,7 +1761,7 @@ proc parseFullReferenceLink(state: State, token: Token, start: int, textSlice: S
     )
   )
   parseLinkInlines(state, link)
-  token.children.append(link)
+  token.appendChild(link)
   return pos - start
 
 proc parseCollapsedReferenceLink(state: State, token: Token, start: int, label: Slice[int]): int =
@@ -1773,7 +1781,7 @@ proc parseCollapsedReferenceLink(state: State, token: Token, start: int, label: 
     )
   )
   parseLinkInlines(state, link)
-  token.children.append(link)
+  token.appendChild(link)
   return label.b - start + 3
 
 proc parseShortcutReferenceLink(state: State, token: Token, start: int, label: Slice[int]): int =
@@ -1793,7 +1801,7 @@ proc parseShortcutReferenceLink(state: State, token: Token, start: int, label: S
     )
   )
   parseLinkInlines(state, link)
-  token.children.append(link)
+  token.appendChild(link)
   return label.b - start + 1
 
 
@@ -1886,7 +1894,7 @@ proc parseInlineImage(state: State, token: Token, start: int, labelSlice: Slice[
   )
 
   parseLinkInlines(state, image, allowNested=true)
-  token.children.append(image)
+  token.appendChild(image)
   result = pos - start + 2
 
 proc parseFullReferenceImage(state: State, token: Token, start: int, altSlice: Slice[int]): int =
@@ -1914,7 +1922,7 @@ proc parseFullReferenceImage(state: State, token: Token, start: int, altSlice: S
     )
   )
   parseLinkInlines(state, image, allowNested=true)
-  token.children.append(image)
+  token.appendChild(image)
   return pos - start + 1
 
 proc parseCollapsedReferenceImage(state: State, token: Token, start: int, label: Slice[int]): int =
@@ -1934,7 +1942,7 @@ proc parseCollapsedReferenceImage(state: State, token: Token, start: int, label:
     )
   )
   parseLinkInlines(state, image)
-  token.children.append(image)
+  token.appendChild(image)
   return label.b - start + 3
 
 proc parseShortcutReferenceImage(state: State, token: Token, start: int, label: Slice[int]): int =
@@ -1954,7 +1962,7 @@ proc parseShortcutReferenceImage(state: State, token: Token, start: int, label: 
     )
   )
   parseLinkInlines(state, image)
-  token.children.append(image)
+  token.appendChild(image)
   return label.b - start + 1
 
 
@@ -2007,7 +2015,7 @@ proc parseHTMLEntity*(state: State, token: Token, start: int): int =
   else:
     entity = escapeHTMLEntity(matches[0])
 
-  token.children.append(Token(
+  token.appendChild(Token(
     type: HTMLEntityToken,
     doc: entity
   ))
@@ -2022,7 +2030,7 @@ proc parseEscape*(state: State, token: Token, start: int): int =
   if size == -1:
     return -1
 
-  token.children.append(Token(
+  token.appendChild(Token(
     type: EscapeToken,
     escapeVal: fmt"{token.doc[start+1]}"
   ))
@@ -2038,7 +2046,7 @@ proc parseInlineHTML*(state: State, token: Token, start: int): int =
   if size == -1:
     return -1
 
-  token.children.append(Token(
+  token.appendChild(Token(
     type: InlineHTMLToken,
     doc: matches[0]
   ))
@@ -2053,7 +2061,7 @@ proc parseHardLineBreak*(state: State, token: Token, start: int): int =
   if size == -1:
     return -1
 
-  token.children.append(Token(type: HardLineBreakToken))
+  token.appendChild(Token(type: HardLineBreakToken))
   return size
 
 proc parseCodeSpan*(state: State, token: Token, start: int): int =
@@ -2067,7 +2075,7 @@ proc parseCodeSpan*(state: State, token: Token, start: int): int =
     size = token.doc[start ..< token.doc.len].matchLen(re"^`+(?!`)")
     if size == -1:
       return -1
-    token.children.append(Token(
+    token.appendChild(Token(
       type: TextToken,
       doc : token.doc[start ..< start+size]
     ))
@@ -2077,7 +2085,7 @@ proc parseCodeSpan*(state: State, token: Token, start: int): int =
   if codeSpanVal[0] == ' ' and codeSpanVal[codeSpanVal.len-1] == ' ' and not codeSpanVal.match(re"^[ ]+$"):
     codeSpanVal = codeSpanVal[1 ..< codeSpanVal.len-1]
 
-  token.children.append(Token(
+  token.appendChild(Token(
     type: CodeSpanToken,
     doc: codeSpanVal,
   ))
@@ -2093,7 +2101,7 @@ proc parseStrikethrough*(state: State, token: Token, start: int): int =
   if size == -1:
     return -1
 
-  token.children.append(Token(
+  token.appendChild(Token(
     type: StrikethroughToken,
     doc: matches[1],
   ))
@@ -2274,7 +2282,7 @@ proc parseLinkInlines*(state: State, token: Token, allowNested: bool = false) =
         pos += size
         break
     if size == -1:
-      token.children.append(Token(type: TextToken, doc: fmt"{ch}"))
+      token.appendChild(Token(type: TextToken, doc: fmt"{ch}"))
       pos += 1
 
   processEmphasis(state, token, delimeters)
@@ -2295,7 +2303,7 @@ proc parseLeafBlockInlines(state: State, token: Token) =
         pos += size
         break
     if size == -1:
-      token.children.append(Token(type: TextToken, doc: fmt"{ch}"))
+      token.appendChild(Token(type: TextToken, doc: fmt"{ch}"))
       pos += 1
 
   processEmphasis(state, token, delimeters)

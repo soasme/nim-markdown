@@ -621,7 +621,6 @@ proc getFence*(doc: string): tuple[indent: int, fence: string, size: int] =
 proc parseCodeContent*(doc: string, indent: int, fence: string): tuple[code: string, size: int]=
   var closeSize = -1
   var pos = 0
-  var indentPrefix = " ".repeat(indent)
   var codeContent = ""
   let closeRe = re(r"(?: {0,3})" & fence & fmt"{fence[0]}" & "{0,}(?:$|\n)")
   for line in doc.splitLines(keepEol=true):
@@ -725,19 +724,12 @@ proc parseIndentedCode*(doc: string, start: int): ParseResult =
   )
 
 proc getSetextHeading*(s: string): tuple[level: int, doc: string, size: int] =
-  var size = 0
+  var size = s.firstLine.len
   var markerLen = 0
-  var lineNumber = 0
   var matches: array[1, string]
   let pattern = re(r" {0,3}(=|-)+ *(?:\n+|$)")
   var level = 0
-  for line in s.splitLines(keepEol=true):
-    if lineNumber == 0:
-      size += line.len
-      lineNumber += 1
-      continue
-    else:
-      lineNumber += 1
+  for line in s.restLines:
     if line.match(re"^(?:\n|$)"): # empty line: break
       break
     if line.matchLen(re"^ {4,}") != -1: # not a code block anymore.
@@ -1049,8 +1041,6 @@ proc parseHtmlTag*(s: string): tuple[html: string, size: int] =
   return s.parseHTMLBlockContent(HTML_TAG_START, HTML_TAG_END)
 
 proc parseHTMLBlock(doc: string, start: int): ParseResult =
-  var htmlContent: string
-  var size: int
   var lit = doc.since(start)
 
   var res = lit.parseHtmlScript()
@@ -1321,13 +1311,6 @@ proc parseParagraph(doc: string, start: int): ParseResult =
     ),
     pos: start+size
   )
-
-proc isContainerBlock(tokenType: TokenType): bool =
-  return {
-    OrderedListToken,
-    UnorderedListToken,
-    BlockquoteToken,
-  }.contains(tokenType)
 
 proc parseBlock(state: State, token: Token) =
   let doc = token.doc
@@ -2358,9 +2341,6 @@ proc renderParagraph(state: State, token: Token): string =
   if token.children.head == nil: ""
   elif token.paragraphVal.loose: p(state.renderInline(token))
   else: state.renderinline(token)
-
-proc renderListItemTightParagraph(state: State, token: Token): string =
-  state.renderInline(token)
 
 proc renderListItemChildren(state: State, token: Token): string =
   var html: string

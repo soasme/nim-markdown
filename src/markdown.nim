@@ -28,6 +28,7 @@ type
 
   Paragraph = object
     doc: string
+    loose: bool
 
   Reference = object
     text: string
@@ -150,7 +151,6 @@ type
 
   State* = ref object
     ruleSet: RuleSet
-    loose: bool
     references: Table[string, Reference]
 
 proc appendChild*(token: Token, child: Token) =
@@ -1315,7 +1315,8 @@ proc parseParagraph(doc: string, start: int): ParseResult =
       type: ParagraphToken,
       doc: doc[start ..< start+size].replace(re"\n\s*", "\n").strip,
       paragraphVal: Paragraph(
-        doc: doc[start ..< start+size]
+        doc: doc[start ..< start+size],
+        loose: true
       )
     ),
     pos: start+size
@@ -1344,6 +1345,9 @@ proc parseBlock(state: State, token: Token) =
           res.token.ulVal.loose = res.token.parseLoose
           for listItem in res.token.children.items:
             listItem.listItemVal.loose = res.token.ulVal.loose
+            for child in listItem.children.items:
+              if child.type == ParagraphToken:
+                child.paragraphVal.loose = res.token.ulVal.loose
       of OrderedListToken:
         res = parseOrderedList(doc, pos)
         if res.pos != -1:
@@ -1353,6 +1357,9 @@ proc parseBlock(state: State, token: Token) =
           res.token.olVal.loose = res.token.parseLoose
           for listItem in res.token.children.items:
             listItem.listItemVal.loose = res.token.olVal.loose
+            for child in listItem.children.items:
+              if child.type == ParagraphToken:
+                child.paragraphVal.loose = res.token.olVal.loose
       of ReferenceToken:
         res = parseReference(doc, pos)
         if res.pos != -1 and not state.references.contains(res.token.referenceVal.text):
@@ -2349,7 +2356,8 @@ proc renderImageAlt*(state: State, token: Token): string =
 
 proc renderParagraph(state: State, token: Token): string =
   if token.children.head == nil: ""
-  else: p(state.renderInline(token))
+  elif token.paragraphVal.loose: p(state.renderInline(token))
+  else: state.renderinline(token)
 
 proc renderListItemTightParagraph(state: State, token: Token): string =
   state.renderInline(token)
@@ -2360,10 +2368,10 @@ proc renderListItemChildren(state: State, token: Token): string =
 
   for child_node in token.children.nodes:
     var child_token = child_node.value
-    if child_token.type == ParagraphToken and not token.listItemVal.loose:
+    if child_token.type == ParagraphToken and not child_token.paragraphVal.loose:
       if child_node.prev != nil:
         result &= "\n"
-      result &= state.renderListItemTightParagraph(child_token)
+      result &= state.renderToken(child_token)
       if child_node.next == nil:
         return result
     else:
@@ -2384,10 +2392,7 @@ proc renderOrderedList(state: State, token: Token): string =
     result = ol("\n", state.render(token))
 
 proc renderListItem(state: State, token: Token): string =
-  let originalLoose = state.loose
-  state.loose = token.listItemVal.loose
   result = li(state.renderListItemChildren(token))
-  state.loose = originalLoose
 
 proc renderTableHeadCell(state: State, token: Token): string =
   let align = token.theadCellVal.align
@@ -2545,7 +2550,6 @@ proc markdown*(doc: string, config: MarkdownConfig = initMarkdownConfig()): stri
   var state = State(
     ruleSet: gfmRuleSet,
     references: initTable[string, Reference](),
-    loose: true
   )
   var document = Token(
     type: DocumentToken,

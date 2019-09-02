@@ -152,7 +152,6 @@ type
     ruleSet: RuleSet
     loose: bool
     references: Table[string, Reference]
-    tokens: DoublyLinkedList[Token]
 
 proc appendChild*(token: Token, child: Token) =
   token.children.append(child)
@@ -2543,9 +2542,7 @@ proc initMarkdownConfig*(
   )
 
 proc markdown*(doc: string, config: MarkdownConfig = initMarkdownConfig()): string =
-  var tokens: DoublyLinkedList[Token]
   var state = State(
-    tokens: tokens,
     ruleSet: gfmRuleSet,
     references: initTable[string, Reference](),
     loose: true

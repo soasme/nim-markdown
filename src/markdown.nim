@@ -163,7 +163,6 @@ type
   ParseResult* = tuple[token: Token, pos: int]
 
   State* = ref object
-    pos: int
     ruleSet: RuleSet
     loose: bool
     references: Table[string, Reference]

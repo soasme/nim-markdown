@@ -123,9 +123,19 @@ type
     HardLineBreakToken,
     DocumentToken
 
+  ChunkKind* = enum
+    BlockChunk,
+    LazyChunk
+
+  Chunk* = ref object
+    kind*: ChunkKind
+    doc*: string
+    pos*: int
+
   Token* = ref object
     doc: string
     children: DoublyLinkedList[Token]
+    chunks: seq[Chunk]
     case type*: TokenType
     of ParagraphToken: paragraphVal*: Paragraph
     of ATXHeadingToken, SetextHeadingToken: headingVal*: Heading
@@ -253,6 +263,9 @@ proc parseHtmlCData*(s: string): tuple[html: string, size: int];
 proc parseHtmlDeclaration*(s: string): tuple[html: string, size: int];
 proc parseHtmlTag*(s: string): tuple[html: string, size: int];
 proc parseHtmlOpenCloseTag*(s: string): tuple[html: string, size: int];
+
+proc `$`*(chunk: Chunk): string =
+  fmt"{chunk.kind}{[chunk.doc]}"
 
 proc since*(s: string, i: int, offset: int = -1): string =
   if offset == -1: s[i..<s.len] else: s[i..<i+offset]
@@ -1105,6 +1118,7 @@ proc parseBlockquote(doc: string, start: int): ParseResult =
   var size = -1
   var document = ""
   var found = false
+  var chunks: seq[Chunk]
 
   while pos < doc.len:
     size = doc.since(pos).matchLen(markerContent, matches=matches)
@@ -1115,7 +1129,9 @@ proc parseBlockquote(doc: string, start: int): ParseResult =
     found = true
     pos += size
     # extract content with blockquote mark
-    document &= matches[0].replacef(re"(^|\n) {0,3}> ?", "$1")
+    var blockChunk = matches[0].replacef(re"(^|\n) {0,3}> ?", "$1")
+    chunks.add(Chunk(kind: BlockChunk, doc: blockChunk, pos: pos))
+    document &= blockChunk
 
     # blank line in non-lazy content always breaks the blockquote.
     if matches[2].strip == "":
@@ -1128,11 +1144,14 @@ proc parseBlockquote(doc: string, start: int): ParseResult =
 
     # TODO laziness only applies to when the tip token is a paragraph.
     # find the laziness text
+    var lazyChunk: string
     for line in doc.since(pos).splitLines(keepEol=true):
       if line.isBlank: break
       if not line.isContinuationText: break
+      lazyChunk &= line
       pos += line.len
       document &= line
+    chunks.add(Chunk(kind: LazyChunk, doc: lazyChunk, pos: pos))
 
   if not found:
     return (nil, -1)
@@ -1140,9 +1159,7 @@ proc parseBlockquote(doc: string, start: int): ParseResult =
   let blockquote = Token(
     type: BlockquoteToken,
     doc: document,
-    blockquoteVal: Blockquote(
-      doc: document
-    )
+    chunks: chunks,
   )
   return (token: blockquote, pos: pos)
 
@@ -1310,6 +1327,40 @@ proc parseParagraph(doc: string, start: int): ParseResult =
     pos: start+size
   )
 
+proc tipToken*(token: Token): Token =
+  var tip: Token = token
+  while tip.children.tail != nil:
+    tip = tip.children.tail.value
+  return tip
+
+proc parseContainerBlock(state: State, token: Token): ParseResult =
+  #var doc: string
+  #for chunk in token.chunks:
+  #  doc &= chunk.doc
+  #parseBlock(state, token)
+  var chunks: seq[Chunk]
+  var pos: int
+  for chunk in token.chunks:
+    chunks.add(chunk)
+    pos = chunk.pos
+    if chunk.kind == BlockChunk:
+      token.doc = chunk.doc
+      var t = Token(type: token.type, doc: chunk.doc)
+      parseBlock(state, t)
+      var p = t.children.head
+      if p != nil and p.value.type == ParagraphToken and token.tipToken.type == ParagraphToken:
+        token.tipToken.doc &= p.value.doc
+        t.children.remove(p)
+      for child in t.children:
+        token.appendChild(child)
+      if token.tipToken.type != ParagraphToken:
+        break
+    else:
+      if not token.tipToken.doc.endsWith("\n"):
+        token.tipToken.doc &= "\n"
+      token.tipToken.doc &= chunk.doc.strip(chars={' '})
+  return (token, pos)
+
 proc parseBlock(state: State, token: Token) =
   let doc = token.doc
   var pos = 0
@@ -1348,7 +1399,7 @@ proc parseBlock(state: State, token: Token) =
       of BlockquoteToken:
         res = parseBlockquote(doc, pos)
         if res.pos != -1 and res.token.doc.strip != "":
-          parseBlock(state, res.token)
+          res = parseContainerBlock(state, res.token)
       of TableToken: res = parseHTMLTable(doc, pos)
       of FencedCodeToken: res = parseFencedCode(doc, pos)
       of IndentedCodeToken: res = parseIndentedCode(doc, pos)

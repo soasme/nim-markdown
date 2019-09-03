@@ -123,9 +123,19 @@ type
     HardLineBreakToken,
     DocumentToken
 
+  ChunkKind* = enum
+    BlockChunk,
+    LazyChunk
+
+  Chunk* = ref object
+    kind*: ChunkKind
+    doc*: string
+    pos*: int
+
   Token* = ref object
     doc: string
     children: DoublyLinkedList[Token]
+    chunks: seq[Chunk]
     case type*: TokenType
     of ParagraphToken: paragraphVal*: Paragraph
     of ATXHeadingToken, SetextHeadingToken: headingVal*: Heading
@@ -254,6 +264,9 @@ proc parseHtmlDeclaration*(s: string): tuple[html: string, size: int];
 proc parseHtmlTag*(s: string): tuple[html: string, size: int];
 proc parseHtmlOpenCloseTag*(s: string): tuple[html: string, size: int];
 
+proc `$`*(chunk: Chunk): string =
+  fmt"{chunk.kind}{[chunk.doc]}"
+
 proc since*(s: string, i: int, offset: int = -1): string =
   if offset == -1: s[i..<s.len] else: s[i..<i+offset]
 
@@ -276,8 +289,6 @@ proc preProcessing(state: State, token: Token) =
   token.doc = token.doc.replace("\u0000", "\uFFFD")
   token.doc = token.doc.replace("&#0;", "&#XFFFD;")
   token.doc = token.doc.replaceInitialTabs
-  # FIXME: it will aggressively clean empty line in code. 98
-  #token.doc = token.doc.replace(re(r"^ +$", {RegexFlag.reMultiLine}), "")
 
 proc isBlank*(doc: string): bool =
   doc.contains(re"^[ \t]*\n?$")
@@ -621,7 +632,6 @@ proc getFence*(doc: string): tuple[indent: int, fence: string, size: int] =
 proc parseCodeContent*(doc: string, indent: int, fence: string): tuple[code: string, size: int]=
   var closeSize = -1
   var pos = 0
-  var indentPrefix = " ".repeat(indent)
   var codeContent = ""
   let closeRe = re(r"(?: {0,3})" & fence & fmt"{fence[0]}" & "{0,}(?:$|\n)")
   for line in doc.splitLines(keepEol=true):
@@ -725,19 +735,12 @@ proc parseIndentedCode*(doc: string, start: int): ParseResult =
   )
 
 proc getSetextHeading*(s: string): tuple[level: int, doc: string, size: int] =
-  var size = 0
+  var size = s.firstLine.len
   var markerLen = 0
-  var lineNumber = 0
   var matches: array[1, string]
   let pattern = re(r" {0,3}(=|-)+ *(?:\n+|$)")
   var level = 0
-  for line in s.splitLines(keepEol=true):
-    if lineNumber == 0:
-      size += line.len
-      lineNumber += 1
-      continue
-    else:
-      lineNumber += 1
+  for line in s.restLines:
     if line.match(re"^(?:\n|$)"): # empty line: break
       break
     if line.matchLen(re"^ {4,}") != -1: # not a code block anymore.
@@ -1049,8 +1052,6 @@ proc parseHtmlTag*(s: string): tuple[html: string, size: int] =
   return s.parseHTMLBlockContent(HTML_TAG_START, HTML_TAG_END)
 
 proc parseHTMLBlock(doc: string, start: int): ParseResult =
-  var htmlContent: string
-  var size: int
   var lit = doc.since(start)
 
   var res = lit.parseHtmlScript()
@@ -1117,6 +1118,7 @@ proc parseBlockquote(doc: string, start: int): ParseResult =
   var size = -1
   var document = ""
   var found = false
+  var chunks: seq[Chunk]
 
   while pos < doc.len:
     size = doc.since(pos).matchLen(markerContent, matches=matches)
@@ -1127,7 +1129,9 @@ proc parseBlockquote(doc: string, start: int): ParseResult =
     found = true
     pos += size
     # extract content with blockquote mark
-    document &= matches[0].replacef(re"(^|\n) {0,3}> ?", "$1")
+    var blockChunk = matches[0].replacef(re"(^|\n) {0,3}> ?", "$1")
+    chunks.add(Chunk(kind: BlockChunk, doc: blockChunk, pos: pos))
+    document &= blockChunk
 
     # blank line in non-lazy content always breaks the blockquote.
     if matches[2].strip == "":
@@ -1140,11 +1144,14 @@ proc parseBlockquote(doc: string, start: int): ParseResult =
 
     # TODO laziness only applies to when the tip token is a paragraph.
     # find the laziness text
+    var lazyChunk: string
     for line in doc.since(pos).splitLines(keepEol=true):
       if line.isBlank: break
       if not line.isContinuationText: break
+      lazyChunk &= line
       pos += line.len
       document &= line
+    chunks.add(Chunk(kind: LazyChunk, doc: lazyChunk, pos: pos))
 
   if not found:
     return (nil, -1)
@@ -1152,9 +1159,7 @@ proc parseBlockquote(doc: string, start: int): ParseResult =
   let blockquote = Token(
     type: BlockquoteToken,
     doc: document,
-    blockquoteVal: Blockquote(
-      doc: document
-    )
+    chunks: chunks,
   )
   return (token: blockquote, pos: pos)
 
@@ -1322,12 +1327,39 @@ proc parseParagraph(doc: string, start: int): ParseResult =
     pos: start+size
   )
 
-proc isContainerBlock(tokenType: TokenType): bool =
-  return {
-    OrderedListToken,
-    UnorderedListToken,
-    BlockquoteToken,
-  }.contains(tokenType)
+proc tipToken*(token: Token): Token =
+  var tip: Token = token
+  while tip.children.tail != nil:
+    tip = tip.children.tail.value
+  return tip
+
+proc parseContainerBlock(state: State, token: Token): ParseResult =
+  #var doc: string
+  #for chunk in token.chunks:
+  #  doc &= chunk.doc
+  #parseBlock(state, token)
+  var chunks: seq[Chunk]
+  var pos: int
+  for chunk in token.chunks:
+    chunks.add(chunk)
+    pos = chunk.pos
+    if chunk.kind == BlockChunk:
+      token.doc = chunk.doc
+      var t = Token(type: token.type, doc: chunk.doc)
+      parseBlock(state, t)
+      var p = t.children.head
+      if p != nil and p.value.type == ParagraphToken and token.tipToken.type == ParagraphToken:
+        token.tipToken.doc &= p.value.doc
+        t.children.remove(p)
+      for child in t.children:
+        token.appendChild(child)
+      if token.tipToken.type != ParagraphToken:
+        break
+    else:
+      if not token.tipToken.doc.endsWith("\n"):
+        token.tipToken.doc &= "\n"
+      token.tipToken.doc &= chunk.doc.strip(chars={' '})
+  return (token, pos)
 
 proc parseBlock(state: State, token: Token) =
   let doc = token.doc
@@ -1367,7 +1399,7 @@ proc parseBlock(state: State, token: Token) =
       of BlockquoteToken:
         res = parseBlockquote(doc, pos)
         if res.pos != -1 and res.token.doc.strip != "":
-          parseBlock(state, res.token)
+          res = parseContainerBlock(state, res.token)
       of TableToken: res = parseHTMLTable(doc, pos)
       of FencedCodeToken: res = parseFencedCode(doc, pos)
       of IndentedCodeToken: res = parseIndentedCode(doc, pos)
@@ -1393,7 +1425,7 @@ proc parseText(state: State, token: Token, start: int): int =
     doc: token.doc[start ..< start+1],
   )
   token.appendChild(text)
-  result = 1 # FIXME: should match aggresively.
+  result = 1
 
 proc parseSoftLineBreak(state: State, token: Token, start: int): int =
   result = token.doc[start ..< token.doc.len].matchLen(re"^ \n *")
@@ -2358,9 +2390,6 @@ proc renderParagraph(state: State, token: Token): string =
   if token.children.head == nil: ""
   elif token.paragraphVal.loose: p(state.renderInline(token))
   else: state.renderinline(token)
-
-proc renderListItemTightParagraph(state: State, token: Token): string =
-  state.renderInline(token)
 
 proc renderListItemChildren(state: State, token: Token): string =
   var html: string

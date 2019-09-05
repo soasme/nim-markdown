@@ -163,6 +163,7 @@ type
   tThematicBreak* = ref object of tBlock
   tHeading* = ref object of tBlock
   tCodeBlock* = ref object of tBlock
+  tHtmlBlock* = ref object of tBlock
 
   tInline* = ref object of Token
   tText* = ref object of tInline
@@ -1085,49 +1086,49 @@ proc parseHTMLBlock(doc: string, start: int): ParseResult =
   var res = lit.parseHtmlScript()
   if res.size != -1:
     return ParseResult(
-      token: Token(type: HTMLBlockToken, doc: res.html),
+      token: tHtmlBlock(type: HTMLBlockToken, doc: res.html),
       pos: start+res.size
     )
 
   res = lit.parseHtmlComment()
   if res.size != -1:
     return ParseResult(
-      token: Token(type: HTMLBlockToken, doc: res.html),
+      token: tHtmlBlock(type: HTMLBlockToken, doc: res.html),
       pos: start+res.size
     )
 
   res = lit.parseProcessingInstruction()
   if res.size != -1:
     return ParseResult(
-      token: Token(type: HTMLBlockToken, doc: res.html),
+      token: tHtmlBlock(type: HTMLBlockToken, doc: res.html),
       pos: start+res.size
     )
 
   res = lit.parseHtmlDeclaration()
   if res.size != -1:
     return ParseResult(
-      token: Token(type: HTMLBlockToken, doc: res.html),
+      token: tHtmlBlock(type: HTMLBlockToken, doc: res.html),
       pos: start+res.size
     )
 
   res = lit.parseHtmlCData()
   if res.size != -1:
     return ParseResult(
-      token: Token(type: HTMLBlockToken, doc: res.html),
+      token: tHtmlBlock(type: HTMLBlockToken, doc: res.html),
       pos: start+res.size
     )
 
   res = lit.parseHtmlTag()
   if res.size != -1:
     return ParseResult(
-      token: Token(type: HTMLBlockToken, doc: res.html),
+      token: tHtmlBlock(type: HTMLBlockToken, doc: res.html),
       pos: start+res.size
     )
 
   res = lit.parseHtmlOpenCloseTag()
   if res.size != -1:
     return ParseResult(
-      token: Token(type: HTMLBlockToken, doc: res.html),
+      token: tHtmlBlock(type: HTMLBlockToken, doc: res.html),
       pos: start+res.size
     )
 
@@ -2595,7 +2596,7 @@ method `$`*(token: tHeading): string =
   let child = $token.children
   fmt"<h{num}>{child}</h{num}>"
 
-method `$`(token: tCodeBlock): string =
+method `$`*(token: tCodeBlock): string =
   var codeHTML = token.doc.escapeCode.escapeQuote
   if codeHTML != "" and not codeHTML.endsWith("\n"):
     codeHTML &= "\n"
@@ -2606,19 +2607,21 @@ method `$`(token: tCodeBlock): string =
     let lang = fmt"language-{info}"
     pre(code(class=lang, codeHTML))
 
+method `$`*(token: tHtmlBlock): string = token.doc.strip(chars={'\n'})
+
 proc renderToken(state: State, token: Token): string =
   case token.type
+  of ListItemToken: state.renderListItem(token)
+  of UnorderedListToken: state.renderUnorderedList(token)
+  of OrderedListToken: state.renderOrderedList(token)
+  of BlockquoteToken: blockquote("\n", state.render(token))
+
   of TableToken: state.renderTable(token)
   of THeadToken: state.renderTableHead(token)
   of TBodyToken: state.renderTableBody(token)
   of TableRowToken: state.renderTableRow(token)
   of THeadCellToken: state.renderTableHeadCell(token)
   of TBodyCellToken: state.renderTableBodyCell(token)
-  of HTMLBlockToken: token.doc.strip(chars={'\n'})
-  of ListItemToken: state.renderListItem(token)
-  of UnorderedListToken: state.renderUnorderedList(token)
-  of OrderedListToken: state.renderOrderedList(token)
-  of BlockquoteToken: blockquote("\n", state.render(token))
   else: $token
 
 proc render(state: State, token: Token): string =

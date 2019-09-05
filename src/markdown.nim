@@ -569,7 +569,7 @@ proc renderListItemChildren(token: Token): string =
 
   for child_node in token.children.nodes:
     var child_token = child_node.value
-    if child_token.type == ParagraphToken and not child_token.paragraphVal.loose:
+    if child_token of tParagraph and not child_token.paragraphVal.loose:
       if child_node.prev != nil:
         result &= "\n"
       result &= $child_token
@@ -593,9 +593,9 @@ proc render(token: Token): string =
   if result != "": result &= "\n"
 
 proc endsWithBlankLine(token: Token): bool =
-  if token.type == ParagraphToken:
+  if token of tParagraph:
     token.paragraphVal.doc.find(re"\n\n$") != -1
-  elif token.type == ListItemToken:
+  elif token of tLi:
     token.listItemVal.verbatim.find(re"\n\n$") != -1
   else:
     token.doc.find(re"\n\n$") != -1
@@ -1567,12 +1567,12 @@ proc parseContainerBlock(state: State, token: Token): ParseResult =
       var t = Token(type: token.type, doc: chunk.doc)
       parseBlock(state, t)
       var p = t.children.head
-      if p != nil and p.value.type == ParagraphToken and token.tipToken.type == ParagraphToken:
+      if p != nil and p.value of tParagraph and token.tipToken of tParagraph:
         token.tipToken.doc &= p.value.doc
         t.children.remove(p)
       for child in t.children:
         token.appendChild(child)
-      if token.tipToken.type != ParagraphToken:
+      if not (token.tipToken of tParagraph):
         break
     else:
       if not token.tipToken.doc.endsWith("\n"):
@@ -1597,7 +1597,7 @@ proc parseBlock(state: State, token: Token) =
           for listItem in res.token.children.items:
             listItem.listItemVal.loose = res.token.ulVal.loose
             for child in listItem.children.items:
-              if child.type == ParagraphToken:
+              if child of tParagraph:
                 child.paragraphVal.loose = res.token.ulVal.loose
       of OrderedListToken:
         res = parseOrderedList(doc, pos)
@@ -1609,7 +1609,7 @@ proc parseBlock(state: State, token: Token) =
           for listItem in res.token.children.items:
             listItem.listItemVal.loose = res.token.olVal.loose
             for child in listItem.children.items:
-              if child.type == ParagraphToken:
+              if child of tParagraph:
                 child.paragraphVal.loose = res.token.olVal.loose
       of ReferenceToken:
         res = parseReference(doc, pos)
@@ -2514,10 +2514,10 @@ proc parseLinkInlines*(state: State, token: Token, allowNested: bool = false) =
   var delimeters: DoublyLinkedList[Delimiter]
   var pos = 0
   var size = 0
-  if token.type == LinkToken:
+  if token of tLink:
     pos = 1
     size = token.linkVal.text.len - 1
-  elif token.type == ImageToken:
+  elif token of tImage:
     pos = 2
     size = token.imageVal.alt.len
   else:

@@ -31,11 +31,6 @@ type
     title: string
     url: string
 
-  Link = object 
-    text: string ## A link contains link text (the visible text).
-    url: string ## A link contains destination (the URI that is the link destination).
-    title: string ## A link contains a optional title.
-
   Image = object
     url: string
     alt: string
@@ -144,7 +139,6 @@ type
     of TBodyCellToken: tbodyCellVal*: HTMLTableCell
     of ReferenceToken: referenceVal*: Reference
     of AutoLinkToken: autoLinkVal*: AutoLink
-    of LinkToken: linkVal*: Link
     of EscapeToken: escapeVal*: string
     of ImageToken: imageVal*: Image
     else: discard
@@ -157,6 +151,7 @@ type
   tThematicBreak* = ref object of tBlock
   Heading* = ref object of tBlock
     level: int
+
   tCodeBlock* = ref object of tBlock
   tHtmlBlock* = ref object of tBlock
   tBlockquote* = ref object of tBlock
@@ -166,6 +161,7 @@ type
   tTable* = ref object of tBlock
   tTHead* = ref object of tBlock
   tTBody* = ref object of tBlock
+    size: int
   tTableRow* = ref object of tBlock
   tTHeadCell* = ref object of tBlock
   tTBodyCell* = ref object of tBlock
@@ -179,7 +175,10 @@ type
   tEscape* = ref object of tInline
   tInlineHtml* = ref object of tInline
   tHtmlEntity* = ref object of tInline
-  tLink* = ref object of tInline
+  Link* = ref object of tInline
+    text: string ## A link contains link text (the visible text).
+    url: string ## A link contains destination (the URI that is the link destination).
+    title: string ## A link contains a optional title.
   tAutoLink* = ref object of tInline
   tImage* = ref object of tInline
   tEm* = ref object of tInline
@@ -461,9 +460,9 @@ proc toStringSeq(tokens: DoublyLinkedList[Token]): seq[string] =
 method `$`*(tokens: DoublyLinkedList[Token]): string {.base.} =
   tokens.toStringSeq.join("")
 
-method `$`*(token: tLink): string =
-  let href = token.linkVal.url.escapeBackslash.escapeLinkUrl
-  let title = token.linkVal.title.escapeBackslash.escapeHTMLEntity.escapeAmpersandSeq.escapeQuote
+method `$`*(token: Link): string =
+  let href = token.url.escapeBackslash.escapeLinkUrl
+  let title = token.title.escapeBackslash.escapeHTMLEntity.escapeAmpersandSeq.escapeQuote
   if title == "": a(href=href, $token.children)
   else: a(href=href, title=title, $token.children)
 
@@ -473,7 +472,7 @@ method alt*(token: tEm): string = $token.children
 
 method alt*(token: tStrong): string = $token.children
 
-method alt*(token: tLink): string = token.linkVal.text
+method alt*(token: Link): string = token.text
 
 method alt*(token: tImage): string = token.imageval.alt
 
@@ -1175,7 +1174,7 @@ proc parseHTMLTable(doc: string, start: int): ParseResult =
     var tbodyToken = tTBody(
       type: TBodyToken,
       doc: doc[start+lines[0].len+lines[1].len ..< pos],
-      tbodyVal: HTMLTableBody(size: tbodyRows.len)
+      size: tbodyRows.len,
     )
     for tbodyRowToken in tbodyRows:
       tbodyToken.appendChild(tbodyRowToken)
@@ -1965,14 +1964,12 @@ proc parseInlineLink(state: State, token: Token, start: int, labelSlice: Slice[i
     title = token.doc[titleSlice]
   var url = token.doc[destinationSlice]
   var text = token.doc[labelSlice.a+1 ..< labelSlice.b]
-  var link = tLink(
+  var link = Link(
     type: LinkToken,
     doc: token.doc[start .. pos],
-    linkVal: Link(
-      text: text,
-      url: url,
-      title: title,
-    )
+    text: text,
+    url: url,
+    title: title,
   )
   parseLinkInlines(state, link)
   token.appendChild(link)
@@ -1993,14 +1990,12 @@ proc parseFullReferenceLink(state: State, token: Token, start: int, textSlice: S
 
   var text = token.doc[textSlice.a+1 ..< textSlice.b]
   var reference = state.references[label]
-  var link = tLink(
+  var link = Link(
     type: LinkToken,
     doc: token.doc[start ..< pos],
-    linkVal: Link(
-      url: reference.url,
-      title: reference.title,
-      text: text
-    )
+    url: reference.url,
+    title: reference.title,
+    text: text
   )
   parseLinkInlines(state, link)
   token.appendChild(link)
@@ -2013,14 +2008,12 @@ proc parseCollapsedReferenceLink(state: State, token: Token, start: int, label: 
     return -1
 
   var reference = state.references[id]
-  var link = tLink(
+  var link = Link(
     type: LinkToken,
     doc: token.doc[start ..< label.b+1],
-    linkVal: Link(
-      url: reference.url,
-      title: reference.title,
-      text: text
-    )
+    url: reference.url,
+    title: reference.title,
+    text: text
   )
   parseLinkInlines(state, link)
   token.appendChild(link)
@@ -2033,14 +2026,12 @@ proc parseShortcutReferenceLink(state: State, token: Token, start: int, label: S
     return -1
 
   var reference = state.references[id]
-  var link = tLink(
+  var link = Link(
     type: LinkToken,
     doc: token.doc[start ..< label.b+1],
-    linkVal: Link(
-      url: reference.url,
-      title: reference.title,
-      text: text
-    )
+    url: reference.url,
+    title: reference.title,
+    text: text
   )
   parseLinkInlines(state, link)
   token.appendChild(link)
@@ -2503,9 +2494,9 @@ proc parseLinkInlines*(state: State, token: Token, allowNested: bool = false) =
   var delimeters: DoublyLinkedList[Delimiter]
   var pos = 0
   var size = 0
-  if token of tLink:
+  if token of Link:
     pos = 1
-    size = token.linkVal.text.len - 1
+    size = Link(token).text.len - 1
   elif token of tImage:
     pos = 2
     size = token.imageVal.alt.len

@@ -258,6 +258,8 @@ proc parseHtmlDeclaration*(s: string): tuple[html: string, size: int];
 proc parseHtmlTag*(s: string): tuple[html: string, size: int];
 proc parseHtmlOpenCloseTag*(s: string): tuple[html: string, size: int];
 
+proc skipParsing*(): ParseResult = ParseResult(token: nil, pos: -1)
+
 proc `$`*(chunk: Chunk): string =
   fmt"{chunk.kind}{[chunk.doc]}"
 
@@ -1538,50 +1540,48 @@ proc parseBlock(state: State, token: Token) =
     if pos == -1:
       raise newException(MarkdownError, fmt"unknown rule.")
 
-proc parseText(state: State, token: Token, start: int): int =
-  var text = Text(
-    type: TextToken,
-    doc: token.doc[start ..< start+1],
-  )
-  token.appendChild(text)
-  result = 1
+proc parseText(doc: string, start: int): ParseResult =
+  let token = Text(type: TextToken, doc: doc[start ..< start+1])
+  return ParseResult(token: token, pos: start+1)
 
-proc parseSoftLineBreak(state: State, token: Token, start: int): int =
-  result = token.doc[start ..< token.doc.len].matchLen(re"^ \n *")
-  if result != -1:
-    token.appendChild(SoftBreak(type: SoftLineBreakToken))
+proc parseSoftLineBreak(doc: string, start: int): ParseResult =
+  let size = doc.since(start).matchLen(re"^ \n *")
+  if size == -1: return skipParsing()
+  let token = SoftBreak(type: SoftLineBreakToken)
+  return ParseResult(token: token, pos: start+size)
 
-proc parseAutoLink(state: State, token: Token, start: int): int =
-  if token.doc[start] != '<':
-    return -1
+proc parseAutoLink(doc: string, start: int): ParseResult =
+  if doc[start] != '<':
+    return skipParsing()
 
   let EMAIL_RE = r"^<([a-zA-Z0-9.!#$%&'*+\/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*)>"
   var emailMatches: array[1, string]
-  result = token.doc[start ..< token.doc.len].matchLen(re(EMAIL_RE, {RegexFlag.reIgnoreCase}), matches=emailMatches)
+  var size = doc.since(start).matchLen(re(EMAIL_RE, {RegexFlag.reIgnoreCase}), matches=emailMatches)
 
-  if result != -1:
+  if size != -1:
     var url = emailMatches[0]
-    # TODO: validate and normalize the link
-    token.appendChild(AutoLink(
+    let token = AutoLink(
       type: AutoLinkToken,
       text: url,
       url: fmt"mailto:{url}"
-    ))
-    return result
-  
+    )
+    return ParseResult(token: token, pos: start+size)
+
   let LINK_RE = r"^<([a-zA-Z][a-zA-Z0-9+.\-]{1,31}):([^<>\x00-\x20]*)>"
   var linkMatches: array[2, string]
-  result = token.doc[start ..< token.doc.len].matchLen(re(LINK_RE, {RegexFlag.reIgnoreCase}), matches=linkMatches)
+  size = doc.since(start).matchLen(re(LINK_RE, {RegexFlag.reIgnoreCase}), matches=linkMatches)
 
-  if result != -1:
+  if size != -1:
     var schema = linkMatches[0]
     var uri = linkMatches[1]
-    token.appendChild(AutoLink(
+    var token = AutoLink(
       type: AutoLinkToken,
       text: fmt"{schema}:{uri}",
       url: fmt"{schema}:{uri}",
-    ))
-    return result
+    )
+    return ParseResult(token: token, pos: start+size)
+
+  return skipParsing()
 
 proc scanInlineDelimiters*(doc: string, start: int, delimiter: var Delimiter) =
   var charBefore = '\n'
@@ -1631,12 +1631,12 @@ proc scanInlineDelimiters*(doc: string, start: int, delimiter: var Delimiter) =
     delimiter.canOpen = isLeftFlanking
     delimiter.canClose = isRightFlanking
 
-proc parseDelimiter(state: State, token: Token, start: int): int =
-  if token.doc[start] != '*' and token.doc[start] != '_':
-    return -1
+proc parseDelimiter(doc: string, start: int): ParseResult =
+  if not {'*', '_'}.contains(doc[start]):
+    return ParseResult(token: nil, pos: -1)
 
   var delimiter = Delimiter(
-    kind: fmt"{token.doc[start]}",
+    kind: fmt"{doc[start]}",
     num: 0,
     originalNum: 0,
     isActive: true,
@@ -1644,18 +1644,17 @@ proc parseDelimiter(state: State, token: Token, start: int): int =
     canClose: false,
   )
 
-  scanInlineDelimiters(token.doc, start, delimiter)
+  scanInlineDelimiters(doc, start, delimiter)
   if delimiter.num == 0:
-    return -1
+    return ParseResult(token: nil, pos: -1)
 
-  result = delimiter.num
-
-  var textToken = Text(
+  let size = delimiter.num
+  let token = Text(
     type: TextToken,
-    doc: token.doc[start ..< start+result],
+    doc: doc[start ..< start+size],
     delimiter: delimiter
   )
-  token.appendChild(textToken)
+  return ParseResult(token: token, pos: start+size)
 
 proc getLinkDestination*(doc: string, start: int): tuple[slice: Slice[int], size: int] =
   # if start < 1 or doc[start - 1] != '(':
@@ -2127,16 +2126,14 @@ proc parseImage*(state: State, token: Token, start: int): int =
     return parseShortcutReferenceImage(state, token, start, labelSlice)
 
 const ENTITY = r"&(?:#x[a-f0-9]{1,6}|#[0-9]{1,7}|[a-z][a-z0-9]{1,31});"
-proc parseHTMLEntity*(state: State, token: Token, start: int): int =
-  if token.doc[start] != '&':
-    return -1
+proc parseHTMLEntity*(doc: string, start: int): ParseResult =
+  if doc[start] != '&': return skipParsing()
 
   let regex = re(r"^(" & ENTITY & ")", {RegexFlag.reIgnoreCase})
   var matches: array[1, string]
 
-  var size = token.doc[start .. token.doc.len - 1].matchLen(regex, matches)
-  if size == -1:
-    return -1
+  var size = doc.since(start).matchLen(regex, matches)
+  if size == -1: return skipParsing()
 
   var entity: string
   if matches[0] == "&#0;":
@@ -2144,112 +2141,143 @@ proc parseHTMLEntity*(state: State, token: Token, start: int): int =
   else:
     entity = escapeHTMLEntity(matches[0])
 
-  token.appendChild(HtmlEntity(
+  let token = HtmlEntity(
     type: HTMLEntityToken,
     doc: entity
-  ))
-  return size
+  )
+  return ParseResult(token: token, pos: start+size)
 
-proc parseEscape*(state: State, token: Token, start: int): int =
-  if token.doc[start] != '\\':
-    return -1
+proc parseEscape*(doc: string, start: int): ParseResult =
+  if doc[start] != '\\': return skipParsing()
 
   let regex = re"^\\([\\`*{}\[\]()#+\-.!_<>~|""$%&',/:;=?@^])"
-  let size = token.doc[start ..< token.doc.len].matchLen(regex)
-  if size == -1:
-    return -1
+  let size = doc.since(start).matchLen(regex)
+  if size == -1: return skipParsing()
 
-  token.appendChild(Escape(
-    type: EscapeToken,
-    doc: fmt"{token.doc[start+1]}"
-  ))
-  return 2
+  let token = Escape(type: EscapeToken, doc: fmt"{doc[start+1]}")
+  return ParseResult(token: token, pos: start+size)
 
-proc parseInlineHTML*(state: State, token: Token, start: int): int =
-  if token.doc[start] != '<':
-    return -1
+proc parseInlineHTML*(doc: string, start: int): ParseResult =
+  if doc[start] != '<': return skipParsing()
+
   let regex = re("^(" & HTML_TAG & ")", {RegexFlag.reIgnoreCase})
   var matches: array[5, string]
-  var size = token.doc[start ..< token.doc.len].matchLen(regex, matches=matches)
+  var size = doc.since(start).matchLen(regex, matches=matches)
 
-  if size == -1:
-    return -1
+  if size == -1: return skipParsing()
 
-  token.appendChild(InlineHtml(
+  let token = InlineHtml(
     type: InlineHTMLToken,
     doc: matches[0]
-  ))
-  return size
+  )
+  return ParseResult(token: token, pos: start+size)
 
-proc parseHardLineBreak*(state: State, token: Token, start: int): int =
-  if token.doc[start] != ' ' and token.doc[start] != '\\':
-    return -1
+proc parseHardLineBreak*(doc: string, start: int): ParseResult =
+  if not {' ', '\\'}.contains(doc[start]): return skipParsing()
 
-  let size = token.doc[start ..< token.doc.len].matchLen(re"^((?: {2,}\n|\\\n)\s*)")
+  let size = doc.since(start).matchLen(re"^((?: {2,}\n|\\\n)\s*)")
 
-  if size == -1:
-    return -1
+  if size == -1: return skipParsing()
 
-  token.appendChild(HardBreak(type: HardLineBreakToken))
-  return size
+  let token = HardBreak(type: HardLineBreakToken)
+  return ParseResult(token: token, pos: start+size)
 
-proc parseCodeSpan*(state: State, token: Token, start: int): int =
-  if token.doc[start] != '`':
-    return -1
+proc parseCodeSpan*(doc: string, start: int): ParseResult =
+  if doc[start] != '`': return skipParsing()
 
   var matches: array[5, string]
-  var size = token.doc[start ..< token.doc.len].matchLen(re"^((`+)([^`]|[^`][\s\S]*?[^`])\2(?!`))", matches=matches)
+  var size = doc.since(start).matchLen(re"^((`+)([^`]|[^`][\s\S]*?[^`])\2(?!`))", matches=matches)
 
   if size == -1:
-    size = token.doc[start ..< token.doc.len].matchLen(re"^`+(?!`)")
+    size = doc.since(start).matchLen(re"^`+(?!`)")
     if size == -1:
-      return -1
-    token.appendChild(Text(
+      return skipParsing()
+    let token = Text(
       type: TextToken,
-      doc : token.doc[start ..< start+size]
-    ))
-    return size
+      doc : doc[start ..< start+size]
+    )
+    return ParseResult(token: token, pos: start+size)
 
   var codeSpanVal = matches[2].strip(chars={'\n'}).replace(re"[\n]+", " ")
   if codeSpanVal[0] == ' ' and codeSpanVal[codeSpanVal.len-1] == ' ' and not codeSpanVal.match(re"^[ ]+$"):
     codeSpanVal = codeSpanVal[1 ..< codeSpanVal.len-1]
 
-  token.appendChild(CodeSpan(
+  let token = CodeSpan(
     type: CodeSpanToken,
     doc: codeSpanVal,
-  ))
-  return size
+  )
+  return ParseResult(token: token, pos: start+size)
 
-proc parseStrikethrough*(state: State, token: Token, start: int): int =
-  if token.doc[start] != '~':
-    return -1
+proc parseStrikethrough*(doc: string, start: int): ParseResult =
+  if doc[start] != '~': return skipParsing()
 
   var matches: array[5, string]
-  var size = token.doc[start ..< token.doc.len].matchLen(re"^(~~(?=\S)([\s\S]*?\S)~~)", matches=matches)
+  var size = doc.since(start).matchLen(re"^(~~(?=\S)([\s\S]*?\S)~~)", matches=matches)
 
-  if size == -1:
-    return -1
+  if size == -1: return skipParsing()
 
-  token.appendChild(Strickthrough(
+  let token = Strickthrough(
     type: StrikethroughToken,
     doc: matches[1],
-  ))
-  return size
+  )
+  return ParseResult(token: token, pos: start+size)
 
 proc findInlineToken(state: State, token: Token, rule: TokenType, start: int): int =
+  var res: ParseResult
+
   case rule
-  of EmphasisToken: result = parseDelimiter(state, token, start)
-  of AutoLinkToken: result = parseAutoLink(state, token, start)
+  of EmphasisToken:
+    res = token.doc.parseDelimiter(start)
+    if res.pos == -1: return -1
+    token.appendChild(res.token)
+    result = res.pos - start
+  of AutoLinkToken:
+    res = token.doc.parseAutoLink(start)
+    if res.pos == -1: return -1
+    token.appendChild(res.token)
+    result = res.pos - start
+  of HTMLEntityToken:
+    res = token.doc.parseHTMLEntity(start)
+    if res.pos == -1: return -1
+    token.appendChild(res.token)
+    result = res.pos - start
+  of InlineHTMLToken:
+    res = token.doc.parseInlineHTML(start)
+    if res.pos == -1: return -1
+    token.appendChild(res.token)
+    result = res.pos - start
+  of EscapeToken:
+    res = token.doc.parseEscape(start)
+    if res.pos == -1: return -1
+    token.appendChild(res.token)
+    result = res.pos - start
+  of CodeSpanToken:
+    res = token.doc.parseCodeSpan(start)
+    if res.pos == -1: return -1
+    token.appendChild(res.token)
+    result = res.pos - start
+  of StrikethroughToken:
+    res = token.doc.parseStrikethrough(start)
+    if res.pos == -1: return -1
+    token.appendChild(res.token)
+    result = res.pos - start
+  of HardLineBreakToken:
+    res = token.doc.parseHardLineBreak(start)
+    if res.pos == -1: return -1
+    token.appendChild(res.token)
+    result = res.pos - start
+  of SoftLineBreakToken:
+    res = token.doc.parseSoftLineBreak(start)
+    if res.pos == -1: return -1
+    token.appendChild(res.token)
+    result = res.pos - start
+  of TextToken:
+    res = token.doc.parseText(start)
+    if res.pos == -1: return -1
+    token.appendChild(res.token)
+    result = res.pos - start
   of LinkToken: result = parseLink(state, token, start)
   of ImageToken: result = parseImage(state, token, start)
-  of HTMLEntityToken: result = parseHTMLEntity(state, token, start)
-  of InlineHTMLToken: result = parseInlineHTML(state, token, start)
-  of EscapeToken: result = parseEscape(state, token, start)
-  of CodeSpanToken: result = parseCodeSpan(state, token, start)
-  of StrikethroughToken: result = parseStrikethrough(state, token, start)
-  of HardLineBreakToken: result = parseHardLineBreak(state, token, start)
-  of SoftLineBreakToken: result = parseSoftLineBreak(state, token, start)
-  of TextToken: result = parseText(state, token, start)
   else: raise newException(MarkdownError, fmt"{token.type} has no inline rule.")
 
 

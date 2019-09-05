@@ -26,10 +26,6 @@ type
     canOpen: bool
     canClose: bool
 
-  Paragraph = object
-    doc: string
-    loose: bool
-
   Reference = object
     text: string
     title: string
@@ -138,7 +134,6 @@ type
     children: DoublyLinkedList[Token]
     chunks: seq[Chunk]
     case type*: TokenType
-    of ParagraphToken: paragraphVal*: Paragraph
     of ATXHeadingToken, SetextHeadingToken: headingVal*: Heading
     of FencedCodeToken, IndentedCodeToken: codeVal*: Code
     of BlockquoteToken: blockquoteVal*: Blockquote
@@ -160,6 +155,9 @@ type
 
   tBlock* = ref object of Token
   tParagraph* = ref object of tBlock
+    loose: bool
+    trailing: string
+
   tThematicBreak* = ref object of tBlock
   tHeading* = ref object of tBlock
   tCodeBlock* = ref object of tBlock
@@ -502,7 +500,7 @@ method `$`*(token: tThematicBreak): string = hr()
 
 method `$`*(token: tParagraph): string =
   if token.children.head == nil: ""
-  elif token.paragraphVal.loose: p($token.children)
+  elif token.loose: p($token.children)
   else: $token.children
 
 method `$`*(token: tHeading): string =
@@ -569,7 +567,7 @@ proc renderListItemChildren(token: Token): string =
 
   for child_node in token.children.nodes:
     var child_token = child_node.value
-    if child_token of tParagraph and not child_token.paragraphVal.loose:
+    if child_token of tParagraph and not tParagraph(child_token).loose:
       if child_node.prev != nil:
         result &= "\n"
       result &= $child_token
@@ -594,7 +592,7 @@ proc render(token: Token): string =
 
 proc endsWithBlankLine(token: Token): bool =
   if token of tParagraph:
-    token.paragraphVal.doc.find(re"\n\n$") != -1
+    tParagraph(token).trailing.len > 1
   elif token of tLi:
     token.listItemVal.verbatim.find(re"\n\n$") != -1
   else:
@@ -1538,10 +1536,8 @@ proc parseParagraph(doc: string, start: int): ParseResult =
     token: tParagraph(
       type: ParagraphToken,
       doc: doc[start ..< start+size].replace(re"\n\s*", "\n").strip,
-      paragraphVal: Paragraph(
-        doc: doc[start ..< start+size],
-        loose: true
-      )
+      loose: true,
+      trailing: doc[start ..< start+size].findAll(re"\n*$").join(""),
     ),
     pos: start+size
   )
@@ -1598,7 +1594,7 @@ proc parseBlock(state: State, token: Token) =
             listItem.listItemVal.loose = res.token.ulVal.loose
             for child in listItem.children.items:
               if child of tParagraph:
-                child.paragraphVal.loose = res.token.ulVal.loose
+                tParagraph(child).loose = res.token.ulVal.loose
       of OrderedListToken:
         res = parseOrderedList(doc, pos)
         if res.pos != -1:
@@ -1610,7 +1606,7 @@ proc parseBlock(state: State, token: Token) =
             listItem.listItemVal.loose = res.token.olVal.loose
             for child in listItem.children.items:
               if child of tParagraph:
-                child.paragraphVal.loose = res.token.olVal.loose
+                tParagraph(child).loose = res.token.olVal.loose
       of ReferenceToken:
         res = parseReference(doc, pos)
         if res.pos != -1 and not state.references.contains(res.token.referenceVal.text):

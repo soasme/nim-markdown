@@ -46,24 +46,6 @@ type
     marker: string
     verbatim: string
 
-  HTMLTableCell = object
-    align: string
-    i: int
-    j: int
-
-  HTMLTableRow = object
-    th: bool
-    td: bool
-
-  HTMLTable = object
-    aligns: seq[string]
-
-  HTMLTableHead = object
-    size: int
-
-  HTMLTableBody = object
-    size: int
-
   TokenType* {.pure.} = enum
     ParagraphToken,
     ATXHeadingToken,
@@ -118,15 +100,7 @@ type
     of UnorderedListToken: ulVal*: UnorderedList
     of OrderedListToken: olVal*: OrderedList
     of ListItemToken: listItemVal*: ListItem
-    of TableToken: tableVal*: HTMLTable
-    of THeadToken: theadVal: HTMLTableHead
-    of TBodyToken: tbodyVal: HTMLTableBody
-    of TableRowToken: tableRowVal: HTMLTableRow
-    of THeadCellToken: theadCellVal*: HTMLTableCell
-    of TBodyCellToken: tbodyCellVal*: HTMLTableCell
     of ReferenceToken: referenceVal*: Reference
-    of AutoLinkToken: autoLinkVal*: AutoLink
-    of EscapeToken: escapeVal*: string
     else: discard
 
   tBlock* = ref object of Token
@@ -151,7 +125,9 @@ type
     size: int
   tTableRow* = ref object of tBlock
   tTHeadCell* = ref object of tBlock
+    align: string
   tTBodyCell* = ref object of tBlock
+    align: string
 
   Inline* = ref object of Token
   Text* = ref object of Inline
@@ -435,7 +411,7 @@ method `$`*(token: HardBreak): string = br() & "\n"
 method `$`*(token: Strickthrough): string = del(token.doc)
 
 method `$`*(token: Escape): string =
-  token.escapeVal.escapeAmpersandSeq.escapeTag.escapeQuote
+  token.doc.escapeAmpersandSeq.escapeTag.escapeQuote
 
 method `$`*(token: InlineHtml): string =
   token.doc.escapeInvalidHTMLTag
@@ -510,12 +486,12 @@ method `$`*(token: CodeBlock): string =
 method `$`*(token: tHtmlBlock): string = token.doc.strip(chars={'\n'})
 
 method `$`*(token: tTHeadCell): string =
-  let align = token.theadCellVal.align
+  let align = token.align
   if align == "": th($token.children)
   else: fmt("<th align=\"{align}\">{$token.children}</th>")
 
 method `$`*(token: tTBodyCell): string =
-  let align = token.tbodyCellVal.align
+  let align = token.align
   if align == "": td($token.children)
   else: fmt("<td align=\"{align}\">{$token.children}</td>")
 
@@ -1099,22 +1075,16 @@ proc parseHTMLTable(doc: string, start: int): ParseResult =
   var theadToken = tTHead(
     type: THeadToken,
     doc: lines[0],
-    theadVal: HTMLTableHead(size: 1)
   )
   var theadRowToken = tTableRow(
     type: TableRowToken,
     doc: lines[0],
-    tableRowVal: HTMLTableRow(th: true, td: false),
   )
   for index, elem in heads:
     var thToken = tTHeadCell(
       type: THeadCellToken,
       doc: elem.strip,
-      theadCellVal: HTMLTableCell(
-        i: index,
-        j: 0,
-        align: aligns[index],
-      )
+      align: aligns[index],
     )
     theadRowToken.appendChild(thToken)
   theadToken.appendChild(theadRowToken)
@@ -1133,7 +1103,6 @@ proc parseHTMLTable(doc: string, start: int): ParseResult =
     var tableRowToken = tTableRow(
       type: TableRowToken,
       doc: "",
-      tableRowVal: HTMLTableRow(th: false, td: true),
     )
     for index, elem in heads:
       var doc = 
@@ -1144,11 +1113,7 @@ proc parseHTMLTable(doc: string, start: int): ParseResult =
       var tdToken = tTBodyCell(
         type: TBodyCellToken,
         doc: doc.replace(re"\\\|", "|").strip,
-        tbodyCellVal: HTMLTableCell(
-          i: index,
-          j: lineIndex,
-          align: aligns[index]
-        )
+        align: aligns[index],
       )
       tableRowToken.appendChild(tdToken)
     tbodyRows.add(tableRowToken)
@@ -1157,9 +1122,6 @@ proc parseHTMLTable(doc: string, start: int): ParseResult =
   var tableToken = tTable(
     type: TableToken,
     doc: doc[start ..< pos],
-    tableVal: HTMLTable(
-      aligns: aligns,
-    )
   )
   tableToken.appendChild(theadToken)
   if tbodyRows.len > 0:
@@ -2245,7 +2207,7 @@ proc parseEscape*(state: State, token: Token, start: int): int =
 
   token.appendChild(Escape(
     type: EscapeToken,
-    escapeVal: fmt"{token.doc[start+1]}"
+    doc: fmt"{token.doc[start+1]}"
   ))
   return 2
 

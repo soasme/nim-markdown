@@ -258,9 +258,9 @@ proc parseBlock(state: State, token: Token);
 proc parseLeafBlockInlines(state: State, token: Token);
 proc parseLinkInlines*(state: State, token: Token, allowNested: bool = false);
 proc getLinkText*(doc: string, start: int, slice: var Slice[int], allowNested: bool = false): int;
-proc getLinkLabel*(doc: string, start: int, label: var string): int;
-proc getLinkDestination*(doc: string, start: int, slice: var Slice[int]): int;
-proc getLinkTitle*(doc: string, start: int, slice: var Slice[int]): int;
+proc getLinkLabel*(doc: string, start: int): tuple[label: string, size: int];
+proc getLinkDestination*(doc: string, start: int): tuple[slice: Slice[int], size: int];
+proc getLinkTitle*(doc: string, start: int): tuple[slice: Slice[int], size: int];
 proc render(token: Token): string;
 proc isContinuationText*(doc: string): bool;
 proc parseHtmlScript(s: string): tuple[html: string, size: int];
@@ -1015,19 +1015,20 @@ proc parseTableRow*(doc: string): seq[string] =
 
   result.add(doc[lastPos ..< max])
 
-proc parseTableAligns*(doc: string, aligns: var seq[string]): bool =
+proc parseTableAligns*(doc: string): tuple[aligns: seq[string], matched: bool] =
   if not doc.match(re"^ {0,3}[-:|][-:|\s]*(?:\n|$)"):
-    return false
+    return (@[], false)
   var columns = doc.split("|")
+  var aligns: seq[string]
   for index, column in columns:
     var t = column.strip
     if t == "":
       if index == 0 or index == columns.len - 1:
         continue
       else:
-        return false
+        return (@[], false)
     if not t.match(re"^:?-+:?$"):
-      return false
+      return (@[], false)
     if t[0] == ':':
       if t[t.len - 1] == ':':
         aligns.add("center")
@@ -1037,7 +1038,7 @@ proc parseTableAligns*(doc: string, aligns: var seq[string]): bool =
       aligns.add("right")
     else:
       aligns.add("")
-  true
+  return (aligns, true)
 
 proc parseHTMLTable(doc: string, start: int): ParseResult =
   # Algorithm:
@@ -1055,8 +1056,8 @@ proc parseHTMLTable(doc: string, start: int): ParseResult =
   if lines.len < 2:
     return ParseResult(token: nil, pos: -1)
 
-  var aligns: seq[string]
-  if not parseTableAligns(lines[1], aligns):
+  var (aligns, alignsMatched) = lines[1].parseTableAligns
+  if not alignsMatched:
     return ParseResult(token: nil, pos: -1)
 
   if lines[0].matchLen(re"^ {4,}") != -1:
@@ -1322,8 +1323,7 @@ proc parseReference*(doc: string, start: int): ParseResult =
 
   pos += markStart - 1
 
-  var label: string
-  var labelSize = getLinkLabel(doc, pos, label)
+  var (label, labelSize) = getLinkLabel(doc, pos)
 
   # Link should have matching ] for [.
   if labelSize == -1:
@@ -1346,8 +1346,7 @@ proc parseReference*(doc: string, start: int): ParseResult =
     pos += whitespaceLen
 
   # parse destination
-  var destinationSlice: Slice[int]
-  var destinationLen = getLinkDestination(doc, pos, destinationslice)
+  var (destinationSlice, destinationLen) = getLinkDestination(doc, pos)
 
   if destinationLen <= 0:
     return ParseResult(token: nil, pos: -1)
@@ -1368,7 +1367,7 @@ proc parseReference*(doc: string, start: int): ParseResult =
     if not {' ', '\t', '\n'}.contains(doc[pos-1]):
       return ParseResult(token: nil, pos: -1)
 
-    titleLen = getLinkTitle(doc, pos, titleSlice)
+    (titleSlice, titleLen) = getLinkTitle(doc, pos)
     if titleLen >= 0:
       pos += titleLen
       # link title may not contain a blank line
@@ -1695,19 +1694,22 @@ proc parseDelimiter(state: State, token: Token, start: int, delimeters: var Doub
   delimeter.token = textToken
   delimeters.append(delimeter)
 
-proc getLinkDestination*(doc: string, start: int, slice: var Slice[int]): int =
+proc getLinkDestination*(doc: string, start: int): tuple[slice: Slice[int], size: int] =
   # if start < 1 or doc[start - 1] != '(':
   #   raise newException(MarkdownError, fmt"{start} can not be the start of inline link destination.")
 
   # A link destination can be 
   # a sequence of zero or more characters between an opening < and a closing >
   # that contains no line breaks or unescaped < or > characters, or
+  var size = -1
+  var slice: Slice[int]
+
   if doc[start] == '<':
-    result = doc[start ..< doc.len].matchLen(re"^<([^\n<>\\]*)>")
-    if result != -1:
+    size = doc[start ..< doc.len].matchLen(re"^<([^\n<>\\]*)>")
+    if size != -1:
       slice.a = start + 1
-      slice.b = start + result - 2
-    return result
+      slice.b = start + size - 2
+    return (slice, size)
 
   # A link destination can also be
   # a nonempty sequence of characters that does not include ASCII space or control characters, 
@@ -1738,17 +1740,17 @@ proc getLinkDestination*(doc: string, start: int, slice: var Slice[int]): int =
         urlLen -= 1
         break
   if level > 1:
-    return -1
+    return ((0..<0), -1)
   if urlLen == -1:
-     return -1
-  slice = (start ..< start+urlLen)
-  return urlLen
+    return ((0..<0), -1)
+  return ((start ..< start+urlLen), urlLen)
 
-proc getLinkTitle*(doc: string, start: int, slice: var Slice[int]): int =
+proc getLinkTitle*(doc: string, start: int): tuple[slice: Slice[int], size: int] =
+  var slice: Slice[int]
   var marker = doc[start]
   # Titles may be in single quotes, double quotes, or parentheses
   if marker != '"' and marker != '\'' and marker != '(':
-    return -1
+    return ((0..<0), -1)
   if marker == '(':
     marker = ')'
   var isEscaping = false
@@ -1761,8 +1763,8 @@ proc getLinkTitle*(doc: string, start: int, slice: var Slice[int]): int =
       continue
     elif ch == marker:
       slice = (start+1 .. start+i)
-      return i+2
-  return -1
+      return (slice, i+2)
+  return ((0..<0), -1)
 
 proc normalizeLabel*(label: string): string =
   # One label matches another just in case their normalized forms are equal.
@@ -1771,15 +1773,16 @@ proc normalizeLabel*(label: string): string =
   # and collapse consecutive internal whitespace to a single space.
   label.toLower.strip.replace(re"\s+", " ")
 
-proc getLinkLabel*(doc: string, start: int, label: var string): int =
+proc getLinkLabel*(doc: string, start: int): tuple[label: string, size: int] =
+  var isEscaping = false
+  var size = 0
+
   if doc[start] != '[':
     raise newException(MarkdownError, fmt"{doc[start]} cannot be the start of link label.")
 
   if start+1 >= doc.len:
-    return -1
+    return ("", -1)
 
-  var isEscaping = false
-  var size = 0
   for i, ch in doc[start+1 ..< doc.len]:
     size += 1
 
@@ -1794,14 +1797,14 @@ proc getLinkLabel*(doc: string, start: int, label: var string): int =
 
     # Unescaped square bracket characters are not allowed inside the opening and closing square brackets of link labels
     elif ch == '[':
-      return -1
+      return ("", -1)
 
     # A link label can have at most 999 characters inside the square brackets.
     if size > 999:
-      return -1
+      return ("", -1)
 
-  label = doc[start+1 ..< start+size].normalizeLabel
-  return size + 1
+  let label = doc[start+1 ..< start+size].normalizeLabel
+  return (label, size+1)
 
 
 proc getLinkText*(doc: string, start: int, slice: var Slice[int], allowNested: bool = false): int =
@@ -1869,8 +1872,7 @@ proc parseInlineLink(state: State, token: Token, start: int, labelSlice: Slice[i
     pos += whitespaceLen
 
   # parse destination
-  var destinationSlice: Slice[int]
-  var destinationLen = getLinkDestination(token.doc, pos, destinationslice)
+  var (destinationSlice, destinationLen) = getLinkDestination(token.doc, pos)
 
   if destinationLen == -1:
     return -1
@@ -1885,8 +1887,8 @@ proc parseInlineLink(state: State, token: Token, start: int, labelSlice: Slice[i
   # parse title (optional)
   if token.doc[pos] != '(' and token.doc[pos] != '\'' and token.doc[pos] != '"' and token.doc[pos] != ')':
     return -1
-  var titleSlice: Slice[int]
-  var titleLen = getLinkTitle(token.doc, pos, titleSlice)
+
+  var (titleSlice, titleLen) = getLinkTitle(token.doc, pos)
 
   if titleLen >= 0:
     pos += titleLen
@@ -1920,8 +1922,7 @@ proc parseInlineLink(state: State, token: Token, start: int, labelSlice: Slice[i
 
 proc parseFullReferenceLink(state: State, token: Token, start: int, textSlice: Slice[int]): int =
   var pos = textSlice.b + 1
-  var label: string
-  var labelSize = getLinkLabel(token.doc, pos, label)
+  var (label, labelSize) = getLinkLabel(token.doc, pos)
 
   if labelSize == -1:
     return -1
@@ -2022,8 +2023,7 @@ proc parseInlineImage(state: State, token: Token, start: int, labelSlice: Slice[
   pos += whitespaceLen
 
   # parse destination
-  var destinationSlice: Slice[int]
-  var destinationLen = getLinkDestination(token.doc, pos, destinationslice)
+  var (destinationslice, destinationLen) = getLinkDestination(token.doc, pos)
   if destinationLen == -1:
     return -1
 
@@ -2036,8 +2036,8 @@ proc parseInlineImage(state: State, token: Token, start: int, labelSlice: Slice[
   # parse title (optional)
   if token.doc[pos] != '(' and token.doc[pos] != '\'' and token.doc[pos] != '"' and token.doc[pos] != ')':
     return -1
-  var titleSlice: Slice[int]
-  var titleLen = getLinkTitle(token.doc, pos, titleSlice)
+
+  var (titleSlice, titleLen) = getLinkTitle(token.doc, pos)
 
   if titleLen >= 0:
     pos += titleLen
@@ -2073,8 +2073,7 @@ proc parseInlineImage(state: State, token: Token, start: int, labelSlice: Slice[
 
 proc parseFullReferenceImage(state: State, token: Token, start: int, altSlice: Slice[int]): int =
   var pos = altSlice.b + 1
-  var label: string
-  var labelSize = getLinkLabel(token.doc, pos, label)
+  var (label, labelSize) = getLinkLabel(token.doc, pos)
 
   if labelSize == -1:
     return -1

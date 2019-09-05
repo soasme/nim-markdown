@@ -162,6 +162,8 @@ type
   tCodeSpan* = ref object of tInline
   tSoftBreak* = ref object of tInline
   tHardBreak* = ref object of tInline
+  tStrickthrough* = ref object of tInline
+  tEscape* = ref object of tInline
 
   ParseResult* = tuple[token: Token, pos: int]
   Parser = (string, int) -> ParseResult
@@ -2091,7 +2093,7 @@ proc parseEscape*(state: State, token: Token, start: int): int =
   if size == -1:
     return -1
 
-  token.appendChild(Token(
+  token.appendChild(tEscape(
     type: EscapeToken,
     escapeVal: fmt"{token.doc[start+1]}"
   ))
@@ -2162,7 +2164,7 @@ proc parseStrikethrough*(state: State, token: Token, start: int): int =
   if size == -1:
     return -1
 
-  token.appendChild(Token(
+  token.appendChild(tStrickthrough(
     type: StrikethroughToken,
     doc: matches[1],
   ))
@@ -2552,13 +2554,17 @@ proc renderHeading(state: State, token: Token): string =
 
 method `$`(token: Token): string {.base.} = ""
 
-method `$`*(token: tCodeSpan): string = code(
-  token.doc.escapeAmpersandChar.escapeTag.escapeQuote
-)
+method `$`*(token: tCodeSpan): string =
+  code(token.doc.escapeAmpersandChar.escapeTag.escapeQuote)
 
 method `$`*(token: tSoftBreak): string = "\n"
 
 method `$`*(token: tHardBreak): string = br() & "\n"
+
+method `$`*(token: tStrickthrough): string = del(token.doc)
+
+method `$`*(token: tEscape): string =
+  token.escapeVal.escapeAmpersandSeq.escapeTag.escapeQuote
 
 proc renderToken(state: State, token: Token): string =
   case token.type
@@ -2586,10 +2592,8 @@ proc renderToken(state: State, token: Token): string =
   of TextToken: token.doc.escapeAmpersandSeq.escapeTag.escapeQuote
   of HTMLEntityToken: token.doc.escapeHTMLEntity.escapeQuote
   of InlineHTMLToken: token.doc.escapeInvalidHTMLTag
-  of EscapeToken: token.escapeVal.escapeAmpersandSeq.escapeTag.escapeQuote
   of EmphasisToken: em(state.renderInline(token))
   of StrongToken: strong(state.renderInline(token))
-  of StrikethroughToken: del(token.doc)
   else: $token
 
 proc render(state: State, token: Token): string =

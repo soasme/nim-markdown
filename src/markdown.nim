@@ -59,6 +59,7 @@ type
 
   Token* = ref object of RootObj
     doc: string
+    pos: int
     children: DoublyLinkedList[Token]
     chunks: seq[Chunk]
     case type*: TokenType
@@ -1516,28 +1517,37 @@ proc finalizeList*(state: State, token: Token) =
       if child of Paragraph:
         Paragraph(child).loose = loose
 
+method apply*(this: Token, state: State, res: ParseResult): ParseResult {.base.} =
+  res
+
+method apply*(this: Ul, state: State, res: ParseResult): ParseResult =
+  state.finalizeList(res.token)
+  res
+
+method apply*(this: Ol, state: State, res: ParseResult): ParseResult =
+  state.finalizeList(res.token)
+  res
+
+method apply*(this: Blockquote, state: State, res: ParseResult): ParseResult =
+  state.parseContainerBlock(res.token)
+
+method apply*(this: Reference, state: State, res: ParseResult): ParseResult =
+  if not state.references.contains(this.text):
+    state.references[this.text] = this
+  res
+
 proc parseBlock(state: State, token: Token) =
-  let doc = token.doc
-  var pos = 0
   var res: ParseResult
-  while pos < doc.len:
+  while token.pos < token.doc.len:
     for blockParser in state.config.blockParsers:
-      res = blockParser(doc, pos)
+      res = blockParser(token.doc, token.pos)
       if res.pos != -1:
-        ### FIXME: These code should be moved into block-specific finalization procs.
-        if (res.token of Ul) or (res.token of Ol):
-          state.finalizeList(res.token)
-        elif res.token of Blockquote:
-          res = state.parseContainerBlock(res.token)
-        elif res.token of Reference:
-          let reference = Reference(res.token)
-          if not state.references.contains(reference.text):
-            state.references[reference.text] = reference
-        pos = res.pos
+        res = res.token.apply(state, res)
         token.appendChild(res.token)
+        token.pos = res.pos
         break
 
-    if pos == -1:
+    if res.pos == -1:
       raise newException(MarkdownError, fmt"unknown rule.")
 
 proc parseText(doc: string, start: int): ParseResult =

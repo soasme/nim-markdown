@@ -153,28 +153,28 @@ type
   tTHeadCell* = ref object of tBlock
   tTBodyCell* = ref object of tBlock
 
-  tInline* = ref object of Token
-  tText* = ref object of tInline
-  tCodeSpan* = ref object of tInline
-  tSoftBreak* = ref object of tInline
-  tHardBreak* = ref object of tInline
-  tStrickthrough* = ref object of tInline
-  tEscape* = ref object of tInline
-  tInlineHtml* = ref object of tInline
-  tHtmlEntity* = ref object of tInline
-  Link* = ref object of tInline
+  Inline* = ref object of Token
+  Text* = ref object of Inline
+  CodeSpan* = ref object of Inline
+  SoftBreak* = ref object of Inline
+  HardBreak* = ref object of Inline
+  Strickthrough* = ref object of Inline
+  Escape* = ref object of Inline
+  InlineHtml* = ref object of Inline
+  HtmlEntity* = ref object of Inline
+  Link* = ref object of Inline
     text: string ## A link contains link text (the visible text).
     url: string ## A link contains destination (the URI that is the link destination).
     title: string ## A link contains a optional title.
-  AutoLink* = ref object of tInline
+  AutoLink* = ref object of Inline
     text: string
     url: string
-  Image* = ref object of tInline
+  Image* = ref object of Inline
     url: string
     alt: string
     title: string
-  tEm* = ref object of tInline
-  tStrong* = ref object of tInline
+  Em* = ref object of Inline
+  Strong* = ref object of Inline
 
   ParseResult* = ref object
     token: Token
@@ -425,25 +425,25 @@ proc toSeq(tokens: DoublyLinkedList[Token]): seq[Token] =
 
 method `$`(token: Token): string {.base.} = ""
 
-method `$`*(token: tCodeSpan): string =
+method `$`*(token: CodeSpan): string =
   code(token.doc.escapeAmpersandChar.escapeTag.escapeQuote)
 
-method `$`*(token: tSoftBreak): string = "\n"
+method `$`*(token: SoftBreak): string = "\n"
 
-method `$`*(token: tHardBreak): string = br() & "\n"
+method `$`*(token: HardBreak): string = br() & "\n"
 
-method `$`*(token: tStrickthrough): string = del(token.doc)
+method `$`*(token: Strickthrough): string = del(token.doc)
 
-method `$`*(token: tEscape): string =
+method `$`*(token: Escape): string =
   token.escapeVal.escapeAmpersandSeq.escapeTag.escapeQuote
 
-method `$`*(token: tInlineHtml): string =
+method `$`*(token: InlineHtml): string =
   token.doc.escapeInvalidHTMLTag
 
-method `$`*(token: tHtmlEntity): string =
+method `$`*(token: HtmlEntity): string =
   token.doc.escapeHTMLEntity.escapeQuote
 
-method `$`*(token: tText): string =
+method `$`*(token: Text): string =
   token.doc.escapeAmpersandSeq.escapeTag.escapeQuote
 
 proc toStringSeq(tokens: DoublyLinkedList[Token]): seq[string] =
@@ -465,9 +465,9 @@ method `$`*(token: Link): string =
 
 method alt*(token: Token): string {.base.} = $token
 
-method alt*(token: tEm): string = $token.children
+method alt*(token: Em): string = $token.children
 
-method alt*(token: tStrong): string = $token.children
+method alt*(token: Strong): string = $token.children
 
 method alt*(token: Link): string = token.text
 
@@ -480,9 +480,9 @@ method `$`*(token: Image): string =
   if title == "": img(src=src, alt=alt)
   else: img(src=src, alt=alt, title=title)
 
-method `$`*(token: tEm): string = em($token.children)
+method `$`*(token: Em): string = em($token.children)
 
-method `$`*(token: tStrong): string = strong($token.children)
+method `$`*(token: Strong): string = strong($token.children)
 
 method `$`*(token: tThematicBreak): string = hr()
 
@@ -1620,7 +1620,7 @@ proc parseBlock(state: State, token: Token) =
       raise newException(MarkdownError, fmt"unknown rule.")
 
 proc parseText(state: State, token: Token, start: int): int =
-  var text = tText(
+  var text = Text(
     type: TextToken,
     doc: token.doc[start ..< start+1],
   )
@@ -1630,7 +1630,7 @@ proc parseText(state: State, token: Token, start: int): int =
 proc parseSoftLineBreak(state: State, token: Token, start: int): int =
   result = token.doc[start ..< token.doc.len].matchLen(re"^ \n *")
   if result != -1:
-    token.appendChild(tSoftBreak(type: SoftLineBreakToken))
+    token.appendChild(SoftBreak(type: SoftLineBreakToken))
 
 proc parseAutoLink(state: State, token: Token, start: int): int =
   if token.doc[start] != '<':
@@ -1732,7 +1732,7 @@ proc parseDelimiter(state: State, token: Token, start: int, delimeters: var Doub
 
   result = delimeter.num
 
-  var textToken = tText(
+  var textToken = Text(
     type: TextToken,
     doc: token.doc[start ..< start+result]
   )
@@ -2228,7 +2228,7 @@ proc parseHTMLEntity*(state: State, token: Token, start: int): int =
   else:
     entity = escapeHTMLEntity(matches[0])
 
-  token.appendChild(tHtmlEntity(
+  token.appendChild(HtmlEntity(
     type: HTMLEntityToken,
     doc: entity
   ))
@@ -2243,7 +2243,7 @@ proc parseEscape*(state: State, token: Token, start: int): int =
   if size == -1:
     return -1
 
-  token.appendChild(tEscape(
+  token.appendChild(Escape(
     type: EscapeToken,
     escapeVal: fmt"{token.doc[start+1]}"
   ))
@@ -2259,7 +2259,7 @@ proc parseInlineHTML*(state: State, token: Token, start: int): int =
   if size == -1:
     return -1
 
-  token.appendChild(tInlineHtml(
+  token.appendChild(InlineHtml(
     type: InlineHTMLToken,
     doc: matches[0]
   ))
@@ -2274,7 +2274,7 @@ proc parseHardLineBreak*(state: State, token: Token, start: int): int =
   if size == -1:
     return -1
 
-  token.appendChild(tHardBreak(type: HardLineBreakToken))
+  token.appendChild(HardBreak(type: HardLineBreakToken))
   return size
 
 proc parseCodeSpan*(state: State, token: Token, start: int): int =
@@ -2288,7 +2288,7 @@ proc parseCodeSpan*(state: State, token: Token, start: int): int =
     size = token.doc[start ..< token.doc.len].matchLen(re"^`+(?!`)")
     if size == -1:
       return -1
-    token.appendChild(tText(
+    token.appendChild(Text(
       type: TextToken,
       doc : token.doc[start ..< start+size]
     ))
@@ -2298,7 +2298,7 @@ proc parseCodeSpan*(state: State, token: Token, start: int): int =
   if codeSpanVal[0] == ' ' and codeSpanVal[codeSpanVal.len-1] == ' ' and not codeSpanVal.match(re"^[ ]+$"):
     codeSpanVal = codeSpanVal[1 ..< codeSpanVal.len-1]
 
-  token.appendChild(tCodeSpan(
+  token.appendChild(CodeSpan(
     type: CodeSpanToken,
     doc: codeSpanVal,
   ))
@@ -2314,7 +2314,7 @@ proc parseStrikethrough*(state: State, token: Token, start: int): int =
   if size == -1:
     return -1
 
-  token.appendChild(tStrickthrough(
+  token.appendChild(Strickthrough(
     type: StrikethroughToken,
     doc: matches[1],
   ))
@@ -2416,9 +2416,9 @@ proc processEmphasis*(state: State, token: Token, delimeterStack: var DoublyLink
       # add emph element to tokens
       var emToken: Token
       if useDelims == 2:
-        emToken = tStrong(type: StrongToken)
+        emToken = Strong(type: StrongToken)
       else:
-        emToken = tEm(type: EmphasisToken)
+        emToken = Em(type: EmphasisToken)
 
       var emNode = newDoublyLinkedNode(emToken)
       for childNode in token.children.nodes:
@@ -2495,7 +2495,7 @@ proc parseLinkInlines*(state: State, token: Token, allowNested: bool = false) =
         pos += size
         break
     if size == -1:
-      token.appendChild(tText(type: TextToken, doc: fmt"{ch}"))
+      token.appendChild(Text(type: TextToken, doc: fmt"{ch}"))
       pos += 1
 
   processEmphasis(state, token, delimeters)
@@ -2516,7 +2516,7 @@ proc parseLeafBlockInlines(state: State, token: Token) =
         pos += size
         break
     if size == -1:
-      token.appendChild(tText(type: TextToken, doc: fmt"{ch}"))
+      token.appendChild(Text(type: TextToken, doc: fmt"{ch}"))
       pos += 1
 
   processEmphasis(state, token, delimeters)

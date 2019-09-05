@@ -159,6 +159,7 @@ type
     else: discard
 
   tInline* = ref object of Token
+  tText* = ref object of tInline
   tCodeSpan* = ref object of tInline
   tSoftBreak* = ref object of tInline
   tHardBreak* = ref object of tInline
@@ -1452,7 +1453,7 @@ proc parseBlock(state: State, token: Token) =
       raise newException(MarkdownError, fmt"unknown rule.")
 
 proc parseText(state: State, token: Token, start: int): int =
-  var text = Token(
+  var text = tText(
     type: TextToken,
     doc: token.doc[start ..< start+1],
   )
@@ -1568,7 +1569,7 @@ proc parseDelimiter(state: State, token: Token, start: int, delimeters: var Doub
 
   result = delimeter.num
 
-  var textToken = Token(
+  var textToken = tText(
     type: TextToken,
     doc: token.doc[start ..< start+result]
   )
@@ -2140,7 +2141,7 @@ proc parseCodeSpan*(state: State, token: Token, start: int): int =
     size = token.doc[start ..< token.doc.len].matchLen(re"^`+(?!`)")
     if size == -1:
       return -1
-    token.appendChild(Token(
+    token.appendChild(tText(
       type: TextToken,
       doc : token.doc[start ..< start+size]
     ))
@@ -2347,7 +2348,7 @@ proc parseLinkInlines*(state: State, token: Token, allowNested: bool = false) =
         pos += size
         break
     if size == -1:
-      token.appendChild(Token(type: TextToken, doc: fmt"{ch}"))
+      token.appendChild(tText(type: TextToken, doc: fmt"{ch}"))
       pos += 1
 
   processEmphasis(state, token, delimeters)
@@ -2368,7 +2369,7 @@ proc parseLeafBlockInlines(state: State, token: Token) =
         pos += size
         break
     if size == -1:
-      token.appendChild(Token(type: TextToken, doc: fmt"{ch}"))
+      token.appendChild(tText(type: TextToken, doc: fmt"{ch}"))
       pos += 1
 
   processEmphasis(state, token, delimeters)
@@ -2574,6 +2575,8 @@ method `$`*(token: tInlineHtml): string =
 method `$`*(token: tHtmlEntity): string =
   token.doc.escapeHTMLEntity.escapeQuote
 
+method `$`*(token: tText): string =
+  token.doc.escapeAmpersandSeq.escapeTag.escapeQuote
 proc renderToken(state: State, token: Token): string =
   case token.type
   of ReferenceToken: ""
@@ -2597,7 +2600,6 @@ proc renderToken(state: State, token: Token): string =
   of OrderedListToken: state.renderOrderedList(token)
   of BlankLineToken: ""
   of BlockquoteToken: blockquote("\n", state.render(token))
-  of TextToken: token.doc.escapeAmpersandSeq.escapeTag.escapeQuote
   of EmphasisToken: em(state.renderInline(token))
   of StrongToken: strong(state.renderInline(token))
   else: $token

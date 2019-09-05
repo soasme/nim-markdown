@@ -292,7 +292,7 @@ proc getLinkText*(doc: string, start: int, slice: var Slice[int], allowNested: b
 proc getLinkLabel*(doc: string, start: int, label: var string): int;
 proc getLinkDestination*(doc: string, start: int, slice: var Slice[int]): int;
 proc getLinkTitle*(doc: string, start: int, slice: var Slice[int]): int;
-proc render(state: State, token: Token): string;
+proc render(token: Token): string;
 proc isContinuationText*(doc: string): bool;
 proc parseHtmlScript(s: string): tuple[html: string, size: int];
 proc parseHtmlComment*(s: string): tuple[html: string, size: int];
@@ -431,6 +431,166 @@ proc reFmt*(patterns: varargs[string]): Regex =
   for p in patterns:
     s &= p
   re(s)
+
+proc toSeq(tokens: DoublyLinkedList[Token]): seq[Token] =
+  result = newSeq[Token]()
+  for token in tokens.items:
+    result.add(token)
+
+method `$`(token: Token): string {.base.} = ""
+
+method `$`*(token: tCodeSpan): string =
+  code(token.doc.escapeAmpersandChar.escapeTag.escapeQuote)
+
+method `$`*(token: tSoftBreak): string = "\n"
+
+method `$`*(token: tHardBreak): string = br() & "\n"
+
+method `$`*(token: tStrickthrough): string = del(token.doc)
+
+method `$`*(token: tEscape): string =
+  token.escapeVal.escapeAmpersandSeq.escapeTag.escapeQuote
+
+method `$`*(token: tInlineHtml): string =
+  token.doc.escapeInvalidHTMLTag
+
+method `$`*(token: tHtmlEntity): string =
+  token.doc.escapeHTMLEntity.escapeQuote
+
+method `$`*(token: tText): string =
+  token.doc.escapeAmpersandSeq.escapeTag.escapeQuote
+
+proc toStringSeq(tokens: DoublyLinkedList[Token]): seq[string] =
+  tokens.toSeq.map((t: Token) => $t)
+
+method `$`*(tokens: DoublyLinkedList[Token]): string {.base.} =
+  tokens.toStringSeq.join("")
+
+method `$`*(token: tLink): string =
+  let href = token.linkVal.url.escapeBackslash.escapeLinkUrl
+  let title = token.linkVal.title.escapeBackslash.escapeHTMLEntity.escapeAmpersandSeq.escapeQuote
+  if title == "": a(href=href, $token.children)
+  else: a(href=href, title=title, $token.children)
+
+method alt*(token: Token): string {.base.} = $token
+
+method alt*(token: tEm): string = $token.children
+
+method alt*(token: tStrong): string = $token.children
+
+method alt*(token: tLink): string = token.linkVal.text
+
+method alt*(token: tImage): string = token.imageval.alt
+
+method `$`*(token: tImage): string =
+  let src = token.imageVal.url.escapeBackslash.escapeLinkUrl
+  let title=token.imageVal.title.escapeBackslash.escapeHTMLEntity.escapeAmpersandSeq.escapeQuote
+  let alt = token.children.toSeq.map((t: Token) => t.alt).join("")
+  if title == "": img(src=src, alt=alt)
+  else: img(src=src, alt=alt, title=title)
+
+method `$`*(token: tAutoLink): string =
+  let href = token.autoLinkVal.url.escapeLinkUrl.escapeAmpersandSeq
+  let text = token.autoLinkVal.text.escapeAmpersandSeq
+  a(href=href, text)
+
+method `$`*(token: tEm): string = em($token.children)
+
+method `$`*(token: tStrong): string = strong($token.children)
+
+method `$`*(token: tThematicBreak): string = hr()
+
+method `$`*(token: tParagraph): string =
+  if token.children.head == nil: ""
+  elif token.paragraphVal.loose: p($token.children)
+  else: $token.children
+
+method `$`*(token: tHeading): string =
+  let num = fmt"{token.headingVal.level}"
+  let child = $token.children
+  fmt"<h{num}>{child}</h{num}>"
+
+method `$`*(token: tCodeBlock): string =
+  var codeHTML = token.doc.escapeCode.escapeQuote
+  if codeHTML != "" and not codeHTML.endsWith("\n"):
+    codeHTML &= "\n"
+  if token.codeVal.info == "":
+    pre(code(codeHTML))
+  else:
+    let info = token.codeVal.info.escapeBackslash.escapeHTMLEntity
+    let lang = fmt"language-{info}"
+    pre(code(class=lang, codeHTML))
+
+method `$`*(token: tHtmlBlock): string = token.doc.strip(chars={'\n'})
+
+method `$`*(token: tTHeadCell): string =
+  let align = token.theadCellVal.align
+  if align == "": th($token.children)
+  else: fmt("<th align=\"{align}\">{$token.children}</th>")
+
+method `$`*(token: tTBodyCell): string =
+  let align = token.tbodyCellVal.align
+  if align == "": td($token.children)
+  else: fmt("<td align=\"{align}\">{$token.children}</td>")
+
+method `$`*(token: tTableRow): string =
+  let cells = token.children.toStringSeq.join("\n")
+  tr("\n", cells , "\n")
+
+method `$`*(token: tTBody): string =
+  let rows = token.children.toStringSeq.join("\n")
+  tbody("\n", rows)
+
+method `$`*(token: tTHead): string =
+  let tr = $token.children.head.value # table>thead>tr
+  thead("\n", tr, "\n")
+
+method `$`*(token: tTable): string =
+  let thead = $token.children.head.value # table>thead
+  var tbody = $token.children.tail.value
+  if tbody != "": tbody = "\n" & tbody.strip
+  table("\n", thead, tbody)
+
+method `$`*(token: tUl): string =
+  ul("\n", render(token))
+
+method `$`*(token: tOl): string =
+  if token.olVal.start != 1:
+    ol(start=fmt"{token.olVal.start}", "\n", render(token))
+  else:
+    ol("\n", render(token))
+
+method `$`*(token: tBlockquote): string =
+  blockquote("\n", render(token))
+
+proc renderListItemChildren(token: Token): string =
+  var html: string
+  if token.children.head == nil: return ""
+
+  for child_node in token.children.nodes:
+    var child_token = child_node.value
+    if child_token.type == ParagraphToken and not child_token.paragraphVal.loose:
+      if child_node.prev != nil:
+        result &= "\n"
+      result &= $child_token
+      if child_node.next == nil:
+        return result
+    else:
+      html = $child_token
+      if html != "":
+        result &= "\n"
+        result &= html
+  if token.listItemVal.loose or token.children.tail != nil:
+    result &= "\n"
+
+method `$`*(token: tLi): string =
+  li(renderListItemChildren(token))
+
+proc render(token: Token): string =
+  var htmls = token.children.toStringSeq
+  htmls.keepIf((s: string) => s != "")
+  result = htmls.join("\n")
+  if result != "": result &= "\n"
 
 proc endsWithBlankLine(token: Token): bool =
   if token.type == ParagraphToken:
@@ -2421,198 +2581,6 @@ proc parse(state: State, token: Token) =
   parseInline(state, token)
   postProcessing(state, token)
 
-proc toSeq(tokens: DoublyLinkedList[Token]): seq[Token] =
-  result = newSeq[Token]()
-  for token in tokens.items:
-    result.add(token)
-
-proc renderToken(state: State, token: Token): string;
-proc renderInline(state: State, token: Token): string =
-  var s = state
-  token.children.toSeq.map(
-    proc(x: Token): string =
-      result = s.renderToken(x)
-  ).join("")
-
-proc renderImageAlt*(state: State, token: Token): string =
-  var s = state
-  token.children.toSeq.map(
-    proc(x: Token): string =
-      case x.type
-      of LinkToken: x.linkVal.text
-      of ImageToken: x.imageVal.alt
-      of EmphasisToken: s.renderInline(x)
-      of StrongToken: s.renderInline(x)
-      else: s.renderToken(x)
-  ).join("")
-
-proc renderParagraph(state: State, token: Token): string =
-  if token.children.head == nil: ""
-  elif token.paragraphVal.loose: p(state.renderInline(token))
-  else: state.renderinline(token)
-
-proc renderListItemChildren(state: State, token: Token): string =
-  var html: string
-  if token.children.head == nil: return ""
-
-  for child_node in token.children.nodes:
-    var child_token = child_node.value
-    if child_token.type == ParagraphToken and not child_token.paragraphVal.loose:
-      if child_node.prev != nil:
-        result &= "\n"
-      result &= state.renderToken(child_token)
-      if child_node.next == nil:
-        return result
-    else:
-      html = renderToken(state, child_token)
-      if html != "":
-        result &= "\n"
-        result &= html
-  if token.listItemVal.loose or token.children.tail != nil:
-    result &= "\n"
-
-proc renderUnorderedList(state: State, token: Token): string =
-  ul("\n", state.render(token))
-
-proc renderOrderedList(state: State, token: Token): string =
-  if token.olVal.start != 1:
-    result = ol(start=fmt"{token.olVal.start}", "\n", state.render(token))
-  else:
-    result = ol("\n", state.render(token))
-
-proc renderListItem(state: State, token: Token): string =
-  result = li(state.renderListItemChildren(token))
-
-method `$`(token: Token): string {.base.} = ""
-
-method `$`*(token: tCodeSpan): string =
-  code(token.doc.escapeAmpersandChar.escapeTag.escapeQuote)
-
-method `$`*(token: tSoftBreak): string = "\n"
-
-method `$`*(token: tHardBreak): string = br() & "\n"
-
-method `$`*(token: tStrickthrough): string = del(token.doc)
-
-method `$`*(token: tEscape): string =
-  token.escapeVal.escapeAmpersandSeq.escapeTag.escapeQuote
-
-method `$`*(token: tInlineHtml): string =
-  token.doc.escapeInvalidHTMLTag
-
-method `$`*(token: tHtmlEntity): string =
-  token.doc.escapeHTMLEntity.escapeQuote
-
-method `$`*(token: tText): string =
-  token.doc.escapeAmpersandSeq.escapeTag.escapeQuote
-
-proc toStringSeq(tokens: DoublyLinkedList[Token]): seq[string] =
-  tokens.toSeq.map((t: Token) => $t)
-
-method `$`*(tokens: DoublyLinkedList[Token]): string {.base.} =
-  tokens.toStringSeq.join("")
-
-method `$`*(token: tLink): string =
-  let href = token.linkVal.url.escapeBackslash.escapeLinkUrl
-  let title = token.linkVal.title.escapeBackslash.escapeHTMLEntity.escapeAmpersandSeq.escapeQuote
-  if title == "": a(href=href, $token.children)
-  else: a(href=href, title=title, $token.children)
-
-method alt*(token: Token): string {.base.} = $token
-
-method alt*(token: tEm): string = $token.children
-
-method alt*(token: tStrong): string = $token.children
-
-method alt*(token: tLink): string = token.linkVal.text
-
-method alt*(token: tImage): string = token.imageval.alt
-
-method `$`*(token: tImage): string =
-  let src = token.imageVal.url.escapeBackslash.escapeLinkUrl
-  let title=token.imageVal.title.escapeBackslash.escapeHTMLEntity.escapeAmpersandSeq.escapeQuote
-  let alt = token.children.toSeq.map((t: Token) => t.alt).join("")
-  if title == "": img(src=src, alt=alt)
-  else: img(src=src, alt=alt, title=title)
-
-method `$`*(token: tAutoLink): string =
-  let href = token.autoLinkVal.url.escapeLinkUrl.escapeAmpersandSeq
-  let text = token.autoLinkVal.text.escapeAmpersandSeq
-  a(href=href, text)
-
-method `$`*(token: tEm): string = em($token.children)
-
-method `$`*(token: tStrong): string = strong($token.children)
-
-method `$`*(token: tThematicBreak): string = hr()
-
-method `$`*(token: tParagraph): string =
-  if token.children.head == nil: ""
-  elif token.paragraphVal.loose: p($token.children)
-  else: $token.children
-
-method `$`*(token: tHeading): string =
-  let num = fmt"{token.headingVal.level}"
-  let child = $token.children
-  fmt"<h{num}>{child}</h{num}>"
-
-method `$`*(token: tCodeBlock): string =
-  var codeHTML = token.doc.escapeCode.escapeQuote
-  if codeHTML != "" and not codeHTML.endsWith("\n"):
-    codeHTML &= "\n"
-  if token.codeVal.info == "":
-    pre(code(codeHTML))
-  else:
-    let info = token.codeVal.info.escapeBackslash.escapeHTMLEntity
-    let lang = fmt"language-{info}"
-    pre(code(class=lang, codeHTML))
-
-method `$`*(token: tHtmlBlock): string = token.doc.strip(chars={'\n'})
-
-method `$`*(token: tTHeadCell): string =
-  let align = token.theadCellVal.align
-  if align == "": th($token.children)
-  else: fmt("<th align=\"{align}\">{$token.children}</th>")
-
-method `$`*(token: tTBodyCell): string =
-  let align = token.tbodyCellVal.align
-  if align == "": td($token.children)
-  else: fmt("<td align=\"{align}\">{$token.children}</td>")
-
-method `$`*(token: tTableRow): string =
-  let cells = token.children.toStringSeq.join("\n")
-  tr("\n", cells , "\n")
-
-method `$`*(token: tTBody): string =
-  let rows = token.children.toStringSeq.join("\n")
-  tbody("\n", rows)
-
-method `$`*(token: tTHead): string =
-  let tr = $token.children.head.value # table>thead>tr
-  thead("\n", tr, "\n")
-
-method `$`*(token: tTable): string =
-  let thead = $token.children.head.value # table>thead
-  var tbody = $token.children.tail.value
-  if tbody != "": tbody = "\n" & tbody.strip
-  table("\n", thead, tbody)
-
-proc renderToken(state: State, token: Token): string =
-  case token.type
-  of ListItemToken: state.renderListItem(token)
-  of UnorderedListToken: state.renderUnorderedList(token)
-  of OrderedListToken: state.renderOrderedList(token)
-  of BlockquoteToken: blockquote("\n", state.render(token))
-  else: $token
-
-proc render(state: State, token: Token): string =
-  var html: string
-  for token in token.children.items:
-    html = state.renderToken(token)
-    if html != "":
-      result &= html
-      result &= "\n"
-
 proc initMarkdownConfig*(
   escape = true,
   keepHtml = true,
@@ -2632,7 +2600,7 @@ proc markdown*(doc: string, config: MarkdownConfig = initMarkdownConfig()): stri
     doc: doc.strip(chars={'\n'})
   )
   parse(state, document)
-  render(state, document)
+  render(document)
 
 proc readCLIOptions*(): MarkdownConfig =
   ## Read options from command line.

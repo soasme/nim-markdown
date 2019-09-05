@@ -12,15 +12,6 @@ type
     inlineRules: seq[TokenType]
     postProcessingRules: seq[TokenType]
 
-  Delimiter* = object
-    token: Token
-    kind: string
-    num: int
-    originalNum: int
-    isActive: bool
-    canOpen: bool
-    canClose: bool
-
   TokenType* {.pure.} = enum
     ParagraphToken,
     ATXHeadingToken,
@@ -121,6 +112,7 @@ type
   Inline* = ref object of Token
 
   Text* = ref object of Inline
+    delimiter: Delimiter
 
   CodeSpan* = ref object of Inline
 
@@ -149,6 +141,15 @@ type
     url: string
     alt: string
     title: string
+
+  Delimiter* = ref object of Inline
+    token: Text
+    kind: string
+    num: int
+    originalNum: int
+    isActive: bool
+    canOpen: bool
+    canClose: bool
 
   Em* = ref object of Inline
 
@@ -1582,7 +1583,7 @@ proc parseAutoLink(state: State, token: Token, start: int): int =
     ))
     return result
 
-proc scanInlineDelimiters*(doc: string, start: int, delimeter: var Delimiter) =
+proc scanInlineDelimiters*(doc: string, start: int, delimiter: var Delimiter) =
   var charBefore = '\n'
   var charAfter = '\n'
   let charCurrent = doc[start]
@@ -1592,8 +1593,8 @@ proc scanInlineDelimiters*(doc: string, start: int, delimeter: var Delimiter) =
   # get the number of delimiters.
   for ch in doc[start .. doc.len - 1]:
     if ch == charCurrent:
-      delimeter.num += 1
-      delimeter.originalNum += 1
+      delimiter.num += 1
+      delimiter.originalNum += 1
     else:
       break
 
@@ -1602,10 +1603,10 @@ proc scanInlineDelimiters*(doc: string, start: int, delimeter: var Delimiter) =
     charBefore = doc[start - 1]
     isCharBeforeWhitespace = fmt"{charBefore}".match(re"^\s") or doc.runeAt(start - 1).isWhitespace
 
-  # get the character after the delimeter runs
-  if start + delimeter.num + 1 < doc.len:
-    charAfter = doc[start + delimeter.num]
-    isCharAfterWhitespace = fmt"{charAfter}".match(re"^\s") or doc.runeAt(start + delimeter.num).isWhitespace
+  # get the character after the delimiter runs
+  if start + delimiter.num + 1 < doc.len:
+    charAfter = doc[start + delimiter.num]
+    isCharAfterWhitespace = fmt"{charAfter}".match(re"^\s") or doc.runeAt(start + delimiter.num).isWhitespace
 
   let isCharAfterPunctuation = fmt"{charAfter}".match(re"^\p{P}")
   let isCharBeforePunctuation = fmt"{charBefore}".match(re"^\p{P}")
@@ -1624,18 +1625,17 @@ proc scanInlineDelimiters*(doc: string, start: int, delimeter: var Delimiter) =
 
   case charCurrent
   of '_':
-    delimeter.canOpen = isLeftFlanking and ((not isRightFlanking) or isCharBeforePunctuation)
-    delimeter.canClose = isRightFlanking and ((not isLeftFlanking) or isCharAfterPunctuation)
+    delimiter.canOpen = isLeftFlanking and ((not isRightFlanking) or isCharBeforePunctuation)
+    delimiter.canClose = isRightFlanking and ((not isLeftFlanking) or isCharAfterPunctuation)
   else:
-    delimeter.canOpen = isLeftFlanking
-    delimeter.canClose = isRightFlanking
+    delimiter.canOpen = isLeftFlanking
+    delimiter.canClose = isRightFlanking
 
-proc parseDelimiter(state: State, token: Token, start: int, delimiters: var DoublyLinkedList[Delimiter]): int =
+proc parseDelimiter(state: State, token: Token, start: int): int =
   if token.doc[start] != '*' and token.doc[start] != '_':
     return -1
 
-  var delimeter = Delimiter(
-    token: nil,
+  var delimiter = Delimiter(
     kind: fmt"{token.doc[start]}",
     num: 0,
     originalNum: 0,
@@ -1644,19 +1644,18 @@ proc parseDelimiter(state: State, token: Token, start: int, delimiters: var Doub
     canClose: false,
   )
 
-  scanInlineDelimiters(token.doc, start, delimeter)
-  if delimeter.num == 0:
+  scanInlineDelimiters(token.doc, start, delimiter)
+  if delimiter.num == 0:
     return -1
 
-  result = delimeter.num
+  result = delimiter.num
 
   var textToken = Text(
     type: TextToken,
-    doc: token.doc[start ..< start+result]
+    doc: token.doc[start ..< start+result],
+    delimiter: delimiter
   )
   token.appendChild(textToken)
-  delimeter.token = textToken
-  delimiters.append(delimeter)
 
 proc getLinkDestination*(doc: string, start: int): tuple[slice: Slice[int], size: int] =
   # if start < 1 or doc[start - 1] != '(':
@@ -2237,9 +2236,9 @@ proc parseStrikethrough*(state: State, token: Token, start: int): int =
   ))
   return size
 
-proc findInlineToken(state: State, token: Token, rule: TokenType, start: int, delimiters: var DoublyLinkedList[Delimiter]): int =
+proc findInlineToken(state: State, token: Token, rule: TokenType, start: int): int =
   case rule
-  of EmphasisToken: result = parseDelimiter(state, token, start, delimiters)
+  of EmphasisToken: result = parseDelimiter(state, token, start)
   of AutoLinkToken: result = parseAutoLink(state, token, start)
   of LinkToken: result = parseLink(state, token, start)
   of ImageToken: result = parseImage(state, token, start)
@@ -2254,14 +2253,24 @@ proc findInlineToken(state: State, token: Token, rule: TokenType, start: int, de
   else: raise newException(MarkdownError, fmt"{token.type} has no inline rule.")
 
 
-proc removeDelimiter*(delimeter: var DoublyLinkedNode[Delimiter]) =
-  if delimeter.prev != nil:
-    delimeter.prev.next = delimeter.next
-  if delimeter.next != nil:
-    delimeter.next.prev = delimeter.prev
-  delimeter = delimeter.next
+proc removeDelimiter*(delimiter: var DoublyLinkedNode[Delimiter]) =
+  if delimiter.prev != nil:
+    delimiter.prev.next = delimiter.next
+  if delimiter.next != nil:
+    delimiter.next.prev = delimiter.prev
+  delimiter = delimiter.next
 
-proc processEmphasis*(state: State, token: Token, delimiterStack: var DoublyLinkedList[Delimiter]) =
+proc getDelimiterStack*(token: Token): DoublyLinkedList[Delimiter] =
+  result = initDoublyLinkedList[Delimiter]()
+  for child in token.children.mitems:
+    if child of Text:
+      var text = Text(child)
+      if text.delimiter != nil:
+        text.delimiter.token = text # TODO: use treat delimiter as a token, instead of linking to a text token.
+        result.append(text.delimiter)
+
+proc processEmphasis*(state: State, token: Token) =
+  var delimiterStack = token.getDelimiterStack
   var opener: DoublyLinkedNode[Delimiter] = nil
   var closer: DoublyLinkedNode[Delimiter] = nil
   var oldCloser: DoublyLinkedNode[Delimiter] = nil
@@ -2278,9 +2287,9 @@ proc processEmphasis*(state: State, token: Token, delimiterStack: var DoublyLink
   closer = delimiterStack.head
   # move forward, looking for closers, and handling each
   while closer != nil:
-    # find the first closing delimeter.
+    # find the first closing delimiter.
     #
-    # sometimes, the delimeter **can _not** close.
+    # sometimes, the delimiter **can _not** close.
     #                                ^
     # , so we choose jumping to the next ^
     if not closer.value.canClose:
@@ -2388,7 +2397,6 @@ proc processEmphasis*(state: State, token: Token, delimiterStack: var DoublyLink
     removeDelimiter(delimiterStack.head)
 
 proc parseLinkInlines*(state: State, token: Token, allowNested: bool = false) =
-  var delimiters: DoublyLinkedList[Delimiter]
   var pos = 0
   var size = 0
   if token of Link:
@@ -2407,7 +2415,7 @@ proc parseLinkInlines*(state: State, token: Token, allowNested: bool = false) =
     for rule in state.ruleSet.inlineRules:
       if not allowNested and rule == LinkToken:
         continue
-      size = findInlineToken(state, token, rule, pos, delimiters)
+      size = findInlineToken(state, token, rule, pos)
       if size != -1:
         pos += size
         break
@@ -2415,11 +2423,10 @@ proc parseLinkInlines*(state: State, token: Token, allowNested: bool = false) =
       token.appendChild(Text(type: TextToken, doc: fmt"{ch}"))
       pos += 1
 
-  processEmphasis(state, token, delimiters)
+  processEmphasis(state, token)
 
 proc parseLeafBlockInlines(state: State, token: Token) =
   var pos = 0
-  var delimiters: DoublyLinkedList[Delimiter]
 
   for index, ch in token.doc[0 ..< token.doc.len].strip:
     if index < pos:
@@ -2428,7 +2435,7 @@ proc parseLeafBlockInlines(state: State, token: Token) =
     for rule in state.ruleSet.inlineRules:
       if token.type == rule:
         continue
-      size = findInlineToken(state, token, rule, pos, delimiters)
+      size = findInlineToken(state, token, rule, pos)
       if size != -1:
         pos += size
         break
@@ -2436,7 +2443,7 @@ proc parseLeafBlockInlines(state: State, token: Token) =
       token.appendChild(Text(type: TextToken, doc: fmt"{ch}"))
       pos += 1
 
-  processEmphasis(state, token, delimiters)
+  processEmphasis(state, token)
 
 proc isContainerToken(token: Token): bool =
   {DocumentToken, BlockquoteToken, ListItemToken, UnorderedListToken,

@@ -154,7 +154,7 @@ type
     else: discard
 
   tBlock* = ref object of Token
-  tParagraph* = ref object of tBlock
+  Paragraph* = ref object of tBlock
     loose: bool
     trailing: string
 
@@ -498,7 +498,7 @@ method `$`*(token: tStrong): string = strong($token.children)
 
 method `$`*(token: tThematicBreak): string = hr()
 
-method `$`*(token: tParagraph): string =
+method `$`*(token: Paragraph): string =
   if token.children.head == nil: ""
   elif token.loose: p($token.children)
   else: $token.children
@@ -567,7 +567,7 @@ proc renderListItemChildren(token: Token): string =
 
   for child_node in token.children.nodes:
     var child_token = child_node.value
-    if child_token of tParagraph and not tParagraph(child_token).loose:
+    if child_token of Paragraph and not Paragraph(child_token).loose:
       if child_node.prev != nil:
         result &= "\n"
       result &= $child_token
@@ -591,8 +591,8 @@ proc render(token: Token): string =
   if result != "": result &= "\n"
 
 proc endsWithBlankLine(token: Token): bool =
-  if token of tParagraph:
-    tParagraph(token).trailing.len > 1
+  if token of Paragraph:
+    Paragraph(token).trailing.len > 1
   elif token of tLi:
     token.listItemVal.verbatim.find(re"\n\n$") != -1
   else:
@@ -1533,7 +1533,7 @@ proc parseParagraph(doc: string, start: int): ParseResult =
 
   size = p.len
   return ParseResult(
-    token: tParagraph(
+    token: Paragraph(
       type: ParagraphToken,
       doc: doc[start ..< start+size].replace(re"\n\s*", "\n").strip,
       loose: true,
@@ -1563,12 +1563,12 @@ proc parseContainerBlock(state: State, token: Token): ParseResult =
       var t = Token(type: token.type, doc: chunk.doc)
       parseBlock(state, t)
       var p = t.children.head
-      if p != nil and p.value of tParagraph and token.tipToken of tParagraph:
+      if p != nil and p.value of Paragraph and token.tipToken of Paragraph:
         token.tipToken.doc &= p.value.doc
         t.children.remove(p)
       for child in t.children:
         token.appendChild(child)
-      if not (token.tipToken of tParagraph):
+      if not (token.tipToken of Paragraph):
         break
     else:
       if not token.tipToken.doc.endsWith("\n"):
@@ -1593,8 +1593,8 @@ proc parseBlock(state: State, token: Token) =
           for listItem in res.token.children.items:
             listItem.listItemVal.loose = res.token.ulVal.loose
             for child in listItem.children.items:
-              if child of tParagraph:
-                tParagraph(child).loose = res.token.ulVal.loose
+              if child of Paragraph:
+                Paragraph(child).loose = res.token.ulVal.loose
       of OrderedListToken:
         res = parseOrderedList(doc, pos)
         if res.pos != -1:
@@ -1605,8 +1605,8 @@ proc parseBlock(state: State, token: Token) =
           for listItem in res.token.children.items:
             listItem.listItemVal.loose = res.token.olVal.loose
             for child in listItem.children.items:
-              if child of tParagraph:
-                tParagraph(child).loose = res.token.olVal.loose
+              if child of Paragraph:
+                Paragraph(child).loose = res.token.olVal.loose
       of ReferenceToken:
         res = parseReference(doc, pos)
         if res.pos != -1 and not state.references.contains(res.token.referenceVal.text):

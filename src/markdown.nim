@@ -1516,6 +1516,17 @@ proc parseContainerBlock(state: State, token: Token): ParseResult =
       token.tipToken.doc &= chunk.doc.strip(chars={' '})
   return ParseResult(token: token, pos: pos)
 
+proc finalizeList*(state: State, token: Token) =
+  for listItem in token.children.items:
+    if listItem.doc != "":
+      parseBlock(state, listItem)
+
+  let loose = token.parseLoose
+  for listItem in token.children.items:
+    for child in listItem.children.items:
+      if child of Paragraph:
+        Paragraph(child).loose = loose
+
 proc parseBlock(state: State, token: Token) =
   let doc = token.doc
   var pos = 0
@@ -1525,26 +1536,10 @@ proc parseBlock(state: State, token: Token) =
       case rule
       of UnorderedListToken:
         res = parseUnorderedList(doc, pos)
-        if res.pos != -1:
-          for listItem in res.token.children.items:
-            if listItem.doc != "":
-              parseBlock(state, listItem)
-          let loose = res.token.parseLoose
-          for listItem in res.token.children.items:
-            for child in listItem.children.items:
-              if child of Paragraph:
-                Paragraph(child).loose = loose
+        if res.pos != -1: state.finalizeList(res.token)
       of OrderedListToken:
         res = parseOrderedList(doc, pos)
-        if res.pos != -1:
-          for listItem in res.token.children.items:
-            if listItem.doc != "":
-              parseBlock(state, listItem)
-          let loose = res.token.parseLoose
-          for listItem in res.token.children.items:
-            for child in listItem.children.items:
-              if child of Paragraph:
-                Paragraph(child).loose = loose
+        if res.pos != -1: state.finalizeList(res.token)
       of ReferenceToken:
         res = parseReference(doc, pos)
         if res.pos != -1 and not state.references.contains(Reference(res.token).text):

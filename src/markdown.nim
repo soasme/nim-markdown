@@ -119,14 +119,14 @@ type
   tUl* = ref object of tBlock
   tOl* = ref object of tBlock
   tLi* = ref object of tBlock
-  tTable* = ref object of tBlock
-  tTHead* = ref object of tBlock
-  tTBody* = ref object of tBlock
+  HtmlTable* = ref object of tBlock
+  THead* = ref object of tBlock
+  TBody* = ref object of tBlock
     size: int
-  tTableRow* = ref object of tBlock
-  tTHeadCell* = ref object of tBlock
+  TableRow* = ref object of tBlock
+  THeadCell* = ref object of tBlock
     align: string
-  tTBodyCell* = ref object of tBlock
+  TBodyCell* = ref object of tBlock
     align: string
 
   Inline* = ref object of Token
@@ -485,29 +485,29 @@ method `$`*(token: CodeBlock): string =
 
 method `$`*(token: tHtmlBlock): string = token.doc.strip(chars={'\n'})
 
-method `$`*(token: tTHeadCell): string =
+method `$`*(token: THeadCell): string =
   let align = token.align
   if align == "": th($token.children)
   else: fmt("<th align=\"{align}\">{$token.children}</th>")
 
-method `$`*(token: tTBodyCell): string =
+method `$`*(token: TBodyCell): string =
   let align = token.align
   if align == "": td($token.children)
   else: fmt("<td align=\"{align}\">{$token.children}</td>")
 
-method `$`*(token: tTableRow): string =
+method `$`*(token: TableRow): string =
   let cells = token.children.toStringSeq.join("\n")
   tr("\n", cells , "\n")
 
-method `$`*(token: tTBody): string =
+method `$`*(token: TBody): string =
   let rows = token.children.toStringSeq.join("\n")
   tbody("\n", rows)
 
-method `$`*(token: tTHead): string =
+method `$`*(token: THead): string =
   let tr = $token.children.head.value # table>thead>tr
   thead("\n", tr, "\n")
 
-method `$`*(token: tTable): string =
+method `$`*(token: HtmlTable): string =
   let thead = $token.children.head.value # table>thead
   var tbody = $token.children.tail.value
   if tbody != "": tbody = "\n" & tbody.strip
@@ -1072,16 +1072,16 @@ proc parseHTMLTable(doc: string, start: int): ParseResult =
   if heads.len > aligns.len:
     return ParseResult(token: nil, pos: -1)
 
-  var theadToken = tTHead(
+  var theadToken = THead(
     type: THeadToken,
     doc: lines[0],
   )
-  var theadRowToken = tTableRow(
+  var theadRowToken = TableRow(
     type: TableRowToken,
     doc: lines[0],
   )
   for index, elem in heads:
-    var thToken = tTHeadCell(
+    var thToken = THeadCell(
       type: THeadCellToken,
       doc: elem.strip,
       align: aligns[index],
@@ -1100,7 +1100,7 @@ proc parseHTMLTable(doc: string, start: int): ParseResult =
 
     var rowColumns = parseTableRow(line.replace(re"^\||\|$", ""))
 
-    var tableRowToken = tTableRow(
+    var tableRowToken = TableRow(
       type: TableRowToken,
       doc: "",
     )
@@ -1110,7 +1110,7 @@ proc parseHTMLTable(doc: string, start: int): ParseResult =
           ""
         else:
           rowColumns[index]
-      var tdToken = tTBodyCell(
+      var tdToken = TBodyCell(
         type: TBodyCellToken,
         doc: doc.replace(re"\\\|", "|").strip,
         align: aligns[index],
@@ -1119,13 +1119,13 @@ proc parseHTMLTable(doc: string, start: int): ParseResult =
     tbodyRows.add(tableRowToken)
     pos += line.len
 
-  var tableToken = tTable(
+  var tableToken = HtmlTable(
     type: TableToken,
     doc: doc[start ..< pos],
   )
   tableToken.appendChild(theadToken)
   if tbodyRows.len > 0:
-    var tbodyToken = tTBody(
+    var tbodyToken = TBody(
       type: TBodyToken,
       doc: doc[start+lines[0].len+lines[1].len ..< pos],
       size: tbodyRows.len,

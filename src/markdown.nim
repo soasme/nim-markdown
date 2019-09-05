@@ -31,10 +31,6 @@ type
     title: string
     url: string
 
-  AutoLink = object
-    text: string
-    url: string
-
   Blockquote = object
     doc: string
 
@@ -173,7 +169,9 @@ type
     text: string ## A link contains link text (the visible text).
     url: string ## A link contains destination (the URI that is the link destination).
     title: string ## A link contains a optional title.
-  tAutoLink* = ref object of tInline
+  AutoLink* = ref object of tInline
+    text: string
+    url: string
   Image* = ref object of tInline
     url: string
     alt: string
@@ -457,6 +455,11 @@ proc toStringSeq(tokens: DoublyLinkedList[Token]): seq[string] =
 method `$`*(tokens: DoublyLinkedList[Token]): string {.base.} =
   tokens.toStringSeq.join("")
 
+method `$`*(token: AutoLink): string =
+  let href = token.url.escapeLinkUrl.escapeAmpersandSeq
+  let text = token.text.escapeAmpersandSeq
+  a(href=href, text)
+
 method `$`*(token: Link): string =
   let href = token.url.escapeBackslash.escapeLinkUrl
   let title = token.title.escapeBackslash.escapeHTMLEntity.escapeAmpersandSeq.escapeQuote
@@ -479,11 +482,6 @@ method `$`*(token: Image): string =
   let alt = token.children.toSeq.map((t: Token) => t.alt).join("")
   if title == "": img(src=src, alt=alt)
   else: img(src=src, alt=alt, title=title)
-
-method `$`*(token: tAutoLink): string =
-  let href = token.autoLinkVal.url.escapeLinkUrl.escapeAmpersandSeq
-  let text = token.autoLinkVal.text.escapeAmpersandSeq
-  a(href=href, text)
 
 method `$`*(token: tEm): string = em($token.children)
 
@@ -1648,12 +1646,10 @@ proc parseAutoLink(state: State, token: Token, start: int): int =
   if result != -1:
     var url = emailMatches[0]
     # TODO: validate and normalize the link
-    token.appendChild(tAutoLink(
+    token.appendChild(AutoLink(
       type: AutoLinkToken,
-      autoLinkVal: AutoLink(
-        text: url,
-        url: fmt"mailto:{url}"
-      )
+      text: url,
+      url: fmt"mailto:{url}"
     ))
     return result
   
@@ -1664,12 +1660,10 @@ proc parseAutoLink(state: State, token: Token, start: int): int =
   if result != -1:
     var schema = linkMatches[0]
     var uri = linkMatches[1]
-    token.appendChild(tAutoLink(
+    token.appendChild(AutoLink(
       type: AutoLinkToken,
-      autoLinkVal: AutoLink(
-        text: fmt"{schema}:{uri}",
-        url: fmt"{schema}:{uri}",
-      )
+      text: fmt"{schema}:{uri}",
+      url: fmt"{schema}:{uri}",
     ))
     return result
 

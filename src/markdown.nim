@@ -1,92 +1,16 @@
-import re, strutils, strformat, tables, sequtils, math, uri, htmlparser, lists
+import re, strutils, strformat, tables, sequtils, math, uri, htmlparser, lists, sugar
 import unicode except `strip`, `splitWhitespace`
 from sequtils import map
 from lists import DoublyLinkedList, prepend, append
-from htmlgen import nil, p, br, em, strong, a, img, code, del, blockquote, li, ul, ol, pre, code, table, thead, tbody, th, tr, td
+from htmlgen import nil, p, br, em, strong, a, img, code, del, blockquote, li, ul, ol, pre, code, table, thead, tbody, th, tr, td, hr
 
 type
   MarkdownError* = object of Exception ## The error object for markdown parsing and rendering.
 
-  MarkdownConfig* = object ## Options for configuring parsing or rendering behavior.
-    escape: bool ## escape ``<``, ``>``, and ``&`` characters to be HTML-safe
-    keepHtml: bool ## deprecated: preserve HTML tags rather than escape it
-
   RuleSet = object
     preProcessingRules: seq[TokenType]
-    blockRules: seq[TokenType]
     inlineRules: seq[TokenType]
     postProcessingRules: seq[TokenType]
-
-  Delimiter* = object
-    token: Token
-    kind: string
-    num: int
-    originalNum: int
-    isActive: bool
-    canOpen: bool
-    canClose: bool
-
-  Paragraph = object
-    doc: string
-    loose: bool
-
-  Reference = object
-    text: string
-    title: string
-    url: string
-
-  Link = object 
-    text: string ## A link contains link text (the visible text).
-    url: string ## A link contains destination (the URI that is the link destination).
-    title: string ## A link contains a optional title.
-
-  Image = object
-    url: string
-    alt: string
-    title: string
-
-  AutoLink = object
-    text: string
-    url: string
-
-  Blockquote = object
-    doc: string
-
-  UnorderedList = object
-    loose: bool
-
-  OrderedList = object
-    loose: bool
-    start: int
-
-  ListItem = object
-    loose: bool
-    marker: string
-    verbatim: string
-
-  Heading = object
-    level: int
-
-  Fenced = object
-    info: string
-
-  HTMLTableCell = object
-    align: string
-    i: int
-    j: int
-
-  HTMLTableRow = object
-    th: bool
-    td: bool
-
-  HTMLTable = object
-    aligns: seq[string]
-
-  HTMLTableHead = object
-    size: int
-
-  HTMLTableBody = object
-    size: int
 
   TokenType* {.pure.} = enum
     ParagraphToken,
@@ -125,64 +49,135 @@ type
 
   ChunkKind* = enum
     BlockChunk,
-    LazyChunk
+    LazyChunk,
+    InlineChunk
 
   Chunk* = ref object
     kind*: ChunkKind
     doc*: string
     pos*: int
 
-  Token* = ref object
+  Token* = ref object of RootObj
     doc: string
+    pos: int
     children: DoublyLinkedList[Token]
     chunks: seq[Chunk]
     case type*: TokenType
-    of ParagraphToken: paragraphVal*: Paragraph
-    of ATXHeadingToken, SetextHeadingToken: headingVal*: Heading
-    of FencedCodeToken: fenceCodeVal*: Fenced
-    of BlockquoteToken: blockquoteVal*: Blockquote
-    of UnorderedListToken: ulVal*: UnorderedList
-    of OrderedListToken: olVal*: OrderedList
-    of ListItemToken: listItemVal*: ListItem
-    of TableToken: tableVal*: HTMLTable
-    of THeadToken: theadVal: HTMLTableHead
-    of TBodyToken: tbodyVal: HTMLTableBody
-    of TableRowToken: tableRowVal: HTMLTableRow
-    of THeadCellToken: theadCellVal*: HTMLTableCell
-    of TBodyCellToken: tbodyCellVal*: HTMLTableCell
-    of ReferenceToken: referenceVal*: Reference
-    of AutoLinkToken: autoLinkVal*: AutoLink
-    of LinkToken: linkVal*: Link
-    of EscapeToken: escapeVal*: string
-    of ImageToken: imageVal*: Image
     else: discard
 
-  ParseResult* = tuple[token: Token, pos: int]
+  Block* = ref object of Token
+
+  Paragraph* = ref object of Block
+    loose: bool
+    trailing: string
+
+  Reference = ref object of Block
+    text: string
+    title: string
+    url: string
+
+  ThematicBreak* = ref object of Block
+
+  Heading* = ref object of Block
+    level: int
+
+  CodeBlock* = ref object of Block
+    info: string
+
+  HtmlBlock* = ref object of Block
+
+  Blockquote* = ref object of Block
+
+  Ul* = ref object of Block
+
+  Ol* = ref object of Block
+    start: int
+
+  Li* = ref object of Block
+    loose: bool
+    marker: string
+    verbatim: string
+  HtmlTable* = ref object of Block
+  THead* = ref object of Block
+  TBody* = ref object of Block
+    size: int
+
+  TableRow* = ref object of Block
+
+  THeadCell* = ref object of Block
+    align: string
+
+  TBodyCell* = ref object of Block
+    align: string
+
+  Inline* = ref object of Token
+
+  Text* = ref object of Inline
+    delimiter: Delimiter
+
+  CodeSpan* = ref object of Inline
+
+  SoftBreak* = ref object of Inline
+
+  HardBreak* = ref object of Inline
+
+  Strickthrough* = ref object of Inline
+
+  Escape* = ref object of Inline
+
+  InlineHtml* = ref object of Inline
+
+  HtmlEntity* = ref object of Inline
+
+  Link* = ref object of Inline
+    text: string ## A link contains link text (the visible text).
+    url: string ## A link contains destination (the URI that is the link destination).
+    title: string ## A link contains a optional title.
+
+  AutoLink* = ref object of Inline
+    text: string
+    url: string
+
+  Image* = ref object of Inline
+    url: string
+    alt: string
+    title: string
+
+  Delimiter* = ref object of Inline
+    token: Text
+    kind: string
+    num: int
+    originalNum: int
+    isActive: bool
+    canOpen: bool
+    canClose: bool
+
+  Em* = ref object of Inline
+
+  Strong* = ref object of Inline
+
+  ParseResult* = ref object
+    token: Token
+    pos: int
+
+  BlockParser* = (string, int) -> ParseResult
+
+  MarkdownConfig* = object ## Options for configuring parsing or rendering behavior.
+    escape: bool ## escape ``<``, ``>``, and ``&`` characters to be HTML-safe
+    keepHtml: bool ## deprecated: preserve HTML tags rather than escape it
+    blockParsers: seq[(string, int) -> ParseResult]
 
   State* = ref object
     ruleSet: RuleSet
-    references: Table[string, Reference]
+    references*: Table[string, Reference]
+    config*: MarkdownConfig
 
 proc appendChild*(token: Token, child: Token) =
   token.children.append(child)
 
 var gfmRuleSet = RuleSet(
   preProcessingRules: @[],
-  blockRules: @[
-    ReferenceToken,
-    ThematicBreakToken,
-    BlockquoteToken,
-    UnorderedListToken,
-    OrderedListToken,
-    IndentedCodeToken,
-    FencedCodeToken,
-    HTMLBlockToken,
-    TableToken,
-    BlankLineToken,
-    ATXHeadingToken,
-    SetextHeadingToken,
-    ParagraphToken,
-  ],
+  # TODO: these rules will soon be moved into Config.
   inlineRules: @[
     EmphasisToken, # including strong.
     ImageToken,
@@ -204,19 +199,19 @@ const THEMATIC_BREAK_RE* = r" {0,3}([-*_])(?:[ \t]*\1){2,}[ \t]*(?:\n+|$)"
 const SETEXT_HEADING_RE* = r"((?:(?:[^\n]+)\n)+) {0,3}(=|-)+ *(?:\n+|$)"
 const INDENTED_CODE_RE* = r"((?: {4}| {0,3}\t)[^\n]+\n*)+"
 
-let HTML_SCRIPT_START* = r"^ {0,3}<(script|pre|style)(?=(\s|>|$))"
-let HTML_SCRIPT_END* = r"</(script|pre|style)>"
-let HTML_COMMENT_START* = r"^ {0,3}<!--"
-let HTML_COMMENT_END* = r"-->"
-let HTML_PROCESSING_INSTRUCTION_START* = r"^ {0,3}<\?"
-let HTML_PROCESSING_INSTRUCTION_END* = r"\?>"
-let HTML_DECLARATION_START* = r"^ {0,3}<\![A-Z]"
-let HTML_DECLARATION_END* = r">"
-let HTML_CDATA_START* = r" {0,3}<!\[CDATA\["
-let HTML_CDATA_END* = r"\]\]>"
-let HTML_VALID_TAGS* = ["address", "article", "aside", "base", "basefont", "blockquote", "body", "caption", "center", "col", "colgroup", "dd", "details", "dialog", "dir", "div", "dl", "dt", "fieldset", "figcaption", "figure", "footer", "form", "frame", "frameset", "h1", "h2", "h3", "h4", "h5", "h6", "head", "header", "hr", "html", "iframe", "legend", "li", "link", "main", "menu", "menuitem", "meta", "nav", "noframes", "ol", "optgroup", "option", "p", "param", "section", "source", "summary", "table", "tbody", "td", "tfoot", "th", "thead", "title", "tr", "track", "ul"]
-let HTML_TAG_START* = r"^ {0,3}</?(" & HTML_VALID_TAGS.join("|") & r")(?=(\s|/?>|$))"
-let HTML_TAG_END* = r"^\n?$"
+const HTML_SCRIPT_START* = r"^ {0,3}<(script|pre|style)(?=(\s|>|$))"
+const HTML_SCRIPT_END* = r"</(script|pre|style)>"
+const HTML_COMMENT_START* = r"^ {0,3}<!--"
+const HTML_COMMENT_END* = r"-->"
+const HTML_PROCESSING_INSTRUCTION_START* = r"^ {0,3}<\?"
+const HTML_PROCESSING_INSTRUCTION_END* = r"\?>"
+const HTML_DECLARATION_START* = r"^ {0,3}<\![A-Z]"
+const HTML_DECLARATION_END* = r">"
+const HTML_CDATA_START* = r" {0,3}<!\[CDATA\["
+const HTML_CDATA_END* = r"\]\]>"
+const HTML_VALID_TAGS* = ["address", "article", "aside", "base", "basefont", "blockquote", "body", "caption", "center", "col", "colgroup", "dd", "details", "dialog", "dir", "div", "dl", "dt", "fieldset", "figcaption", "figure", "footer", "form", "frame", "frameset", "h1", "h2", "h3", "h4", "h5", "h6", "head", "header", "hr", "html", "iframe", "legend", "li", "link", "main", "menu", "menuitem", "meta", "nav", "noframes", "ol", "optgroup", "option", "p", "param", "section", "source", "summary", "table", "tbody", "td", "tfoot", "th", "thead", "title", "tr", "track", "ul"]
+const HTML_TAG_START* = r"^ {0,3}</?(" & HTML_VALID_TAGS.join("|") & r")(?=(\s|/?>|$))"
+const HTML_TAG_END* = r"^\n?$"
 
 const TAGNAME* = r"[A-Za-z][A-Za-z0-9-]*"
 const ATTRIBUTENAME* = r"[a-zA-Z_:][a-zA-Z0-9:._-]*"
@@ -243,18 +238,18 @@ const HTML_TAG* = (
   & r")"
 )
 
-let HTML_OPEN_CLOSE_TAG_START* = "^ {0,3}(?:" & OPEN_TAG & "|" & CLOSE_TAG & r")\s*$"
-let HTML_OPEN_CLOSE_TAG_END* = r"^\n?$"
+const HTML_OPEN_CLOSE_TAG_START* = "^ {0,3}(?:" & OPEN_TAG & "|" & CLOSE_TAG & r")\s*$"
+const HTML_OPEN_CLOSE_TAG_END* = r"^\n?$"
 
 proc parse(state: State, token: Token);
 proc parseBlock(state: State, token: Token);
 proc parseLeafBlockInlines(state: State, token: Token);
 proc parseLinkInlines*(state: State, token: Token, allowNested: bool = false);
-proc getLinkText*(doc: string, start: int, slice: var Slice[int], allowNested: bool = false): int;
-proc getLinkLabel*(doc: string, start: int, label: var string): int;
-proc getLinkDestination*(doc: string, start: int, slice: var Slice[int]): int;
-proc getLinkTitle*(doc: string, start: int, slice: var Slice[int]): int;
-proc render(state: State, token: Token): string;
+proc getLinkText*(doc: string, start: int, allowNested: bool = false): tuple[slice: Slice[int], size: int];
+proc getLinkLabel*(doc: string, start: int): tuple[label: string, size: int];
+proc getLinkDestination*(doc: string, start: int): tuple[slice: Slice[int], size: int];
+proc getLinkTitle*(doc: string, start: int): tuple[slice: Slice[int], size: int];
+proc render(token: Token): string;
 proc isContinuationText*(doc: string): bool;
 proc parseHtmlScript(s: string): tuple[html: string, size: int];
 proc parseHtmlComment*(s: string): tuple[html: string, size: int];
@@ -263,6 +258,8 @@ proc parseHtmlCData*(s: string): tuple[html: string, size: int];
 proc parseHtmlDeclaration*(s: string): tuple[html: string, size: int];
 proc parseHtmlTag*(s: string): tuple[html: string, size: int];
 proc parseHtmlOpenCloseTag*(s: string): tuple[html: string, size: int];
+
+proc skipParsing*(): ParseResult = ParseResult(token: nil, pos: -1)
 
 proc `$`*(chunk: Chunk): string =
   fmt"{chunk.kind}{[chunk.doc]}"
@@ -394,11 +391,171 @@ proc reFmt*(patterns: varargs[string]): Regex =
     s &= p
   re(s)
 
+proc toSeq(tokens: DoublyLinkedList[Token]): seq[Token] =
+  result = newSeq[Token]()
+  for token in tokens.items:
+    result.add(token)
+
+method `$`(token: Token): string {.base.} = ""
+
+method `$`*(token: CodeSpan): string =
+  code(token.doc.escapeAmpersandChar.escapeTag.escapeQuote)
+
+method `$`*(token: SoftBreak): string = "\n"
+
+method `$`*(token: HardBreak): string = br() & "\n"
+
+method `$`*(token: Strickthrough): string = del(token.doc)
+
+method `$`*(token: Escape): string =
+  token.doc.escapeAmpersandSeq.escapeTag.escapeQuote
+
+method `$`*(token: InlineHtml): string =
+  token.doc.escapeInvalidHTMLTag
+
+method `$`*(token: HtmlEntity): string =
+  token.doc.escapeHTMLEntity.escapeQuote
+
+method `$`*(token: Text): string =
+  token.doc.escapeAmpersandSeq.escapeTag.escapeQuote
+
+proc toStringSeq(tokens: DoublyLinkedList[Token]): seq[string] =
+  tokens.toSeq.map((t: Token) => $t)
+
+method `$`*(tokens: DoublyLinkedList[Token]): string {.base.} =
+  tokens.toStringSeq.join("")
+
+method `$`*(token: AutoLink): string =
+  let href = token.url.escapeLinkUrl.escapeAmpersandSeq
+  let text = token.text.escapeAmpersandSeq
+  a(href=href, text)
+
+method `$`*(token: Link): string =
+  let href = token.url.escapeBackslash.escapeLinkUrl
+  let title = token.title.escapeBackslash.escapeHTMLEntity.escapeAmpersandSeq.escapeQuote
+  if title == "": a(href=href, $token.children)
+  else: a(href=href, title=title, $token.children)
+
+method alt*(token: Token): string {.base.} = $token
+
+method alt*(token: Em): string = $token.children
+
+method alt*(token: Strong): string = $token.children
+
+method alt*(token: Link): string = token.text
+
+method alt*(token: Image): string = token.alt
+
+method `$`*(token: Image): string =
+  let src = token.url.escapeBackslash.escapeLinkUrl
+  let title=token.title.escapeBackslash.escapeHTMLEntity.escapeAmpersandSeq.escapeQuote
+  let alt = token.children.toSeq.map((t: Token) => t.alt).join("")
+  if title == "": img(src=src, alt=alt)
+  else: img(src=src, alt=alt, title=title)
+
+method `$`*(token: Em): string = em($token.children)
+
+method `$`*(token: Strong): string = strong($token.children)
+
+method `$`*(token: ThematicBreak): string = hr()
+
+method `$`*(token: Paragraph): string =
+  if token.children.head == nil: ""
+  elif token.loose: p($token.children)
+  else: $token.children
+
+method `$`*(token: Heading): string =
+  let num = fmt"{token.level}"
+  let child = $token.children
+  fmt"<h{num}>{child}</h{num}>"
+
+method `$`*(token: CodeBlock): string =
+  var codeHTML = token.doc.escapeCode.escapeQuote
+  if codeHTML != "" and not codeHTML.endsWith("\n"):
+    codeHTML &= "\n"
+  if token.info == "":
+    pre(code(codeHTML))
+  else:
+    let info = token.info.escapeBackslash.escapeHTMLEntity
+    let lang = fmt"language-{info}"
+    pre(code(class=lang, codeHTML))
+
+method `$`*(token: HtmlBlock): string = token.doc.strip(chars={'\n'})
+
+method `$`*(token: THeadCell): string =
+  let align = token.align
+  if align == "": th($token.children)
+  else: fmt("<th align=\"{align}\">{$token.children}</th>")
+
+method `$`*(token: TBodyCell): string =
+  let align = token.align
+  if align == "": td($token.children)
+  else: fmt("<td align=\"{align}\">{$token.children}</td>")
+
+method `$`*(token: TableRow): string =
+  let cells = token.children.toStringSeq.join("\n")
+  tr("\n", cells , "\n")
+
+method `$`*(token: TBody): string =
+  let rows = token.children.toStringSeq.join("\n")
+  tbody("\n", rows)
+
+method `$`*(token: THead): string =
+  let tr = $token.children.head.value # table>thead>tr
+  thead("\n", tr, "\n")
+
+method `$`*(token: HtmlTable): string =
+  let thead = $token.children.head.value # table>thead
+  var tbody = $token.children.tail.value
+  if tbody != "": tbody = "\n" & tbody.strip
+  table("\n", thead, tbody)
+
+method `$`*(token: Ul): string =
+  ul("\n", render(token))
+
+method `$`*(token: Ol): string =
+  if token.start != 1:
+    ol(start=fmt"{token.start}", "\n", render(token))
+  else:
+    ol("\n", render(token))
+
+method `$`*(token: Blockquote): string =
+  blockquote("\n", render(token))
+
+proc renderListItemChildren(token: Li): string =
+  var html: string
+  if token.children.head == nil: return ""
+
+  for child_node in token.children.nodes:
+    var child_token = child_node.value
+    if child_token of Paragraph and not Paragraph(child_token).loose:
+      if child_node.prev != nil:
+        result &= "\n"
+      result &= $child_token
+      if child_node.next == nil:
+        return result
+    else:
+      html = $child_token
+      if html != "":
+        result &= "\n"
+        result &= html
+  if token.loose or token.children.tail != nil:
+    result &= "\n"
+
+method `$`*(token: Li): string =
+  li(renderListItemChildren(token))
+
+proc render(token: Token): string =
+  var htmls = token.children.toStringSeq
+  htmls.keepIf((s: string) => s != "")
+  result = htmls.join("\n")
+  if result != "": result &= "\n"
+
 proc endsWithBlankLine(token: Token): bool =
-  if token.type == ParagraphToken:
-    token.paragraphVal.doc.find(re"\n\n$") != -1
-  elif token.type == ListItemToken:
-    token.listItemVal.verbatim.find(re"\n\n$") != -1
+  if token of Paragraph:
+    Paragraph(token).trailing.len > 1
+  elif token of Li:
+    Li(token).verbatim.find(re"\n\n$") != -1
   else:
     token.doc.find(re"\n\n$") != -1
 
@@ -536,32 +693,27 @@ proc parseUnorderedList(doc: string, start: int): ParseResult =
     if itemSize == -1:
       break
 
-    var listItem = Token(
+    var listItem = Li(
       type: ListItemToken,
       doc: listItemDoc.strip(chars={'\n'}),
-      listItemVal: ListItem(
-        verbatim: listItemDoc,
-        marker: marker
-      )
+      verbatim: listItemDoc,
+      marker: marker
     )
     listItems.add(listItem)
 
     pos += itemSize
 
   if marker == "":
-    return (nil, -1)
+    return ParseResult(token: nil, pos: -1)
 
-  var ulToken = Token(
+  var ulToken = Ul(
     type: UnorderedListToken,
     doc: doc[start ..< pos],
-    ulVal: UnorderedList(
-      loose: false
-    )
   )
   for listItem in listItems:
     ulToken.appendChild(listItem)
 
-  return (token: ulToken, pos: pos)
+  return ParseResult(token: ulToken, pos: pos)
 
 proc parseOrderedList(doc: string, start: int): ParseResult =
   var pos = start
@@ -580,42 +732,37 @@ proc parseOrderedList(doc: string, start: int): ParseResult =
       startIndex = index
       found = true
 
-    var listItem = Token(
+    var listItem = Li(
       type: ListItemToken,
       doc: listItemDoc.strip(chars={'\n'}),
-      listItemVal: ListItem(
-        verbatim: listItemDoc,
-        marker: marker
-      )
+      verbatim: listItemDoc,
+      marker: marker
     )
     listItems.add(listItem)
 
     pos += itemSize
 
   if marker == "":
-    return (nil, -1)
+    return ParseResult(token: nil, pos: -1)
 
-  var olToken = Token(
+  var olToken = Ol(
     type: OrderedListToken,
     doc: doc[start ..< pos],
-    olVal: OrderedList(
-      start: startIndex,
-      loose: false
-    )
+    start: startIndex,
   )
   for listItem in listItems:
     olToken.appendChild(listItem)
 
-  return (token: olToken, pos: pos)
+  return ParseResult(token: olToken, pos: pos)
 
 proc getThematicBreak(s: string): tuple[size: int] =
   return (size: s.matchLen(re(r"^" & THEMATIC_BREAK_RE)))
 
 proc parseThematicBreak(doc: string, start: int): ParseResult =
   let res = doc.since(start).getThematicBreak()
-  if res.size == -1: return (nil, -1)
-  return (
-    token: Token(type: ThematicBreakToken),
+  if res.size == -1: return ParseResult(token: nil, pos: -1)
+  return ParseResult(
+    token: ThematicBreak(type: ThematicBreakToken),
     pos: start+res.size
   )
 
@@ -647,28 +794,28 @@ proc parseCodeContent*(doc: string, indent: int, fence: string): tuple[code: str
     pos += line.len
   return (codeContent, pos)
 
-proc parseCodeInfo*(doc: string, size: var int): string =
+proc parseCodeInfo*(doc: string): tuple[info: string, size: int] =
   var matches: array[1, string]
-  size = doc.matchLen(re"(?: |\t)*([^`\n]*)?(?:\n|$)", matches=matches)
+  let size = doc.matchLen(re"(?: |\t)*([^`\n]*)?(?:\n|$)", matches=matches)
   if size == -1:
-    return ""
+    return ("", -1)
   for item in matches[0].splitWhitespace:
-    return item
-  return ""
+    return (item, size)
+  return ("", size)
 
-proc parseTildeBlockCodeInfo*(doc: string, size: var int): string =
+proc parseTildeBlockCodeInfo*(doc: string): tuple[info: string, size: int] =
   var matches: array[1, string]
-  size = doc.matchLen(re"(?: |\t)*(.*)?(?:\n|$)", matches=matches)
+  let size = doc.matchLen(re"(?: |\t)*(.*)?(?:\n|$)", matches=matches)
   if size == -1:
-    return ""
+    return ("", -1)
   for item in matches[0].splitWhitespace:
-    return item
-  return ""
+    return (item, size)
+  return ("", size)
 
 proc parseFencedCode(doc: string, start: int): ParseResult =
   var pos = start
   var fenceRes = doc.since(start).getFence()
-  if fenceRes.size == -1: return (nil, -1)
+  if fenceRes.size == -1: return ParseResult(token: nil, pos: -1)
   var indent = fenceRes.indent
   var fence = fenceRes.fence
   pos += fenceRes.size
@@ -676,10 +823,10 @@ proc parseFencedCode(doc: string, start: int): ParseResult =
   var infoSize = -1
   var info: string
   if fence.startsWith("`"):
-    info = doc.since(pos).parseCodeInfo(infoSize)
+    (info, infoSize) = doc.since(pos).parseCodeInfo()
   else:
-    info = doc.since(pos).parseTildeBlockCodeInfo(infoSize)
-  if infoSize == -1: return (nil, -1)
+    (info, infosize) = doc.since(pos).parseTildeBlockCodeInfo()
+  if infoSize == -1: return ParseResult(token: nil, pos: -1)
 
   pos += infoSize
 
@@ -690,12 +837,12 @@ proc parseFencedCode(doc: string, start: int): ParseResult =
   if doc.since(pos).matchLen(re"\n$") != -1:
     pos += 1
 
-  let codeToken = Token(
+  let codeToken = CodeBlock(
     type: FencedCodeToken,
     doc: codeContent,
-    fenceCodeVal: Fenced(info: info),
+    info: info,
   )
-  return (token: codeToken, pos: pos)
+  return ParseResult(token: codeToken, pos: pos)
 
 const rIndentedCode = r"^(?: {4}| {0,3}\t)(.*\n?)"
 
@@ -723,14 +870,15 @@ proc getIndentedCodeRestLines*(s: string): tuple[code: string, size: int] =
 
 proc parseIndentedCode*(doc: string, start: int): ParseResult =
   var res = doc.since(start).getIndentedCodeFirstLine()
-  if res.size == -1: return (nil, -1)
+  if res.size == -1: return ParseResult(token: nil, pos: -1)
   var code = res.code
   var pos = start + res.size
   res = doc.since(start).getIndentedCodeRestLines()
   code &= res.code
+  code = code.removeBlankLines
   pos += res.size
-  return (
-    token: Token(type: IndentedCodeToken, doc: code),
+  return ParseResult(
+    token: CodeBlock(type: IndentedCodeToken, doc: code, info: ""),
     pos: pos
   )
 
@@ -767,14 +915,12 @@ proc getSetextHeading*(s: string): tuple[level: int, doc: string, size: int] =
 
 proc parseSetextHeading(doc: string, start: int): ParseResult =
   let res = doc.since(start).getSetextHeading()
-  if res.size == -1: return (nil, -1)
-  return (
-    token: Token(
+  if res.size == -1: return ParseResult(token: nil, pos: -1)
+  return ParseResult(
+    token: Heading(
       type: SetextHeadingToken,
       doc: res.doc,
-      headingVal: Heading(
-        level: res.level
-      )
+      level: res.level,
     ),
     pos: start+res.size
   )
@@ -796,22 +942,20 @@ proc getAtxHeading*(s: string): tuple[level: int, doc: string, size: int] =
 
 proc parseATXHeading(doc: string, start: int = 0): ParseResult =
   let res = doc.since(start).getAtxHeading()
-  if res.size == -1: return (nil, -1)
-  return (
-    token: Token(
+  if res.size == -1: return ParseResult(token: nil, pos: -1)
+  return ParseResult(
+    token: Heading(
       type: ATXHeadingToken,
       doc: res.doc,
-      headingVal: Heading(
-        level: res.level
-      )
+      level: res.level,
     ),
     pos: start+res.size
   )
 
 proc parseBlankLine*(doc: string, start: int): ParseResult =
   let size = doc.since(start).matchLen(re(r"^((?:\s*\n)+)"))
-  if size == -1: return (nil, -1)
-  return (
+  if size == -1: return ParseResult(token: nil, pos: -1)
+  return ParseResult(
     token: Token(
       type: BlankLineToken,
       doc: doc.since(start, offset=size),
@@ -861,19 +1005,20 @@ proc parseTableRow*(doc: string): seq[string] =
 
   result.add(doc[lastPos ..< max])
 
-proc parseTableAligns*(doc: string, aligns: var seq[string]): bool =
+proc parseTableAligns*(doc: string): tuple[aligns: seq[string], matched: bool] =
   if not doc.match(re"^ {0,3}[-:|][-:|\s]*(?:\n|$)"):
-    return false
+    return (@[], false)
   var columns = doc.split("|")
+  var aligns: seq[string]
   for index, column in columns:
     var t = column.strip
     if t == "":
       if index == 0 or index == columns.len - 1:
         continue
       else:
-        return false
+        return (@[], false)
     if not t.match(re"^:?-+:?$"):
-      return false
+      return (@[], false)
     if t[0] == ':':
       if t[t.len - 1] == ':':
         aligns.add("center")
@@ -883,7 +1028,7 @@ proc parseTableAligns*(doc: string, aligns: var seq[string]): bool =
       aligns.add("right")
     else:
       aligns.add("")
-  true
+  return (aligns, true)
 
 proc parseHTMLTable(doc: string, start: int): ParseResult =
   # Algorithm:
@@ -899,41 +1044,35 @@ proc parseHTMLTable(doc: string, start: int): ParseResult =
   var pos = start
   let lines = doc.since(start).splitLines(keepEol=true)
   if lines.len < 2:
-    return (nil, -1)
+    return ParseResult(token: nil, pos: -1)
 
-  var aligns: seq[string]
-  if not parseTableAligns(lines[1], aligns):
-    return (nil, -1)
+  var (aligns, alignsMatched) = lines[1].parseTableAligns
+  if not alignsMatched:
+    return ParseResult(token: nil, pos: -1)
 
   if lines[0].matchLen(re"^ {4,}") != -1:
-    return (nil, -1)
+    return ParseResult(token: nil, pos: -1)
 
   if lines[0] == "" or lines[0].find('|') == -1:
-    return (nil, -1)
+    return ParseResult(token: nil, pos: -1)
 
   var heads = parseTableRow(lines[0].replace(re"^\||\|$", ""))
   if heads.len > aligns.len:
-    return (nil, -1)
+    return ParseResult(token: nil, pos: -1)
 
-  var theadToken = Token(
+  var theadToken = THead(
     type: THeadToken,
     doc: lines[0],
-    theadVal: HTMLTableHead(size: 1)
   )
-  var theadRowToken = Token(
+  var theadRowToken = TableRow(
     type: TableRowToken,
     doc: lines[0],
-    tableRowVal: HTMLTableRow(th: true, td: false),
   )
   for index, elem in heads:
-    var thToken = Token(
+    var thToken = THeadCell(
       type: THeadCellToken,
       doc: elem.strip,
-      theadCellVal: HTMLTableCell(
-        i: index,
-        j: 0,
-        align: aligns[index],
-      )
+      align: aligns[index],
     )
     theadRowToken.appendChild(thToken)
   theadToken.appendChild(theadRowToken)
@@ -949,10 +1088,9 @@ proc parseHTMLTable(doc: string, start: int): ParseResult =
 
     var rowColumns = parseTableRow(line.replace(re"^\||\|$", ""))
 
-    var tableRowToken = Token(
+    var tableRowToken = TableRow(
       type: TableRowToken,
       doc: "",
-      tableRowVal: HTMLTableRow(th: false, td: true),
     )
     for index, elem in heads:
       var doc = 
@@ -960,37 +1098,30 @@ proc parseHTMLTable(doc: string, start: int): ParseResult =
           ""
         else:
           rowColumns[index]
-      var tdToken = Token(
+      var tdToken = TBodyCell(
         type: TBodyCellToken,
         doc: doc.replace(re"\\\|", "|").strip,
-        tbodyCellVal: HTMLTableCell(
-          i: index,
-          j: lineIndex,
-          align: aligns[index]
-        )
+        align: aligns[index],
       )
       tableRowToken.appendChild(tdToken)
     tbodyRows.add(tableRowToken)
     pos += line.len
 
-  var tableToken = Token(
+  var tableToken = HtmlTable(
     type: TableToken,
     doc: doc[start ..< pos],
-    tableVal: HTMLTable(
-      aligns: aligns,
-    )
   )
   tableToken.appendChild(theadToken)
   if tbodyRows.len > 0:
-    var tbodyToken = Token(
+    var tbodyToken = TBody(
       type: TBodyToken,
       doc: doc[start+lines[0].len+lines[1].len ..< pos],
-      tbodyVal: HTMLTableBody(size: tbodyRows.len)
+      size: tbodyRows.len,
     )
     for tbodyRowToken in tbodyRows:
       tbodyToken.appendChild(tbodyRowToken)
     tableToken.appendChild(tbodyToken)
-  return (token: tableToken, pos: pos)
+  return ParseResult(token: tableToken, pos: pos)
 
 proc parseHTMLBlockContent*(doc: string, startPattern: string, endPattern: string,
   ignoreCase = false): tuple[html: string, size: int] =
@@ -1056,60 +1187,70 @@ proc parseHTMLBlock(doc: string, start: int): ParseResult =
 
   var res = lit.parseHtmlScript()
   if res.size != -1:
-    return (
-      token: Token(type: HTMLBlockToken, doc: res.html),
+    return ParseResult(
+      token: HtmlBlock(type: HTMLBlockToken, doc: res.html),
       pos: start+res.size
     )
 
   res = lit.parseHtmlComment()
   if res.size != -1:
-    return (
-      token: Token(type: HTMLBlockToken, doc: res.html),
+    return ParseResult(
+      token: HtmlBlock(type: HTMLBlockToken, doc: res.html),
       pos: start+res.size
     )
 
   res = lit.parseProcessingInstruction()
   if res.size != -1:
-    return (
-      token: Token(type: HTMLBlockToken, doc: res.html),
+    return ParseResult(
+      token: HtmlBlock(type: HTMLBlockToken, doc: res.html),
       pos: start+res.size
     )
 
   res = lit.parseHtmlDeclaration()
   if res.size != -1:
-    return (
-      token: Token(type: HTMLBlockToken, doc: res.html),
+    return ParseResult(
+      token: HtmlBlock(type: HTMLBlockToken, doc: res.html),
       pos: start+res.size
     )
 
   res = lit.parseHtmlCData()
   if res.size != -1:
-    return (
-      token: Token(type: HTMLBlockToken, doc: res.html),
+    return ParseResult(
+      token: HtmlBlock(type: HTMLBlockToken, doc: res.html),
       pos: start+res.size
     )
 
   res = lit.parseHtmlTag()
   if res.size != -1:
-    return (
-      token: Token(type: HTMLBlockToken, doc: res.html),
+    return ParseResult(
+      token: HtmlBlock(type: HTMLBlockToken, doc: res.html),
       pos: start+res.size
     )
 
   res = lit.parseHtmlOpenCloseTag()
   if res.size != -1:
-    return (
-      token: Token(type: HTMLBlockToken, doc: res.html),
+    return ParseResult(
+      token: HtmlBlock(type: HTMLBlockToken, doc: res.html),
       pos: start+res.size
     )
 
 
-  return (nil, -1)
+  return ParseResult(token: nil, pos: -1)
 
 
 const rBlockquoteMarker = r"^( {0,3}>)"
 
 proc isBlockquote*(s: string): bool = s.contains(re(rBlockquoteMarker))
+
+proc consumeBlockquoteMarker(doc: string): string =
+  var s: string
+  for line in doc.splitLines(keepEol=true):
+    s = line.replacef(re"^ {0,3}>(.*)", "$1")
+    if s.startsWith(" "):
+      s = s.since(1)
+    elif s.startsWith("\t"):
+      s = s.replaceInitialTabs.since(2)
+    result &= s
 
 proc parseBlockquote(doc: string, start: int): ParseResult =
   let markerContent = re(r"^(( {0,3}>([^\n]*(?:\n|$)))+)")
@@ -1129,7 +1270,7 @@ proc parseBlockquote(doc: string, start: int): ParseResult =
     found = true
     pos += size
     # extract content with blockquote mark
-    var blockChunk = matches[0].replacef(re"(^|\n) {0,3}> ?", "$1")
+    var blockChunk = matches[0].consumeBlockquoteMarker
     chunks.add(Chunk(kind: BlockChunk, doc: blockChunk, pos: pos))
     document &= blockChunk
 
@@ -1154,40 +1295,39 @@ proc parseBlockquote(doc: string, start: int): ParseResult =
     chunks.add(Chunk(kind: LazyChunk, doc: lazyChunk, pos: pos))
 
   if not found:
-    return (nil, -1)
+    return ParseResult(token: nil, pos: -1)
 
-  let blockquote = Token(
+  let blockquote = Blockquote(
     type: BlockquoteToken,
     doc: document,
     chunks: chunks,
   )
-  return (token: blockquote, pos: pos)
+  return ParseResult(token: blockquote, pos: pos)
 
 proc parseReference*(doc: string, start: int): ParseResult =
   var pos = start
 
   var markStart = doc.since(pos).matchLen(re"^ {0,3}\[")
   if markStart == -1:
-    return (nil, -1)
+    return ParseResult(token: nil, pos: -1)
 
   pos += markStart - 1
 
-  var label: string
-  var labelSize = getLinkLabel(doc, pos, label)
+  var (label, labelSize) = getLinkLabel(doc, pos)
 
   # Link should have matching ] for [.
   if labelSize == -1:
-    return (nil, -1)
+    return ParseResult(token: nil, pos: -1)
 
   # A link label must contain at least one non-whitespace character.
   if label.find(re"\S") == -1:
-    return (nil, -1)
+    return ParseResult(token: nil, pos: -1)
 
   # An inline link consists of a link text followed immediately by a left parenthesis (
   pos += labelSize # [link]
 
   if pos >= doc.len or doc[pos] != ':':
-    return (nil, -1)
+    return ParseResult(token: nil, pos: -1)
   pos += 1
 
   # parse whitespace
@@ -1196,11 +1336,10 @@ proc parseReference*(doc: string, start: int): ParseResult =
     pos += whitespaceLen
 
   # parse destination
-  var destinationSlice: Slice[int]
-  var destinationLen = getLinkDestination(doc, pos, destinationslice)
+  var (destinationSlice, destinationLen) = getLinkDestination(doc, pos)
 
   if destinationLen <= 0:
-    return (nil, -1)
+    return ParseResult(token: nil, pos: -1)
 
   pos += destinationLen
 
@@ -1216,14 +1355,14 @@ proc parseReference*(doc: string, start: int): ParseResult =
   if pos<doc.len and (doc[pos] == '(' or doc[pos] == '\'' or doc[pos] == '"'):
     # at least one whitespace before the optional title.
     if not {' ', '\t', '\n'}.contains(doc[pos-1]):
-      return (nil, -1)
+      return ParseResult(token: nil, pos: -1)
 
-    titleLen = getLinkTitle(doc, pos, titleSlice)
+    (titleSlice, titleLen) = getLinkTitle(doc, pos)
     if titleLen >= 0:
       pos += titleLen
       # link title may not contain a blank line
       if doc[titleSlice].find(re"\n{2,}") != -1:
-        return (nil, -1)
+        return ParseResult(token: nil, pos: -1)
 
     # parse whitespace, no more non-whitespace is allowed from now.
     whitespaceLen = doc[pos ..< doc.len].matchLen(re"^\s*(?:\n|$)")
@@ -1236,7 +1375,7 @@ proc parseReference*(doc: string, start: int): ParseResult =
       pos -= titleLen
       titleLen = -1
     else:
-      return (nil, -1)
+      return ParseResult(token: nil, pos: -1)
 
   # construct token
   var title = ""
@@ -1245,16 +1384,14 @@ proc parseReference*(doc: string, start: int): ParseResult =
 
   var url = doc[destinationSlice]
 
-  var reference = Token(
+  var reference = Reference(
     type: ReferenceToken,
     doc: doc[start ..< pos],
-    referenceVal: Reference(
-      text: label,
-      url: url,
-      title: title,
-    )
+    text: label,
+    url: url,
+    title: title,
   )
-  return (token: reference, pos: pos)
+  return ParseResult(token: reference, pos: pos)
 
 proc isContinuationText*(doc: string): bool =
   let atxRes = doc.getAtxHeading()
@@ -1294,35 +1431,43 @@ proc isContinuationText*(doc: string): bool =
 
   return true
 
+proc isUlEmptyListItem*(doc: string): bool =
+  doc.match(re"^ {0,3}(?:[\-+*]|\d+[.)])[ \t]*\n?$")
+
+proc isOlNo1ListItem*(doc: string): bool =
+  (
+    doc.contains(re" {0,3}\d+[.(][ \t]+[^\n]") and
+    not doc.contains(re" {0,3}1[.)]")
+  )
+
 proc parseParagraph(doc: string, start: int): ParseResult =
   var size: int
   let firstLine = doc.since(start).firstLine
   var p = firstLine
   for line in doc.since(start).restLines:
+    # Special cases.
     # empty list item is continuation text
-    if line.match(re"^ {0,3}(?:[\-+*]|\d+[.)])[ \t]*\n?$"):
+    # ol should start with 1.
+    if line.isUlEmptyListItem or line.isOlNo1ListItem:
       p &= line
       continue
-    # ol should start with 1.
-    if line.contains(re" {0,3}\d+[.(][ \t]+[^\n]"):
-      if not line.strip.startsWith("1.") and not line.strip.startsWith("1)"):
-        p &= line
-        continue
+
+    # Continuation text ends at a blank line.
     if line.isBlank:
       p &= line
       break
+
     if not line.isContinuationText:
       break
     p &= line
+
   size = p.len
-  return (
-    token: Token(
+  return ParseResult(
+    token: Paragraph(
       type: ParagraphToken,
       doc: doc[start ..< start+size].replace(re"\n\s*", "\n").strip,
-      paragraphVal: Paragraph(
-        doc: doc[start ..< start+size],
-        loose: true
-      )
+      loose: true,
+      trailing: doc[start ..< start+size].findAll(re"\n*$").join(""),
     ),
     pos: start+size
   )
@@ -1348,138 +1493,118 @@ proc parseContainerBlock(state: State, token: Token): ParseResult =
       var t = Token(type: token.type, doc: chunk.doc)
       parseBlock(state, t)
       var p = t.children.head
-      if p != nil and p.value.type == ParagraphToken and token.tipToken.type == ParagraphToken:
+      if p != nil and p.value of Paragraph and token.tipToken of Paragraph:
         token.tipToken.doc &= p.value.doc
         t.children.remove(p)
       for child in t.children:
         token.appendChild(child)
-      if token.tipToken.type != ParagraphToken:
+      if not (token.tipToken of Paragraph):
         break
     else:
       if not token.tipToken.doc.endsWith("\n"):
         token.tipToken.doc &= "\n"
       token.tipToken.doc &= chunk.doc.strip(chars={' '})
-  return (token, pos)
+  return ParseResult(token: token, pos: pos)
+
+proc finalizeList*(state: State, token: Token) =
+  for listItem in token.children.items:
+    if listItem.doc != "":
+      parseBlock(state, listItem)
+
+  let loose = token.parseLoose
+  for listItem in token.children.items:
+    for child in listItem.children.items:
+      if child of Paragraph:
+        Paragraph(child).loose = loose
+
+method apply*(this: Token, state: State, res: ParseResult): ParseResult {.base.} =
+  res
+
+method apply*(this: Ul, state: State, res: ParseResult): ParseResult =
+  state.finalizeList(res.token)
+  res
+
+method apply*(this: Ol, state: State, res: ParseResult): ParseResult =
+  state.finalizeList(res.token)
+  res
+
+method apply*(this: Blockquote, state: State, res: ParseResult): ParseResult =
+  state.parseContainerBlock(res.token)
+
+method apply*(this: Reference, state: State, res: ParseResult): ParseResult =
+  if not state.references.contains(this.text):
+    state.references[this.text] = this
+  res
 
 proc parseBlock(state: State, token: Token) =
-  let doc = token.doc
-  var pos = 0
   var res: ParseResult
-  while pos < doc.len:
-    for rule in state.ruleSet.blockRules:
-      case rule
-      of UnorderedListToken:
-        res = parseUnorderedList(doc, pos)
-        if res.pos != -1:
-          for listItem in res.token.children.items:
-            if listItem.doc != "":
-              parseBlock(state, listItem)
-          res.token.ulVal.loose = res.token.parseLoose
-          for listItem in res.token.children.items:
-            listItem.listItemVal.loose = res.token.ulVal.loose
-            for child in listItem.children.items:
-              if child.type == ParagraphToken:
-                child.paragraphVal.loose = res.token.ulVal.loose
-      of OrderedListToken:
-        res = parseOrderedList(doc, pos)
-        if res.pos != -1:
-          for listItem in res.token.children.items:
-            if listItem.doc != "":
-              parseBlock(state, listItem)
-          res.token.olVal.loose = res.token.parseLoose
-          for listItem in res.token.children.items:
-            listItem.listItemVal.loose = res.token.olVal.loose
-            for child in listItem.children.items:
-              if child.type == ParagraphToken:
-                child.paragraphVal.loose = res.token.olVal.loose
-      of ReferenceToken:
-        res = parseReference(doc, pos)
-        if res.pos != -1 and not state.references.contains(res.token.referenceVal.text):
-          state.references[res.token.referenceVal.text] = res.token.referenceVal
-      of BlockquoteToken:
-        res = parseBlockquote(doc, pos)
-        if res.pos != -1 and res.token.doc.strip != "":
-          res = parseContainerBlock(state, res.token)
-      of TableToken: res = parseHTMLTable(doc, pos)
-      of FencedCodeToken: res = parseFencedCode(doc, pos)
-      of IndentedCodeToken: res = parseIndentedCode(doc, pos)
-      of HTMLBlockToken: res = parseHTMLBlock(doc, pos)
-      of SetextHeadingToken: res = parseSetextHeading(doc, pos)
-      of BlankLineToken: res = parseBlankLine(doc, pos)
-      of ThematicBreakToken: res = parseThematicBreak(doc, pos)
-      of ATXHeadingToken: res = parseATXHeading(doc, pos)
-      of ParagraphToken: res = parseParagraph(doc, pos)
-      else: raise newException(MarkdownError, fmt"unknown rule.")
-
+  while token.pos < token.doc.len:
+    for blockParser in state.config.blockParsers:
+      res = blockParser(token.doc, token.pos)
       if res.pos != -1:
-        pos = res.pos
+        res = res.token.apply(state, res)
         token.appendChild(res.token)
+        token.pos = res.pos
         break
 
-    if pos == -1:
+    if res.pos == -1:
       raise newException(MarkdownError, fmt"unknown rule.")
 
-proc parseText(state: State, token: Token, start: int): int =
-  var text = Token(
-    type: TextToken,
-    doc: token.doc[start ..< start+1],
-  )
-  token.appendChild(text)
-  result = 1
+proc parseText(doc: string, start: int): ParseResult =
+  let token = Text(type: TextToken, doc: doc[start ..< start+1])
+  return ParseResult(token: token, pos: start+1)
 
-proc parseSoftLineBreak(state: State, token: Token, start: int): int =
-  result = token.doc[start ..< token.doc.len].matchLen(re"^ \n *")
-  if result != -1:
-    token.appendChild(Token(type: SoftLineBreakToken))
+proc parseSoftLineBreak(doc: string, start: int): ParseResult =
+  let size = doc.since(start).matchLen(re"^ \n *")
+  if size == -1: return skipParsing()
+  let token = SoftBreak(type: SoftLineBreakToken)
+  return ParseResult(token: token, pos: start+size)
 
-proc parseAutoLink(state: State, token: Token, start: int): int =
-  if token.doc[start] != '<':
-    return -1
+proc parseAutoLink(doc: string, start: int): ParseResult =
+  if doc[start] != '<':
+    return skipParsing()
 
   let EMAIL_RE = r"^<([a-zA-Z0-9.!#$%&'*+\/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*)>"
   var emailMatches: array[1, string]
-  result = token.doc[start ..< token.doc.len].matchLen(re(EMAIL_RE, {RegexFlag.reIgnoreCase}), matches=emailMatches)
+  var size = doc.since(start).matchLen(re(EMAIL_RE, {RegexFlag.reIgnoreCase}), matches=emailMatches)
 
-  if result != -1:
+  if size != -1:
     var url = emailMatches[0]
-    # TODO: validate and normalize the link
-    token.appendChild(Token(
+    let token = AutoLink(
       type: AutoLinkToken,
-      autoLinkVal: AutoLink(
-        text: url,
-        url: fmt"mailto:{url}"
-      )
-    ))
-    return result
-  
+      text: url,
+      url: fmt"mailto:{url}"
+    )
+    return ParseResult(token: token, pos: start+size)
+
   let LINK_RE = r"^<([a-zA-Z][a-zA-Z0-9+.\-]{1,31}):([^<>\x00-\x20]*)>"
   var linkMatches: array[2, string]
-  result = token.doc[start ..< token.doc.len].matchLen(re(LINK_RE, {RegexFlag.reIgnoreCase}), matches=linkMatches)
+  size = doc.since(start).matchLen(re(LINK_RE, {RegexFlag.reIgnoreCase}), matches=linkMatches)
 
-  if result != -1:
+  if size != -1:
     var schema = linkMatches[0]
     var uri = linkMatches[1]
-    token.appendChild(Token(
+    var token = AutoLink(
       type: AutoLinkToken,
-      autoLinkVal: AutoLink(
-        text: fmt"{schema}:{uri}",
-        url: fmt"{schema}:{uri}",
-      )
-    ))
-    return result
+      text: fmt"{schema}:{uri}",
+      url: fmt"{schema}:{uri}",
+    )
+    return ParseResult(token: token, pos: start+size)
 
-proc scanInlineDelimiters*(doc: string, start: int, delimeter: var Delimiter) =
+  return skipParsing()
+
+proc scanInlineDelimiters*(doc: string, start: int, delimiter: var Delimiter) =
   var charBefore = '\n'
   var charAfter = '\n'
   let charCurrent = doc[start]
   var isCharAfterWhitespace = true
   var isCharBeforeWhitespace = true
 
-  # get the number of delimeters.
+  # get the number of delimiters.
   for ch in doc[start .. doc.len - 1]:
     if ch == charCurrent:
-      delimeter.num += 1
-      delimeter.originalNum += 1
+      delimiter.num += 1
+      delimiter.originalNum += 1
     else:
       break
 
@@ -1488,10 +1613,10 @@ proc scanInlineDelimiters*(doc: string, start: int, delimeter: var Delimiter) =
     charBefore = doc[start - 1]
     isCharBeforeWhitespace = fmt"{charBefore}".match(re"^\s") or doc.runeAt(start - 1).isWhitespace
 
-  # get the character after the delimeter runs
-  if start + delimeter.num + 1 < doc.len:
-    charAfter = doc[start + delimeter.num]
-    isCharAfterWhitespace = fmt"{charAfter}".match(re"^\s") or doc.runeAt(start + delimeter.num).isWhitespace
+  # get the character after the delimiter runs
+  if start + delimiter.num + 1 < doc.len:
+    charAfter = doc[start + delimiter.num]
+    isCharAfterWhitespace = fmt"{charAfter}".match(re"^\s") or doc.runeAt(start + delimiter.num).isWhitespace
 
   let isCharAfterPunctuation = fmt"{charAfter}".match(re"^\p{P}")
   let isCharBeforePunctuation = fmt"{charBefore}".match(re"^\p{P}")
@@ -1510,19 +1635,18 @@ proc scanInlineDelimiters*(doc: string, start: int, delimeter: var Delimiter) =
 
   case charCurrent
   of '_':
-    delimeter.canOpen = isLeftFlanking and ((not isRightFlanking) or isCharBeforePunctuation)
-    delimeter.canClose = isRightFlanking and ((not isLeftFlanking) or isCharAfterPunctuation)
+    delimiter.canOpen = isLeftFlanking and ((not isRightFlanking) or isCharBeforePunctuation)
+    delimiter.canClose = isRightFlanking and ((not isLeftFlanking) or isCharAfterPunctuation)
   else:
-    delimeter.canOpen = isLeftFlanking
-    delimeter.canClose = isRightFlanking
+    delimiter.canOpen = isLeftFlanking
+    delimiter.canClose = isRightFlanking
 
-proc parseDelimiter(state: State, token: Token, start: int, delimeters: var DoublyLinkedList[Delimiter]): int =
-  if token.doc[start] != '*' and token.doc[start] != '_':
-    return -1
+proc parseDelimiter(doc: string, start: int): ParseResult =
+  if not {'*', '_'}.contains(doc[start]):
+    return ParseResult(token: nil, pos: -1)
 
-  var delimeter = Delimiter(
-    token: nil,
-    kind: fmt"{token.doc[start]}",
+  var delimiter = Delimiter(
+    kind: fmt"{doc[start]}",
     num: 0,
     originalNum: 0,
     isActive: true,
@@ -1530,33 +1654,34 @@ proc parseDelimiter(state: State, token: Token, start: int, delimeters: var Doub
     canClose: false,
   )
 
-  scanInlineDelimiters(token.doc, start, delimeter)
-  if delimeter.num == 0:
-    return -1
+  scanInlineDelimiters(doc, start, delimiter)
+  if delimiter.num == 0:
+    return ParseResult(token: nil, pos: -1)
 
-  result = delimeter.num
-
-  var textToken = Token(
+  let size = delimiter.num
+  let token = Text(
     type: TextToken,
-    doc: token.doc[start ..< start+result]
+    doc: doc[start ..< start+size],
+    delimiter: delimiter
   )
-  token.appendChild(textToken)
-  delimeter.token = textToken
-  delimeters.append(delimeter)
+  return ParseResult(token: token, pos: start+size)
 
-proc getLinkDestination*(doc: string, start: int, slice: var Slice[int]): int =
+proc getLinkDestination*(doc: string, start: int): tuple[slice: Slice[int], size: int] =
   # if start < 1 or doc[start - 1] != '(':
   #   raise newException(MarkdownError, fmt"{start} can not be the start of inline link destination.")
 
   # A link destination can be 
   # a sequence of zero or more characters between an opening < and a closing >
   # that contains no line breaks or unescaped < or > characters, or
+  var size = -1
+  var slice: Slice[int]
+
   if doc[start] == '<':
-    result = doc[start ..< doc.len].matchLen(re"^<([^\n<>\\]*)>")
-    if result != -1:
+    size = doc[start ..< doc.len].matchLen(re"^<([^\n<>\\]*)>")
+    if size != -1:
       slice.a = start + 1
-      slice.b = start + result - 2
-    return result
+      slice.b = start + size - 2
+    return (slice, size)
 
   # A link destination can also be
   # a nonempty sequence of characters that does not include ASCII space or control characters, 
@@ -1587,17 +1712,17 @@ proc getLinkDestination*(doc: string, start: int, slice: var Slice[int]): int =
         urlLen -= 1
         break
   if level > 1:
-    return -1
+    return ((0..<0), -1)
   if urlLen == -1:
-     return -1
-  slice = (start ..< start+urlLen)
-  return urlLen
+    return ((0..<0), -1)
+  return ((start ..< start+urlLen), urlLen)
 
-proc getLinkTitle*(doc: string, start: int, slice: var Slice[int]): int =
+proc getLinkTitle*(doc: string, start: int): tuple[slice: Slice[int], size: int] =
+  var slice: Slice[int]
   var marker = doc[start]
   # Titles may be in single quotes, double quotes, or parentheses
   if marker != '"' and marker != '\'' and marker != '(':
-    return -1
+    return ((0..<0), -1)
   if marker == '(':
     marker = ')'
   var isEscaping = false
@@ -1610,8 +1735,8 @@ proc getLinkTitle*(doc: string, start: int, slice: var Slice[int]): int =
       continue
     elif ch == marker:
       slice = (start+1 .. start+i)
-      return i+2
-  return -1
+      return (slice, i+2)
+  return ((0..<0), -1)
 
 proc normalizeLabel*(label: string): string =
   # One label matches another just in case their normalized forms are equal.
@@ -1620,15 +1745,16 @@ proc normalizeLabel*(label: string): string =
   # and collapse consecutive internal whitespace to a single space.
   label.toLower.strip.replace(re"\s+", " ")
 
-proc getLinkLabel*(doc: string, start: int, label: var string): int =
+proc getLinkLabel*(doc: string, start: int): tuple[label: string, size: int] =
+  var isEscaping = false
+  var size = 0
+
   if doc[start] != '[':
     raise newException(MarkdownError, fmt"{doc[start]} cannot be the start of link label.")
 
   if start+1 >= doc.len:
-    return -1
+    return ("", -1)
 
-  var isEscaping = false
-  var size = 0
   for i, ch in doc[start+1 ..< doc.len]:
     size += 1
 
@@ -1643,17 +1769,17 @@ proc getLinkLabel*(doc: string, start: int, label: var string): int =
 
     # Unescaped square bracket characters are not allowed inside the opening and closing square brackets of link labels
     elif ch == '[':
-      return -1
+      return ("", -1)
 
     # A link label can have at most 999 characters inside the square brackets.
     if size > 999:
-      return -1
+      return ("", -1)
 
-  label = doc[start+1 ..< start+size].normalizeLabel
-  return size + 1
+  let label = doc[start+1 ..< start+size].normalizeLabel
+  return (label, size+1)
 
 
-proc getLinkText*(doc: string, start: int, slice: var Slice[int], allowNested: bool = false): int =
+proc getLinkText*(doc: string, start: int, allowNested: bool = false): tuple[slice: Slice[int], size: int] =
   # based on assumption: token.doc[start] = '['
   if doc[start] != '[':
     raise newException(MarkdownError, fmt"{start} is not [.")
@@ -1695,15 +1821,15 @@ proc getLinkText*(doc: string, start: int, slice: var Slice[int], allowNested: b
     # Links may not contain other links, at any level of nesting.
     # Image description may contain links.
     if level == 0 and not allowNested and doc[start .. start+i].find(re"[^!]\[[^]]*\]\([^)]*\)") > -1:
-        return -1
+      return ((0..<0), -1)
     if level == 0 and not allowNested and doc[start .. start+i].find(re"[^!]\[[^]]*\]\[[^]]*\]") > -1:
-        return -1
+      return ((0..<0), -1)
 
     if level == 0:
-      slice = (start .. start+i)
-      return i+1
+      let slice = (start .. start+i)
+      return (slice, i+1)
 
-  return -1
+  return ((0..<0), -1)
 
 
 proc parseInlineLink(state: State, token: Token, start: int, labelSlice: Slice[int]): int =
@@ -1718,8 +1844,7 @@ proc parseInlineLink(state: State, token: Token, start: int, labelSlice: Slice[i
     pos += whitespaceLen
 
   # parse destination
-  var destinationSlice: Slice[int]
-  var destinationLen = getLinkDestination(token.doc, pos, destinationslice)
+  var (destinationSlice, destinationLen) = getLinkDestination(token.doc, pos)
 
   if destinationLen == -1:
     return -1
@@ -1734,8 +1859,8 @@ proc parseInlineLink(state: State, token: Token, start: int, labelSlice: Slice[i
   # parse title (optional)
   if token.doc[pos] != '(' and token.doc[pos] != '\'' and token.doc[pos] != '"' and token.doc[pos] != ')':
     return -1
-  var titleSlice: Slice[int]
-  var titleLen = getLinkTitle(token.doc, pos, titleSlice)
+
+  var (titleSlice, titleLen) = getLinkTitle(token.doc, pos)
 
   if titleLen >= 0:
     pos += titleLen
@@ -1756,14 +1881,12 @@ proc parseInlineLink(state: State, token: Token, start: int, labelSlice: Slice[i
     title = token.doc[titleSlice]
   var url = token.doc[destinationSlice]
   var text = token.doc[labelSlice.a+1 ..< labelSlice.b]
-  var link = Token(
+  var link = Link(
     type: LinkToken,
     doc: token.doc[start .. pos],
-    linkVal: Link(
-      text: text,
-      url: url,
-      title: title,
-    )
+    text: text,
+    url: url,
+    title: title,
   )
   parseLinkInlines(state, link)
   token.appendChild(link)
@@ -1771,8 +1894,7 @@ proc parseInlineLink(state: State, token: Token, start: int, labelSlice: Slice[i
 
 proc parseFullReferenceLink(state: State, token: Token, start: int, textSlice: Slice[int]): int =
   var pos = textSlice.b + 1
-  var label: string
-  var labelSize = getLinkLabel(token.doc, pos, label)
+  var (label, labelSize) = getLinkLabel(token.doc, pos)
 
   if labelSize == -1:
     return -1
@@ -1784,14 +1906,12 @@ proc parseFullReferenceLink(state: State, token: Token, start: int, textSlice: S
 
   var text = token.doc[textSlice.a+1 ..< textSlice.b]
   var reference = state.references[label]
-  var link = Token(
+  var link = Link(
     type: LinkToken,
     doc: token.doc[start ..< pos],
-    linkVal: Link(
-      url: reference.url,
-      title: reference.title,
-      text: text
-    )
+    url: reference.url,
+    title: reference.title,
+    text: text
   )
   parseLinkInlines(state, link)
   token.appendChild(link)
@@ -1804,14 +1924,12 @@ proc parseCollapsedReferenceLink(state: State, token: Token, start: int, label: 
     return -1
 
   var reference = state.references[id]
-  var link = Token(
+  var link = Link(
     type: LinkToken,
     doc: token.doc[start ..< label.b+1],
-    linkVal: Link(
-      url: reference.url,
-      title: reference.title,
-      text: text
-    )
+    url: reference.url,
+    title: reference.title,
+    text: text
   )
   parseLinkInlines(state, link)
   token.appendChild(link)
@@ -1824,14 +1942,12 @@ proc parseShortcutReferenceLink(state: State, token: Token, start: int, label: S
     return -1
 
   var reference = state.references[id]
-  var link = Token(
+  var link = Link(
     type: LinkToken,
     doc: token.doc[start ..< label.b+1],
-    linkVal: Link(
-      url: reference.url,
-      title: reference.title,
-      text: text
-    )
+    url: reference.url,
+    title: reference.title,
+    text: text
   )
   parseLinkInlines(state, link)
   token.appendChild(link)
@@ -1844,7 +1960,7 @@ proc parseLink*(state: State, token: Token, start: int): int =
     return -1
 
   var labelSlice: Slice[int]
-  result = getLinkText(token.doc, start, labelSlice)
+  (labelSlice, result) = getLinkText(token.doc, start)
   # Link should have matching ] for [.
   if result == -1:
     return -1
@@ -1879,8 +1995,7 @@ proc parseInlineImage(state: State, token: Token, start: int, labelSlice: Slice[
   pos += whitespaceLen
 
   # parse destination
-  var destinationSlice: Slice[int]
-  var destinationLen = getLinkDestination(token.doc, pos, destinationslice)
+  var (destinationslice, destinationLen) = getLinkDestination(token.doc, pos)
   if destinationLen == -1:
     return -1
 
@@ -1893,8 +2008,8 @@ proc parseInlineImage(state: State, token: Token, start: int, labelSlice: Slice[
   # parse title (optional)
   if token.doc[pos] != '(' and token.doc[pos] != '\'' and token.doc[pos] != '"' and token.doc[pos] != ')':
     return -1
-  var titleSlice: Slice[int]
-  var titleLen = getLinkTitle(token.doc, pos, titleSlice)
+
+  var (titleSlice, titleLen) = getLinkTitle(token.doc, pos)
 
   if titleLen >= 0:
     pos += titleLen
@@ -1916,14 +2031,12 @@ proc parseInlineImage(state: State, token: Token, start: int, labelSlice: Slice[
   var url = token.doc[destinationSlice]
   var text = token.doc[labelSlice.a+1 ..< labelSlice.b]
 
-  var image = Token(
+  var image = Image(
     type: ImageToken,
     doc: token.doc[start-1 ..< pos+1],
-    imageVal: Image(
-      alt: text,
-      url: url,
-      title: title,
-    )
+    alt: text,
+    url: url,
+    title: title,
   )
 
   parseLinkInlines(state, image, allowNested=true)
@@ -1932,8 +2045,7 @@ proc parseInlineImage(state: State, token: Token, start: int, labelSlice: Slice[
 
 proc parseFullReferenceImage(state: State, token: Token, start: int, altSlice: Slice[int]): int =
   var pos = altSlice.b + 1
-  var label: string
-  var labelSize = getLinkLabel(token.doc, pos, label)
+  var (label, labelSize) = getLinkLabel(token.doc, pos)
 
   if labelSize == -1:
     return -1
@@ -1945,14 +2057,12 @@ proc parseFullReferenceImage(state: State, token: Token, start: int, altSlice: S
     return -1
 
   var reference = state.references[label]
-  var image = Token(
+  var image = Image(
     type: ImageToken,
     doc: token.doc[start ..< pos-1],
-    imageVal: Image(
-      url: reference.url,
-      title: reference.title,
-      alt: alt
-    )
+    url: reference.url,
+    title: reference.title,
+    alt: alt
   )
   parseLinkInlines(state, image, allowNested=true)
   token.appendChild(image)
@@ -1965,14 +2075,12 @@ proc parseCollapsedReferenceImage(state: State, token: Token, start: int, label:
     return -1
 
   var reference = state.references[id]
-  var image = Token(
+  var image = Image(
     type: ImageToken,
     doc: token.doc[start ..< label.b+2],
-    imageVal: Image(
-      url: reference.url,
-      title: reference.title,
-      alt: alt
-    )
+    url: reference.url,
+    title: reference.title,
+    alt: alt
   )
   parseLinkInlines(state, image)
   token.appendChild(image)
@@ -1985,14 +2093,12 @@ proc parseShortcutReferenceImage(state: State, token: Token, start: int, label: 
     return -1
 
   var reference = state.references[id]
-  var image = Token(
+  var image = Image(
     type: ImageToken,
     doc: token.doc[start ..< label.b+1],
-    imageVal: Image(
-      url: reference.url,
-      title: reference.title,
-      alt: alt
-    )
+    url: reference.url,
+    title: reference.title,
+    alt: alt
   )
   parseLinkInlines(state, image)
   token.appendChild(image)
@@ -2004,8 +2110,7 @@ proc parseImage*(state: State, token: Token, start: int): int =
   if not token.doc[start ..< token.doc.len].match(re"^!\["):
     return -1
 
-  var labelSlice: Slice[int]
-  var labelSize = getLinkText(token.doc, start+1, labelSlice, allowNested=true)
+  var (labelSlice, labelSize) = getLinkText(token.doc, start+1, allowNested=true)
 
   # Image should have matching ] for [.
   if labelSize == -1:
@@ -2031,16 +2136,14 @@ proc parseImage*(state: State, token: Token, start: int): int =
     return parseShortcutReferenceImage(state, token, start, labelSlice)
 
 const ENTITY = r"&(?:#x[a-f0-9]{1,6}|#[0-9]{1,7}|[a-z][a-z0-9]{1,31});"
-proc parseHTMLEntity*(state: State, token: Token, start: int): int =
-  if token.doc[start] != '&':
-    return -1
+proc parseHTMLEntity*(doc: string, start: int): ParseResult =
+  if doc[start] != '&': return skipParsing()
 
   let regex = re(r"^(" & ENTITY & ")", {RegexFlag.reIgnoreCase})
   var matches: array[1, string]
 
-  var size = token.doc[start .. token.doc.len - 1].matchLen(regex, matches)
-  if size == -1:
-    return -1
+  var size = doc.since(start).matchLen(regex, matches)
+  if size == -1: return skipParsing()
 
   var entity: string
   if matches[0] == "&#0;":
@@ -2048,123 +2151,164 @@ proc parseHTMLEntity*(state: State, token: Token, start: int): int =
   else:
     entity = escapeHTMLEntity(matches[0])
 
-  token.appendChild(Token(
+  let token = HtmlEntity(
     type: HTMLEntityToken,
     doc: entity
-  ))
-  return size
+  )
+  return ParseResult(token: token, pos: start+size)
 
-proc parseEscape*(state: State, token: Token, start: int): int =
-  if token.doc[start] != '\\':
-    return -1
+proc parseEscape*(doc: string, start: int): ParseResult =
+  if doc[start] != '\\': return skipParsing()
 
   let regex = re"^\\([\\`*{}\[\]()#+\-.!_<>~|""$%&',/:;=?@^])"
-  let size = token.doc[start ..< token.doc.len].matchLen(regex)
-  if size == -1:
-    return -1
+  let size = doc.since(start).matchLen(regex)
+  if size == -1: return skipParsing()
 
-  token.appendChild(Token(
-    type: EscapeToken,
-    escapeVal: fmt"{token.doc[start+1]}"
-  ))
-  return 2
+  let token = Escape(type: EscapeToken, doc: fmt"{doc[start+1]}")
+  return ParseResult(token: token, pos: start+size)
 
-proc parseInlineHTML*(state: State, token: Token, start: int): int =
-  if token.doc[start] != '<':
-    return -1
+proc parseInlineHTML*(doc: string, start: int): ParseResult =
+  if doc[start] != '<': return skipParsing()
+
   let regex = re("^(" & HTML_TAG & ")", {RegexFlag.reIgnoreCase})
   var matches: array[5, string]
-  var size = token.doc[start ..< token.doc.len].matchLen(regex, matches=matches)
+  var size = doc.since(start).matchLen(regex, matches=matches)
 
-  if size == -1:
-    return -1
+  if size == -1: return skipParsing()
 
-  token.appendChild(Token(
+  let token = InlineHtml(
     type: InlineHTMLToken,
     doc: matches[0]
-  ))
-  return size
+  )
+  return ParseResult(token: token, pos: start+size)
 
-proc parseHardLineBreak*(state: State, token: Token, start: int): int =
-  if token.doc[start] != ' ' and token.doc[start] != '\\':
-    return -1
+proc parseHardLineBreak*(doc: string, start: int): ParseResult =
+  if not {' ', '\\'}.contains(doc[start]): return skipParsing()
 
-  let size = token.doc[start ..< token.doc.len].matchLen(re"^((?: {2,}\n|\\\n)\s*)")
+  let size = doc.since(start).matchLen(re"^((?: {2,}\n|\\\n)\s*)")
 
-  if size == -1:
-    return -1
+  if size == -1: return skipParsing()
 
-  token.appendChild(Token(type: HardLineBreakToken))
-  return size
+  let token = HardBreak(type: HardLineBreakToken)
+  return ParseResult(token: token, pos: start+size)
 
-proc parseCodeSpan*(state: State, token: Token, start: int): int =
-  if token.doc[start] != '`':
-    return -1
+proc parseCodeSpan*(doc: string, start: int): ParseResult =
+  if doc[start] != '`': return skipParsing()
 
   var matches: array[5, string]
-  var size = token.doc[start ..< token.doc.len].matchLen(re"^((`+)([^`]|[^`][\s\S]*?[^`])\2(?!`))", matches=matches)
+  var size = doc.since(start).matchLen(re"^((`+)([^`]|[^`][\s\S]*?[^`])\2(?!`))", matches=matches)
 
   if size == -1:
-    size = token.doc[start ..< token.doc.len].matchLen(re"^`+(?!`)")
+    size = doc.since(start).matchLen(re"^`+(?!`)")
     if size == -1:
-      return -1
-    token.appendChild(Token(
+      return skipParsing()
+    let token = Text(
       type: TextToken,
-      doc : token.doc[start ..< start+size]
-    ))
-    return size
+      doc : doc[start ..< start+size]
+    )
+    return ParseResult(token: token, pos: start+size)
 
   var codeSpanVal = matches[2].strip(chars={'\n'}).replace(re"[\n]+", " ")
   if codeSpanVal[0] == ' ' and codeSpanVal[codeSpanVal.len-1] == ' ' and not codeSpanVal.match(re"^[ ]+$"):
     codeSpanVal = codeSpanVal[1 ..< codeSpanVal.len-1]
 
-  token.appendChild(Token(
+  let token = CodeSpan(
     type: CodeSpanToken,
     doc: codeSpanVal,
-  ))
-  return size
+  )
+  return ParseResult(token: token, pos: start+size)
 
-proc parseStrikethrough*(state: State, token: Token, start: int): int =
-  if token.doc[start] != '~':
-    return -1
+proc parseStrikethrough*(doc: string, start: int): ParseResult =
+  if doc[start] != '~': return skipParsing()
 
   var matches: array[5, string]
-  var size = token.doc[start ..< token.doc.len].matchLen(re"^(~~(?=\S)([\s\S]*?\S)~~)", matches=matches)
+  var size = doc.since(start).matchLen(re"^(~~(?=\S)([\s\S]*?\S)~~)", matches=matches)
 
-  if size == -1:
-    return -1
+  if size == -1: return skipParsing()
 
-  token.appendChild(Token(
+  let token = Strickthrough(
     type: StrikethroughToken,
     doc: matches[1],
-  ))
-  return size
+  )
+  return ParseResult(token: token, pos: start+size)
 
-proc findInlineToken(state: State, token: Token, rule: TokenType, start: int, delimeters: var DoublyLinkedList[Delimiter]): int =
+proc findInlineToken(state: State, token: Token, rule: TokenType, start: int): int =
+  var res: ParseResult
+
   case rule
-  of EmphasisToken: result = parseDelimiter(state, token, start, delimeters)
-  of AutoLinkToken: result = parseAutoLink(state, token, start)
+  of EmphasisToken:
+    res = token.doc.parseDelimiter(start)
+    if res.pos == -1: return -1
+    token.appendChild(res.token)
+    result = res.pos - start
+  of AutoLinkToken:
+    res = token.doc.parseAutoLink(start)
+    if res.pos == -1: return -1
+    token.appendChild(res.token)
+    result = res.pos - start
+  of HTMLEntityToken:
+    res = token.doc.parseHTMLEntity(start)
+    if res.pos == -1: return -1
+    token.appendChild(res.token)
+    result = res.pos - start
+  of InlineHTMLToken:
+    res = token.doc.parseInlineHTML(start)
+    if res.pos == -1: return -1
+    token.appendChild(res.token)
+    result = res.pos - start
+  of EscapeToken:
+    res = token.doc.parseEscape(start)
+    if res.pos == -1: return -1
+    token.appendChild(res.token)
+    result = res.pos - start
+  of CodeSpanToken:
+    res = token.doc.parseCodeSpan(start)
+    if res.pos == -1: return -1
+    token.appendChild(res.token)
+    result = res.pos - start
+  of StrikethroughToken:
+    res = token.doc.parseStrikethrough(start)
+    if res.pos == -1: return -1
+    token.appendChild(res.token)
+    result = res.pos - start
+  of HardLineBreakToken:
+    res = token.doc.parseHardLineBreak(start)
+    if res.pos == -1: return -1
+    token.appendChild(res.token)
+    result = res.pos - start
+  of SoftLineBreakToken:
+    res = token.doc.parseSoftLineBreak(start)
+    if res.pos == -1: return -1
+    token.appendChild(res.token)
+    result = res.pos - start
+  of TextToken:
+    res = token.doc.parseText(start)
+    if res.pos == -1: return -1
+    token.appendChild(res.token)
+    result = res.pos - start
   of LinkToken: result = parseLink(state, token, start)
   of ImageToken: result = parseImage(state, token, start)
-  of HTMLEntityToken: result = parseHTMLEntity(state, token, start)
-  of InlineHTMLToken: result = parseInlineHTML(state, token, start)
-  of EscapeToken: result = parseEscape(state, token, start)
-  of CodeSpanToken: result = parseCodeSpan(state, token, start)
-  of StrikethroughToken: result = parseStrikethrough(state, token, start)
-  of HardLineBreakToken: result = parseHardLineBreak(state, token, start)
-  of SoftLineBreakToken: result = parseSoftLineBreak(state, token, start)
-  of TextToken: result = parseText(state, token, start)
   else: raise newException(MarkdownError, fmt"{token.type} has no inline rule.")
 
 
-proc removeDelimiter*(delimeter: var DoublyLinkedNode[Delimiter]) =
-  if delimeter.prev != nil:
-    delimeter.prev.next = delimeter.next
-  if delimeter.next != nil:
-    delimeter.next.prev = delimeter.prev
-  delimeter = delimeter.next
+proc removeDelimiter*(delimiter: var DoublyLinkedNode[Delimiter]) =
+  if delimiter.prev != nil:
+    delimiter.prev.next = delimiter.next
+  if delimiter.next != nil:
+    delimiter.next.prev = delimiter.prev
+  delimiter = delimiter.next
 
-proc processEmphasis*(state: State, token: Token, delimeterStack: var DoublyLinkedList[Delimiter]) =
+proc getDelimiterStack*(token: Token): DoublyLinkedList[Delimiter] =
+  result = initDoublyLinkedList[Delimiter]()
+  for child in token.children.mitems:
+    if child of Text:
+      var text = Text(child)
+      if text.delimiter != nil:
+        text.delimiter.token = text # TODO: use treat delimiter as a token, instead of linking to a text token.
+        result.append(text.delimiter)
+
+proc processEmphasis*(state: State, token: Token) =
+  var delimiterStack = token.getDelimiterStack
   var opener: DoublyLinkedNode[Delimiter] = nil
   var closer: DoublyLinkedNode[Delimiter] = nil
   var oldCloser: DoublyLinkedNode[Delimiter] = nil
@@ -2178,12 +2322,12 @@ proc processEmphasis*(state: State, token: Token, delimeterStack: var DoublyLink
   #
   # *opener and closer*
   #                   ^
-  closer = delimeterStack.head
+  closer = delimiterStack.head
   # move forward, looking for closers, and handling each
   while closer != nil:
-    # find the first closing delimeter.
+    # find the first closing delimiter.
     #
-    # sometimes, the delimeter **can _not** close.
+    # sometimes, the delimiter **can _not** close.
     #                                ^
     # , so we choose jumping to the next ^
     if not closer.value.canClose:
@@ -2236,9 +2380,9 @@ proc processEmphasis*(state: State, token: Token, delimeterStack: var DoublyLink
       # add emph element to tokens
       var emToken: Token
       if useDelims == 2:
-        emToken = Token(type: StrongToken)
+        emToken = Strong(type: StrongToken)
       else:
-        emToken = Token(type: EmphasisToken)
+        emToken = Em(type: EmphasisToken)
 
       var emNode = newDoublyLinkedNode(emToken)
       for childNode in token.children.nodes:
@@ -2287,19 +2431,18 @@ proc processEmphasis*(state: State, token: Token, delimeterStack: var DoublyLink
         removeDelimiter(oldCloser)
 
   # after done, remove all delimiters
-  while delimeterStack.head != nil:
-    removeDelimiter(delimeterStack.head)
+  while delimiterStack.head != nil:
+    removeDelimiter(delimiterStack.head)
 
 proc parseLinkInlines*(state: State, token: Token, allowNested: bool = false) =
-  var delimeters: DoublyLinkedList[Delimiter]
   var pos = 0
   var size = 0
-  if token.type == LinkToken:
+  if token of Link:
     pos = 1
-    size = token.linkVal.text.len - 1
-  elif token.type == ImageToken:
+    size = Link(token).text.len - 1
+  elif token of Image:
     pos = 2
-    size = token.imageVal.alt.len
+    size = Image(token).alt.len
   else:
     raise newException(MarkdownError, fmt"{token.type} has no link inlines.")
 
@@ -2310,19 +2453,18 @@ proc parseLinkInlines*(state: State, token: Token, allowNested: bool = false) =
     for rule in state.ruleSet.inlineRules:
       if not allowNested and rule == LinkToken:
         continue
-      size = findInlineToken(state, token, rule, pos, delimeters)
+      size = findInlineToken(state, token, rule, pos)
       if size != -1:
         pos += size
         break
     if size == -1:
-      token.appendChild(Token(type: TextToken, doc: fmt"{ch}"))
+      token.appendChild(Text(type: TextToken, doc: fmt"{ch}"))
       pos += 1
 
-  processEmphasis(state, token, delimeters)
+  processEmphasis(state, token)
 
 proc parseLeafBlockInlines(state: State, token: Token) =
   var pos = 0
-  var delimeters: DoublyLinkedList[Delimiter]
 
   for index, ch in token.doc[0 ..< token.doc.len].strip:
     if index < pos:
@@ -2331,15 +2473,15 @@ proc parseLeafBlockInlines(state: State, token: Token) =
     for rule in state.ruleSet.inlineRules:
       if token.type == rule:
         continue
-      size = findInlineToken(state, token, rule, pos, delimeters)
+      size = findInlineToken(state, token, rule, pos)
       if size != -1:
         pos += size
         break
     if size == -1:
-      token.appendChild(Token(type: TextToken, doc: fmt"{ch}"))
+      token.appendChild(Text(type: TextToken, doc: fmt"{ch}"))
       pos += 1
 
-  processEmphasis(state, token, delimeters)
+  processEmphasis(state, token)
 
 proc isContainerToken(token: Token): bool =
   {DocumentToken, BlockquoteToken, ListItemToken, UnorderedListToken,
@@ -2361,231 +2503,61 @@ proc parse(state: State, token: Token) =
   parseInline(state, token)
   postProcessing(state, token)
 
-proc toSeq(tokens: DoublyLinkedList[Token]): seq[Token] =
-  result = newSeq[Token]()
-  for token in tokens.items:
-    result.add(token)
-
-proc renderToken(state: State, token: Token): string;
-proc renderInline(state: State, token: Token): string =
-  var s = state
-  token.children.toSeq.map(
-    proc(x: Token): string =
-      result = s.renderToken(x)
-  ).join("")
-
-proc renderImageAlt*(state: State, token: Token): string =
-  var s = state
-  token.children.toSeq.map(
-    proc(x: Token): string =
-      case x.type
-      of LinkToken: x.linkVal.text
-      of ImageToken: x.imageVal.alt
-      of EmphasisToken: s.renderInline(x)
-      of StrongToken: s.renderInline(x)
-      else: s.renderToken(x)
-  ).join("")
-
-proc renderParagraph(state: State, token: Token): string =
-  if token.children.head == nil: ""
-  elif token.paragraphVal.loose: p(state.renderInline(token))
-  else: state.renderinline(token)
-
-proc renderListItemChildren(state: State, token: Token): string =
-  var html: string
-  if token.children.head == nil: return ""
-
-  for child_node in token.children.nodes:
-    var child_token = child_node.value
-    if child_token.type == ParagraphToken and not child_token.paragraphVal.loose:
-      if child_node.prev != nil:
-        result &= "\n"
-      result &= state.renderToken(child_token)
-      if child_node.next == nil:
-        return result
-    else:
-      html = renderToken(state, child_token)
-      if html != "":
-        result &= "\n"
-        result &= html
-  if token.listItemVal.loose or token.children.tail != nil:
-    result &= "\n"
-
-proc renderUnorderedList(state: State, token: Token): string =
-  ul("\n", state.render(token))
-
-proc renderOrderedList(state: State, token: Token): string =
-  if token.olVal.start != 1:
-    result = ol(start=fmt"{token.olVal.start}", "\n", state.render(token))
-  else:
-    result = ol("\n", state.render(token))
-
-proc renderListItem(state: State, token: Token): string =
-  result = li(state.renderListItemChildren(token))
-
-proc renderTableHeadCell(state: State, token: Token): string =
-  let align = token.theadCellVal.align
-  if align == "":
-    fmt"<th>{state.renderInline(token)}</th>"
-  else:
-    fmt("<th align=\"{align}\">{state.renderInline(token)}</th>")
-
-proc renderTableBodyCell(state: State, token: Token): string =
-  let align = token.tbodyCellVal.align
-  if align == "":
-    fmt"<td>{state.renderInline(token)}</td>"
-  else:
-    fmt("<td align=\"{align}\">{state.renderInline(token)}</td>")
-
-proc renderTableRow(state: State, token: Token): string =
-  var s = state
-  tr(
-    "\n",
-    token.children.toSeq.map(
-      proc(x: Token): string =
-        s.renderToken(x)
-    ).join("\n"),
-    "\n"
-  )
-
-proc renderTableHead(state: State, token: Token): string =
-  thead(
-    "\n",
-    state.renderTableRow(token.children.head.value.children.head.value),
-    "\n"
-  )
-
-proc renderTableBody(state: State, token: Token): string =
-  if token.children.head.next == nil:
-    return ""
-  var s = state
-  tbody(
-    "\n",
-    token.children.tail.value.children.toSeq.map(
-      proc(x: Token): string =
-        s.renderToken(x)
-    ).join("\n"),
-  )
-
-proc renderTable(state: State, token: Token): string =
-  let thead = state.renderTableHead(token)
-  var tbody = state.renderTableBody(token)
-  if tbody != "":
-    tbody = "\n" & tbody.strip
-  table("\n", thead, tbody)
-
-proc renderFencedCode(state: State, token: Token): string =
-  var codeHTML = token.doc.escapeCode.escapeQuote
-  if codeHTML != "" and not codeHTML.endsWith("\n"):
-    codeHTML &= "\n"
-
-  if token.fenceCodeVal.info == "":
-    pre(code(codeHTML))
-  else:
-    pre(code(
-      class=fmt"language-{token.fenceCodeVal.info.escapeBackslash.escapeHTMLEntity}",
-      codeHTML,
-      ))
-
-proc renderLink(state: State, token: Token): string =
-  if token.linkVal.title == "":
-    a(
-      href=token.linkVal.url.escapeBackslash.escapeLinkUrl,
-      state.renderInline(token)
-    )
-  else:
-    a(
-      href=token.linkVal.url.escapeBackslash.escapeLinkUrl,
-      title=token.linkVal.title.escapeBackslash.escapeHTMLEntity.escapeAmpersandSeq.escapeQuote,
-      state.renderInline(token)
-    )
-
-proc renderImage(state: State, token: Token): string =
-  if token.imageVal.title == "":
-    img(
-      src=token.imageVal.url.escapeBackslash.escapeLinkUrl,
-      alt=state.renderImageAlt(token)
-    )
-  else:
-    img(
-      src=token.imageVal.url.escapeBackslash.escapeLinkUrl,
-      alt=state.renderImageAlt(token),
-      title=token.imageVal.title.escapeBackslash.escapeHTMLEntity.escapeAmpersandSeq.escapeQuote,
-    )
-
-proc renderAutoLink(state: State, token: Token): string =
-  a(
-    href=token.autoLinkVal.url.escapeLinkUrl.escapeAmpersandSeq,
-    token.autoLinkVal.text.escapeAmpersandSeq
-  )
-
-proc renderHeading(state: State, token: Token): string =
-  fmt"<h{token.headingVal.level}>{state.renderInline(token)}</h{token.headingVal.level}>"
-
-proc renderToken(state: State, token: Token): string =
-  case token.type
-  of ReferenceToken: ""
-  of ThematicBreakToken: "<hr />"
-  of ParagraphToken: state.renderParagraph(token)
-  of ATXHeadingToken, SetextHeadingToken: state.renderHeading(token)
-  of IndentedCodeToken: pre(code(token.doc.removeBlankLines.escapeCode.escapeQuote, "\n"))
-  of TableToken: state.renderTable(token)
-  of THeadToken: state.renderTableHead(token)
-  of TBodyToken: state.renderTableBody(token)
-  of TableRowToken: state.renderTableRow(token)
-  of THeadCellToken: state.renderTableHeadCell(token)
-  of TBodyCellToken: state.renderTableBodyCell(token)
-  of FencedCodeToken: state.renderFencedCode(token)
-  of LinkToken: state.renderLink(token)
-  of ImageToken: state.renderImage(token)
-  of AutoLinkToken: state.renderAutoLink(token)
-  of HTMLBlockToken: token.doc.strip(chars={'\n'})
-  of ListItemToken: state.renderListItem(token)
-  of UnorderedListToken: state.renderUnorderedList(token)
-  of OrderedListToken: state.renderOrderedList(token)
-  of BlankLineToken: ""
-  of BlockquoteToken: blockquote("\n", state.render(token))
-  of TextToken: token.doc.escapeAmpersandSeq.escapeTag.escapeQuote
-  of HTMLEntityToken: token.doc.escapeHTMLEntity.escapeQuote
-  of InlineHTMLToken: token.doc.escapeInvalidHTMLTag
-  of EscapeToken: token.escapeVal.escapeAmpersandSeq.escapeTag.escapeQuote
-  of EmphasisToken: em(state.renderInline(token))
-  of StrongToken: strong(state.renderInline(token))
-  of StrikethroughToken: del(token.doc)
-  of HardLineBreakToken: br() & "\n"
-  of CodeSpanToken: code(token.doc.escapeAmpersandChar.escapeTag.escapeQuote)
-  of SoftLineBreakToken: "\n"
-  of DocumentToken: ""
-
-proc render(state: State, token: Token): string =
-  var html: string
-  for token in token.children.items:
-    html = state.renderToken(token)
-    if html != "":
-      result &= html
-      result &= "\n"
-
-
-proc initMarkdownConfig*(
+proc initCommonmarkConfig*(
   escape = true,
-  keepHtml = true
+  keepHtml = true,
 ): MarkdownConfig =
-  MarkdownConfig(
+  result = MarkdownConfig(
     escape: escape,
-    keepHtml: keepHtml
+    keepHtml: keepHtml,
   )
+  result.blockParsers.add(parseReference)
+  result.blockParsers.add(parseThematicBreak)
+  result.blockParsers.add(parseBlockquote)
+  result.blockParsers.add(parseUnorderedList)
+  result.blockParsers.add(parseOrderedList)
+  result.blockParsers.add(parseIndentedCode)
+  result.blockParsers.add(parseFencedCode)
+  result.blockParsers.add(parseHTMLBlock)
+  result.blockParsers.add(parseBlankLine)
+  result.blockParsers.add(parseATXHeading)
+  result.blockParsers.add(parseSetextHeading)
+  result.blockParsers.add(parseParagraph)
 
-proc markdown*(doc: string, config: MarkdownConfig = initMarkdownConfig()): string =
+proc initGfmConfig*(
+  escape = true,
+  keepHtml = true,
+): MarkdownConfig =
+  result = MarkdownConfig(
+    escape: escape,
+    keepHtml: keepHtml,
+  )
+  result.blockParsers.add(parseReference)
+  result.blockParsers.add(parseThematicBreak)
+  result.blockParsers.add(parseBlockquote)
+  result.blockParsers.add(parseUnorderedList)
+  result.blockParsers.add(parseOrderedList)
+  result.blockParsers.add(parseIndentedCode)
+  result.blockParsers.add(parseFencedCode)
+  result.blockParsers.add(parseHTMLBlock)
+  result.blockParsers.add(parseHTMLTable) #: Commonmark extension: Table.
+  result.blockParsers.add(parseBlankLine)
+  result.blockParsers.add(parseATXHeading)
+  result.blockParsers.add(parseSetextHeading)
+  result.blockParsers.add(parseParagraph)
+
+proc markdown*(doc: string, config: MarkdownConfig = initCommonmarkConfig()): string =
   var state = State(
     ruleSet: gfmRuleSet,
     references: initTable[string, Reference](),
+    config: config,
   )
   var document = Token(
     type: DocumentToken,
     doc: doc.strip(chars={'\n'})
   )
   parse(state, document)
-  render(state, document)
+  render(document)
 
 proc readCLIOptions*(): MarkdownConfig =
   ## Read options from command line.
@@ -2597,7 +2569,7 @@ proc readCLIOptions*(): MarkdownConfig =
   ## * `-k` / `--keep-html`
   ## * '--no-keep-html`
   ##
-  result = initMarkdownConfig()
+  result = initCommonmarkConfig()
   when declared(commandLineParams):
     for opt in commandLineParams():
       case opt

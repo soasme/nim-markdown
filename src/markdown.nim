@@ -1,4 +1,4 @@
-import re, strutils, strformat, tables, sequtils, math, uri, htmlparser, lists
+import re, strutils, strformat, tables, sequtils, math, uri, htmlparser, lists, sugar
 import unicode except `strip`, `splitWhitespace`
 from sequtils import map
 from lists import DoublyLinkedList, prepend, append
@@ -125,14 +125,15 @@ type
 
   ChunkKind* = enum
     BlockChunk,
-    LazyChunk
+    LazyChunk,
+    InlineChunk
 
   Chunk* = ref object
     kind*: ChunkKind
     doc*: string
     pos*: int
 
-  Token* = ref object
+  Token* = ref object of RootObj
     doc: string
     children: DoublyLinkedList[Token]
     chunks: seq[Chunk]
@@ -158,9 +159,11 @@ type
     else: discard
 
   ParseResult* = tuple[token: Token, pos: int]
+  Parser = (string, int) -> ParseResult
 
   State* = ref object
     ruleSet: RuleSet
+    blockParsers: seq[Parser]
     references: Table[string, Reference]
 
 proc appendChild*(token: Token, child: Token) =
@@ -204,19 +207,19 @@ const THEMATIC_BREAK_RE* = r" {0,3}([-*_])(?:[ \t]*\1){2,}[ \t]*(?:\n+|$)"
 const SETEXT_HEADING_RE* = r"((?:(?:[^\n]+)\n)+) {0,3}(=|-)+ *(?:\n+|$)"
 const INDENTED_CODE_RE* = r"((?: {4}| {0,3}\t)[^\n]+\n*)+"
 
-let HTML_SCRIPT_START* = r"^ {0,3}<(script|pre|style)(?=(\s|>|$))"
-let HTML_SCRIPT_END* = r"</(script|pre|style)>"
-let HTML_COMMENT_START* = r"^ {0,3}<!--"
-let HTML_COMMENT_END* = r"-->"
-let HTML_PROCESSING_INSTRUCTION_START* = r"^ {0,3}<\?"
-let HTML_PROCESSING_INSTRUCTION_END* = r"\?>"
-let HTML_DECLARATION_START* = r"^ {0,3}<\![A-Z]"
-let HTML_DECLARATION_END* = r">"
-let HTML_CDATA_START* = r" {0,3}<!\[CDATA\["
-let HTML_CDATA_END* = r"\]\]>"
-let HTML_VALID_TAGS* = ["address", "article", "aside", "base", "basefont", "blockquote", "body", "caption", "center", "col", "colgroup", "dd", "details", "dialog", "dir", "div", "dl", "dt", "fieldset", "figcaption", "figure", "footer", "form", "frame", "frameset", "h1", "h2", "h3", "h4", "h5", "h6", "head", "header", "hr", "html", "iframe", "legend", "li", "link", "main", "menu", "menuitem", "meta", "nav", "noframes", "ol", "optgroup", "option", "p", "param", "section", "source", "summary", "table", "tbody", "td", "tfoot", "th", "thead", "title", "tr", "track", "ul"]
-let HTML_TAG_START* = r"^ {0,3}</?(" & HTML_VALID_TAGS.join("|") & r")(?=(\s|/?>|$))"
-let HTML_TAG_END* = r"^\n?$"
+const HTML_SCRIPT_START* = r"^ {0,3}<(script|pre|style)(?=(\s|>|$))"
+const HTML_SCRIPT_END* = r"</(script|pre|style)>"
+const HTML_COMMENT_START* = r"^ {0,3}<!--"
+const HTML_COMMENT_END* = r"-->"
+const HTML_PROCESSING_INSTRUCTION_START* = r"^ {0,3}<\?"
+const HTML_PROCESSING_INSTRUCTION_END* = r"\?>"
+const HTML_DECLARATION_START* = r"^ {0,3}<\![A-Z]"
+const HTML_DECLARATION_END* = r">"
+const HTML_CDATA_START* = r" {0,3}<!\[CDATA\["
+const HTML_CDATA_END* = r"\]\]>"
+const HTML_VALID_TAGS* = ["address", "article", "aside", "base", "basefont", "blockquote", "body", "caption", "center", "col", "colgroup", "dd", "details", "dialog", "dir", "div", "dl", "dt", "fieldset", "figcaption", "figure", "footer", "form", "frame", "frameset", "h1", "h2", "h3", "h4", "h5", "h6", "head", "header", "hr", "html", "iframe", "legend", "li", "link", "main", "menu", "menuitem", "meta", "nav", "noframes", "ol", "optgroup", "option", "p", "param", "section", "source", "summary", "table", "tbody", "td", "tfoot", "th", "thead", "title", "tr", "track", "ul"]
+const HTML_TAG_START* = r"^ {0,3}</?(" & HTML_VALID_TAGS.join("|") & r")(?=(\s|/?>|$))"
+const HTML_TAG_END* = r"^\n?$"
 
 const TAGNAME* = r"[A-Za-z][A-Za-z0-9-]*"
 const ATTRIBUTENAME* = r"[a-zA-Z_:][a-zA-Z0-9:._-]*"
@@ -243,8 +246,8 @@ const HTML_TAG* = (
   & r")"
 )
 
-let HTML_OPEN_CLOSE_TAG_START* = "^ {0,3}(?:" & OPEN_TAG & "|" & CLOSE_TAG & r")\s*$"
-let HTML_OPEN_CLOSE_TAG_END* = r"^\n?$"
+const HTML_OPEN_CLOSE_TAG_START* = "^ {0,3}(?:" & OPEN_TAG & "|" & CLOSE_TAG & r")\s*$"
+const HTML_OPEN_CLOSE_TAG_END* = r"^\n?$"
 
 proc parse(state: State, token: Token);
 proc parseBlock(state: State, token: Token);
@@ -1111,6 +1114,16 @@ const rBlockquoteMarker = r"^( {0,3}>)"
 
 proc isBlockquote*(s: string): bool = s.contains(re(rBlockquoteMarker))
 
+proc consumeBlockquoteMarker(doc: string): string =
+  var s: string
+  for line in doc.splitLines(keepEol=true):
+    s = line.replacef(re"^ {0,3}>(.*)", "$1")
+    if s.startsWith(" "):
+      s = s.since(1)
+    elif s.startsWith("\t"):
+      s = s.replaceInitialTabs.since(2)
+    result &= s
+
 proc parseBlockquote(doc: string, start: int): ParseResult =
   let markerContent = re(r"^(( {0,3}>([^\n]*(?:\n|$)))+)")
   var matches: array[3, string]
@@ -1129,7 +1142,7 @@ proc parseBlockquote(doc: string, start: int): ParseResult =
     found = true
     pos += size
     # extract content with blockquote mark
-    var blockChunk = matches[0].replacef(re"(^|\n) {0,3}> ?", "$1")
+    var blockChunk = matches[0].consumeBlockquoteMarker
     chunks.add(Chunk(kind: BlockChunk, doc: blockChunk, pos: pos))
     document &= blockChunk
 
@@ -1294,26 +1307,36 @@ proc isContinuationText*(doc: string): bool =
 
   return true
 
+proc isUlEmptyListItem*(doc: string): bool =
+  doc.match(re"^ {0,3}(?:[\-+*]|\d+[.)])[ \t]*\n?$")
+
+proc isOlNo1ListItem*(doc: string): bool =
+  (
+    doc.contains(re" {0,3}\d+[.(][ \t]+[^\n]") and
+    not doc.contains(re" {0,3}1[.)]")
+  )
+
 proc parseParagraph(doc: string, start: int): ParseResult =
   var size: int
   let firstLine = doc.since(start).firstLine
   var p = firstLine
   for line in doc.since(start).restLines:
+    # Special cases.
     # empty list item is continuation text
-    if line.match(re"^ {0,3}(?:[\-+*]|\d+[.)])[ \t]*\n?$"):
+    # ol should start with 1.
+    if line.isUlEmptyListItem or line.isOlNo1ListItem:
       p &= line
       continue
-    # ol should start with 1.
-    if line.contains(re" {0,3}\d+[.(][ \t]+[^\n]"):
-      if not line.strip.startsWith("1.") and not line.strip.startsWith("1)"):
-        p &= line
-        continue
+
+    # Continuation text ends at a blank line.
     if line.isBlank:
       p &= line
       break
+
     if not line.isContinuationText:
       break
     p &= line
+
   size = p.len
   return (
     token: Token(
@@ -2568,7 +2591,7 @@ proc render(state: State, token: Token): string =
 
 proc initMarkdownConfig*(
   escape = true,
-  keepHtml = true
+  keepHtml = true,
 ): MarkdownConfig =
   MarkdownConfig(
     escape: escape,

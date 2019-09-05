@@ -257,7 +257,7 @@ proc parse(state: State, token: Token);
 proc parseBlock(state: State, token: Token);
 proc parseLeafBlockInlines(state: State, token: Token);
 proc parseLinkInlines*(state: State, token: Token, allowNested: bool = false);
-proc getLinkText*(doc: string, start: int, slice: var Slice[int], allowNested: bool = false): int;
+proc getLinkText*(doc: string, start: int, allowNested: bool = false): tuple[slice: Slice[int], size: int];
 proc getLinkLabel*(doc: string, start: int): tuple[label: string, size: int];
 proc getLinkDestination*(doc: string, start: int): tuple[slice: Slice[int], size: int];
 proc getLinkTitle*(doc: string, start: int): tuple[slice: Slice[int], size: int];
@@ -1807,7 +1807,7 @@ proc getLinkLabel*(doc: string, start: int): tuple[label: string, size: int] =
   return (label, size+1)
 
 
-proc getLinkText*(doc: string, start: int, slice: var Slice[int], allowNested: bool = false): int =
+proc getLinkText*(doc: string, start: int, allowNested: bool = false): tuple[slice: Slice[int], size: int] =
   # based on assumption: token.doc[start] = '['
   if doc[start] != '[':
     raise newException(MarkdownError, fmt"{start} is not [.")
@@ -1849,15 +1849,15 @@ proc getLinkText*(doc: string, start: int, slice: var Slice[int], allowNested: b
     # Links may not contain other links, at any level of nesting.
     # Image description may contain links.
     if level == 0 and not allowNested and doc[start .. start+i].find(re"[^!]\[[^]]*\]\([^)]*\)") > -1:
-        return -1
+      return ((0..<0), -1)
     if level == 0 and not allowNested and doc[start .. start+i].find(re"[^!]\[[^]]*\]\[[^]]*\]") > -1:
-        return -1
+      return ((0..<0), -1)
 
     if level == 0:
-      slice = (start .. start+i)
-      return i+1
+      let slice = (start .. start+i)
+      return (slice, i+1)
 
-  return -1
+  return ((0..<0), -1)
 
 
 proc parseInlineLink(state: State, token: Token, start: int, labelSlice: Slice[int]): int =
@@ -1988,7 +1988,7 @@ proc parseLink*(state: State, token: Token, start: int): int =
     return -1
 
   var labelSlice: Slice[int]
-  result = getLinkText(token.doc, start, labelSlice)
+  (labelSlice, result) = getLinkText(token.doc, start)
   # Link should have matching ] for [.
   if result == -1:
     return -1
@@ -2138,8 +2138,7 @@ proc parseImage*(state: State, token: Token, start: int): int =
   if not token.doc[start ..< token.doc.len].match(re"^!\["):
     return -1
 
-  var labelSlice: Slice[int]
-  var labelSize = getLinkText(token.doc, start+1, labelSlice, allowNested=true)
+  var (labelSlice, labelSize) = getLinkText(token.doc, start+1, allowNested=true)
 
   # Image should have matching ] for [.
   if labelSize == -1:

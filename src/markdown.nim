@@ -78,62 +78,85 @@ type
     case type*: TokenType
     else: discard
 
-  tBlock* = ref object of Token
-  Paragraph* = ref object of tBlock
+  Block* = ref object of Token
+
+  Paragraph* = ref object of Block
     loose: bool
     trailing: string
 
-  Reference = ref object of tBlock
+  Reference = ref object of Block
     text: string
     title: string
     url: string
 
-  tThematicBreak* = ref object of tBlock
-  Heading* = ref object of tBlock
+  ThematicBreak* = ref object of Block
+
+  Heading* = ref object of Block
     level: int
 
-  CodeBlock* = ref object of tBlock
+  CodeBlock* = ref object of Block
     info: string
-  tHtmlBlock* = ref object of tBlock
-  tBlockquote* = ref object of tBlock
-  tUl* = ref object of tBlock
-  tOl* = ref object of tBlock
+
+  HtmlBlock* = ref object of Block
+
+  Blockquote* = ref object of Block
+
+  Ul* = ref object of Block
+
+  Ol* = ref object of Block
     start: int
-  tLi* = ref object of tBlock
+
+  Li* = ref object of Block
     loose: bool
     marker: string
     verbatim: string
-  HtmlTable* = ref object of tBlock
-  THead* = ref object of tBlock
-  TBody* = ref object of tBlock
+  HtmlTable* = ref object of Block
+  THead* = ref object of Block
+  TBody* = ref object of Block
     size: int
-  TableRow* = ref object of tBlock
-  THeadCell* = ref object of tBlock
+
+  TableRow* = ref object of Block
+
+  THeadCell* = ref object of Block
     align: string
-  TBodyCell* = ref object of tBlock
+
+  TBodyCell* = ref object of Block
     align: string
 
   Inline* = ref object of Token
+
   Text* = ref object of Inline
+
   CodeSpan* = ref object of Inline
+
   SoftBreak* = ref object of Inline
+
   HardBreak* = ref object of Inline
+
   Strickthrough* = ref object of Inline
+
   Escape* = ref object of Inline
+
   InlineHtml* = ref object of Inline
+
   HtmlEntity* = ref object of Inline
+
   Link* = ref object of Inline
     text: string ## A link contains link text (the visible text).
     url: string ## A link contains destination (the URI that is the link destination).
     title: string ## A link contains a optional title.
+
   AutoLink* = ref object of Inline
     text: string
     url: string
+
   Image* = ref object of Inline
     url: string
     alt: string
     title: string
+
   Em* = ref object of Inline
+
   Strong* = ref object of Inline
 
   ParseResult* = ref object
@@ -444,7 +467,7 @@ method `$`*(token: Em): string = em($token.children)
 
 method `$`*(token: Strong): string = strong($token.children)
 
-method `$`*(token: tThematicBreak): string = hr()
+method `$`*(token: ThematicBreak): string = hr()
 
 method `$`*(token: Paragraph): string =
   if token.children.head == nil: ""
@@ -467,7 +490,7 @@ method `$`*(token: CodeBlock): string =
     let lang = fmt"language-{info}"
     pre(code(class=lang, codeHTML))
 
-method `$`*(token: tHtmlBlock): string = token.doc.strip(chars={'\n'})
+method `$`*(token: HtmlBlock): string = token.doc.strip(chars={'\n'})
 
 method `$`*(token: THeadCell): string =
   let align = token.align
@@ -497,19 +520,19 @@ method `$`*(token: HtmlTable): string =
   if tbody != "": tbody = "\n" & tbody.strip
   table("\n", thead, tbody)
 
-method `$`*(token: tUl): string =
+method `$`*(token: Ul): string =
   ul("\n", render(token))
 
-method `$`*(token: tOl): string =
+method `$`*(token: Ol): string =
   if token.start != 1:
     ol(start=fmt"{token.start}", "\n", render(token))
   else:
     ol("\n", render(token))
 
-method `$`*(token: tBlockquote): string =
+method `$`*(token: Blockquote): string =
   blockquote("\n", render(token))
 
-proc renderListItemChildren(token: tLi): string =
+proc renderListItemChildren(token: Li): string =
   var html: string
   if token.children.head == nil: return ""
 
@@ -529,7 +552,7 @@ proc renderListItemChildren(token: tLi): string =
   if token.loose or token.children.tail != nil:
     result &= "\n"
 
-method `$`*(token: tLi): string =
+method `$`*(token: Li): string =
   li(renderListItemChildren(token))
 
 proc render(token: Token): string =
@@ -541,8 +564,8 @@ proc render(token: Token): string =
 proc endsWithBlankLine(token: Token): bool =
   if token of Paragraph:
     Paragraph(token).trailing.len > 1
-  elif token of tLi:
-    tLi(token).verbatim.find(re"\n\n$") != -1
+  elif token of Li:
+    Li(token).verbatim.find(re"\n\n$") != -1
   else:
     token.doc.find(re"\n\n$") != -1
 
@@ -680,7 +703,7 @@ proc parseUnorderedList(doc: string, start: int): ParseResult =
     if itemSize == -1:
       break
 
-    var listItem = tLi(
+    var listItem = Li(
       type: ListItemToken,
       doc: listItemDoc.strip(chars={'\n'}),
       verbatim: listItemDoc,
@@ -693,7 +716,7 @@ proc parseUnorderedList(doc: string, start: int): ParseResult =
   if marker == "":
     return ParseResult(token: nil, pos: -1)
 
-  var ulToken = tUl(
+  var ulToken = Ul(
     type: UnorderedListToken,
     doc: doc[start ..< pos],
   )
@@ -719,7 +742,7 @@ proc parseOrderedList(doc: string, start: int): ParseResult =
       startIndex = index
       found = true
 
-    var listItem = tLi(
+    var listItem = Li(
       type: ListItemToken,
       doc: listItemDoc.strip(chars={'\n'}),
       verbatim: listItemDoc,
@@ -732,7 +755,7 @@ proc parseOrderedList(doc: string, start: int): ParseResult =
   if marker == "":
     return ParseResult(token: nil, pos: -1)
 
-  var olToken = tOl(
+  var olToken = Ol(
     type: OrderedListToken,
     doc: doc[start ..< pos],
     start: startIndex,
@@ -749,7 +772,7 @@ proc parseThematicBreak(doc: string, start: int): ParseResult =
   let res = doc.since(start).getThematicBreak()
   if res.size == -1: return ParseResult(token: nil, pos: -1)
   return ParseResult(
-    token: tThematicBreak(type: ThematicBreakToken),
+    token: ThematicBreak(type: ThematicBreakToken),
     pos: start+res.size
   )
 
@@ -1174,49 +1197,49 @@ proc parseHTMLBlock(doc: string, start: int): ParseResult =
   var res = lit.parseHtmlScript()
   if res.size != -1:
     return ParseResult(
-      token: tHtmlBlock(type: HTMLBlockToken, doc: res.html),
+      token: HtmlBlock(type: HTMLBlockToken, doc: res.html),
       pos: start+res.size
     )
 
   res = lit.parseHtmlComment()
   if res.size != -1:
     return ParseResult(
-      token: tHtmlBlock(type: HTMLBlockToken, doc: res.html),
+      token: HtmlBlock(type: HTMLBlockToken, doc: res.html),
       pos: start+res.size
     )
 
   res = lit.parseProcessingInstruction()
   if res.size != -1:
     return ParseResult(
-      token: tHtmlBlock(type: HTMLBlockToken, doc: res.html),
+      token: HtmlBlock(type: HTMLBlockToken, doc: res.html),
       pos: start+res.size
     )
 
   res = lit.parseHtmlDeclaration()
   if res.size != -1:
     return ParseResult(
-      token: tHtmlBlock(type: HTMLBlockToken, doc: res.html),
+      token: HtmlBlock(type: HTMLBlockToken, doc: res.html),
       pos: start+res.size
     )
 
   res = lit.parseHtmlCData()
   if res.size != -1:
     return ParseResult(
-      token: tHtmlBlock(type: HTMLBlockToken, doc: res.html),
+      token: HtmlBlock(type: HTMLBlockToken, doc: res.html),
       pos: start+res.size
     )
 
   res = lit.parseHtmlTag()
   if res.size != -1:
     return ParseResult(
-      token: tHtmlBlock(type: HTMLBlockToken, doc: res.html),
+      token: HtmlBlock(type: HTMLBlockToken, doc: res.html),
       pos: start+res.size
     )
 
   res = lit.parseHtmlOpenCloseTag()
   if res.size != -1:
     return ParseResult(
-      token: tHtmlBlock(type: HTMLBlockToken, doc: res.html),
+      token: HtmlBlock(type: HTMLBlockToken, doc: res.html),
       pos: start+res.size
     )
 
@@ -1283,7 +1306,7 @@ proc parseBlockquote(doc: string, start: int): ParseResult =
   if not found:
     return ParseResult(token: nil, pos: -1)
 
-  let blockquote = tBlockquote(
+  let blockquote = Blockquote(
     type: BlockquoteToken,
     doc: document,
     chunks: chunks,

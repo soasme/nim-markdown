@@ -1542,12 +1542,13 @@ proc parseBlock(state: State, token: Token) =
         if res.pos != -1: state.finalizeList(res.token)
       of ReferenceToken:
         res = parseReference(doc, pos)
-        if res.pos != -1 and not state.references.contains(Reference(res.token).text):
-          state.references[Reference(res.token).text] = Reference(res.token)
+        if res.pos != -1:
+          let reference = Reference(res.token)
+          if not state.references.contains(reference.text):
+            state.references[reference.text] = reference
       of BlockquoteToken:
         res = parseBlockquote(doc, pos)
-        if res.pos != -1 and res.token.doc.strip != "":
-          res = parseContainerBlock(state, res.token)
+        if res.pos != -1: res = parseContainerBlock(state, res.token)
       of TableToken: res = parseHTMLTable(doc, pos)
       of FencedCodeToken: res = parseFencedCode(doc, pos)
       of IndentedCodeToken: res = parseIndentedCode(doc, pos)

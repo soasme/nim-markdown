@@ -159,6 +159,7 @@ type
     else: discard
 
   tBlock* = ref object of Token
+  tParagraph* = ref object of tBlock
   tThematicBreak* = ref object of tBlock
 
   tInline* = ref object of Token
@@ -1360,7 +1361,7 @@ proc parseParagraph(doc: string, start: int): ParseResult =
 
   size = p.len
   return ParseResult(
-    token: Token(
+    token: tParagraph(
       type: ParagraphToken,
       doc: doc[start ..< start+size].replace(re"\n\s*", "\n").strip,
       paragraphVal: Paragraph(
@@ -2595,9 +2596,13 @@ method `$`*(token: tStrong): string = strong($token.children)
 
 method `$`*(token: tThematicBreak): string = hr()
 
+method `$`*(token: tParagraph): string =
+  if token.children.head == nil: ""
+  elif token.paragraphVal.loose: p($token.children)
+  else: $token.children
+
 proc renderToken(state: State, token: Token): string =
   case token.type
-  of ParagraphToken: state.renderParagraph(token)
   of ATXHeadingToken, SetextHeadingToken: state.renderHeading(token)
   of IndentedCodeToken: pre(code(token.doc.removeBlankLines.escapeCode.escapeQuote, "\n"))
   of TableToken: state.renderTable(token)

@@ -60,9 +60,6 @@ type
     marker: string
     verbatim: string
 
-  Heading = object
-    level: int
-
   Code= object
     info: string
 
@@ -134,7 +131,6 @@ type
     children: DoublyLinkedList[Token]
     chunks: seq[Chunk]
     case type*: TokenType
-    of ATXHeadingToken, SetextHeadingToken: headingVal*: Heading
     of FencedCodeToken, IndentedCodeToken: codeVal*: Code
     of BlockquoteToken: blockquoteVal*: Blockquote
     of UnorderedListToken: ulVal*: UnorderedList
@@ -159,7 +155,8 @@ type
     trailing: string
 
   tThematicBreak* = ref object of tBlock
-  tHeading* = ref object of tBlock
+  Heading* = ref object of tBlock
+    level: int
   tCodeBlock* = ref object of tBlock
   tHtmlBlock* = ref object of tBlock
   tBlockquote* = ref object of tBlock
@@ -503,8 +500,8 @@ method `$`*(token: Paragraph): string =
   elif token.loose: p($token.children)
   else: $token.children
 
-method `$`*(token: tHeading): string =
-  let num = fmt"{token.headingVal.level}"
+method `$`*(token: Heading): string =
+  let num = fmt"{token.level}"
   let child = $token.children
   fmt"<h{num}>{child}</h{num}>"
 
@@ -966,12 +963,10 @@ proc parseSetextHeading(doc: string, start: int): ParseResult =
   let res = doc.since(start).getSetextHeading()
   if res.size == -1: return ParseResult(token: nil, pos: -1)
   return ParseResult(
-    token: tHeading(
+    token: Heading(
       type: SetextHeadingToken,
       doc: res.doc,
-      headingVal: Heading(
-        level: res.level
-      )
+      level: res.level,
     ),
     pos: start+res.size
   )
@@ -995,12 +990,10 @@ proc parseATXHeading(doc: string, start: int = 0): ParseResult =
   let res = doc.since(start).getAtxHeading()
   if res.size == -1: return ParseResult(token: nil, pos: -1)
   return ParseResult(
-    token: tHeading(
+    token: Heading(
       type: ATXHeadingToken,
       doc: res.doc,
-      headingVal: Heading(
-        level: res.level
-      )
+      level: res.level,
     ),
     pos: start+res.size
   )

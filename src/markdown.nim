@@ -158,6 +158,9 @@ type
     of ImageToken: imageVal*: Image
     else: discard
 
+  tInline* = ref object of Token
+  tCodeSpan* = ref object of tInline
+
   ParseResult* = tuple[token: Token, pos: int]
   Parser = (string, int) -> ParseResult
 
@@ -2141,7 +2144,7 @@ proc parseCodeSpan*(state: State, token: Token, start: int): int =
   if codeSpanVal[0] == ' ' and codeSpanVal[codeSpanVal.len-1] == ' ' and not codeSpanVal.match(re"^[ ]+$"):
     codeSpanVal = codeSpanVal[1 ..< codeSpanVal.len-1]
 
-  token.appendChild(Token(
+  token.appendChild(tCodeSpan(
     type: CodeSpanToken,
     doc: codeSpanVal,
   ))
@@ -2545,6 +2548,11 @@ proc renderAutoLink(state: State, token: Token): string =
 proc renderHeading(state: State, token: Token): string =
   fmt"<h{token.headingVal.level}>{state.renderInline(token)}</h{token.headingVal.level}>"
 
+method `$`(token: Token): string {.base.} = ""
+
+method `$`(token: tCodeSpan): string =
+  code(token.doc.escapeAmpersandChar.escapeTag.escapeQuote)
+
 proc renderToken(state: State, token: Token): string =
   case token.type
   of ReferenceToken: ""
@@ -2576,9 +2584,8 @@ proc renderToken(state: State, token: Token): string =
   of StrongToken: strong(state.renderInline(token))
   of StrikethroughToken: del(token.doc)
   of HardLineBreakToken: br() & "\n"
-  of CodeSpanToken: code(token.doc.escapeAmpersandChar.escapeTag.escapeQuote)
   of SoftLineBreakToken: "\n"
-  of DocumentToken: ""
+  else: $token
 
 proc render(state: State, token: Token): string =
   var html: string
@@ -2587,7 +2594,6 @@ proc render(state: State, token: Token): string =
     if html != "":
       result &= html
       result &= "\n"
-
 
 proc initMarkdownConfig*(
   escape = true,

@@ -170,6 +170,11 @@ type
   tEscape* = ref object of tInline
   tInlineHtml* = ref object of tInline
   tHtmlEntity* = ref object of tInline
+  tLink* = ref object of tInline
+  tAutoLink* = ref object of tInline
+  tImage* = ref object of tInline
+  tEm* = ref object of tInline
+  tStrong* = ref object of tInline
 
   ParseResult* = ref object
     token: Token
@@ -1483,7 +1488,7 @@ proc parseAutoLink(state: State, token: Token, start: int): int =
   if result != -1:
     var url = emailMatches[0]
     # TODO: validate and normalize the link
-    token.appendChild(Token(
+    token.appendChild(tAutoLink(
       type: AutoLinkToken,
       autoLinkVal: AutoLink(
         text: url,
@@ -1499,7 +1504,7 @@ proc parseAutoLink(state: State, token: Token, start: int): int =
   if result != -1:
     var schema = linkMatches[0]
     var uri = linkMatches[1]
-    token.appendChild(Token(
+    token.appendChild(tAutoLink(
       type: AutoLinkToken,
       autoLinkVal: AutoLink(
         text: fmt"{schema}:{uri}",
@@ -1796,7 +1801,7 @@ proc parseInlineLink(state: State, token: Token, start: int, labelSlice: Slice[i
     title = token.doc[titleSlice]
   var url = token.doc[destinationSlice]
   var text = token.doc[labelSlice.a+1 ..< labelSlice.b]
-  var link = Token(
+  var link = tLink(
     type: LinkToken,
     doc: token.doc[start .. pos],
     linkVal: Link(
@@ -1824,7 +1829,7 @@ proc parseFullReferenceLink(state: State, token: Token, start: int, textSlice: S
 
   var text = token.doc[textSlice.a+1 ..< textSlice.b]
   var reference = state.references[label]
-  var link = Token(
+  var link = tLink(
     type: LinkToken,
     doc: token.doc[start ..< pos],
     linkVal: Link(
@@ -1844,7 +1849,7 @@ proc parseCollapsedReferenceLink(state: State, token: Token, start: int, label: 
     return -1
 
   var reference = state.references[id]
-  var link = Token(
+  var link = tLink(
     type: LinkToken,
     doc: token.doc[start ..< label.b+1],
     linkVal: Link(
@@ -1864,7 +1869,7 @@ proc parseShortcutReferenceLink(state: State, token: Token, start: int, label: S
     return -1
 
   var reference = state.references[id]
-  var link = Token(
+  var link = tLink(
     type: LinkToken,
     doc: token.doc[start ..< label.b+1],
     linkVal: Link(
@@ -1956,7 +1961,7 @@ proc parseInlineImage(state: State, token: Token, start: int, labelSlice: Slice[
   var url = token.doc[destinationSlice]
   var text = token.doc[labelSlice.a+1 ..< labelSlice.b]
 
-  var image = Token(
+  var image = tImage(
     type: ImageToken,
     doc: token.doc[start-1 ..< pos+1],
     imageVal: Image(
@@ -1985,7 +1990,7 @@ proc parseFullReferenceImage(state: State, token: Token, start: int, altSlice: S
     return -1
 
   var reference = state.references[label]
-  var image = Token(
+  var image = tImage(
     type: ImageToken,
     doc: token.doc[start ..< pos-1],
     imageVal: Image(
@@ -2005,7 +2010,7 @@ proc parseCollapsedReferenceImage(state: State, token: Token, start: int, label:
     return -1
 
   var reference = state.references[id]
-  var image = Token(
+  var image = tImage(
     type: ImageToken,
     doc: token.doc[start ..< label.b+2],
     imageVal: Image(
@@ -2025,7 +2030,7 @@ proc parseShortcutReferenceImage(state: State, token: Token, start: int, label: 
     return -1
 
   var reference = state.references[id]
-  var image = Token(
+  var image = tImage(
     type: ImageToken,
     doc: token.doc[start ..< label.b+1],
     imageVal: Image(
@@ -2276,9 +2281,9 @@ proc processEmphasis*(state: State, token: Token, delimeterStack: var DoublyLink
       # add emph element to tokens
       var emToken: Token
       if useDelims == 2:
-        emToken = Token(type: StrongToken)
+        emToken = tStrong(type: StrongToken)
       else:
-        emToken = Token(type: EmphasisToken)
+        emToken = tEm(type: EmphasisToken)
 
       var emNode = newDoublyLinkedNode(emToken)
       for childNode in token.children.nodes:
@@ -2585,6 +2590,39 @@ method `$`*(token: tHtmlEntity): string =
 method `$`*(token: tText): string =
   token.doc.escapeAmpersandSeq.escapeTag.escapeQuote
 
+method `$`*(tokens: DoublyLinkedList[Token]): string {.base.} =
+  tokens.toSeq.map((t: Token) => $t).join("")
+
+method `$`*(token: tLink): string =
+  let href = token.linkVal.url.escapeBackslash.escapeLinkUrl
+  let title = token.linkVal.title.escapeBackslash.escapeHTMLEntity.escapeAmpersandSeq.escapeQuote
+  if title == "": a(href=href, $token.children)
+  else: a(href=href, title=title, $token.children)
+
+method alt*(token: Token): string {.base.} = $token
+method alt*(token: tEm): string = $token.children
+method alt*(token: tStrong): string = $token.children
+method alt*(token: tLink): string = token.linkVal.text
+method alt*(token: tImage): string = token.imageval.alt
+
+method `$`*(token: tImage): string =
+  let src = token.imageVal.url.escapeBackslash.escapeLinkUrl
+  let title=token.imageVal.title.escapeBackslash.escapeHTMLEntity.escapeAmpersandSeq.escapeQuote
+  let alt = token.children.toSeq.map((t: Token) => t.alt).join("")
+  if title == "": img(src=src, alt=alt)
+  else: img(src=src, alt=alt, title=title)
+
+method `$`*(token: tAutoLink): string =
+  let href = token.autoLinkVal.url.escapeLinkUrl.escapeAmpersandSeq
+  let text = token.autoLinkVal.text.escapeAmpersandSeq
+  a(href=href, text)
+
+method `$`*(token: tEm): string =
+  em($token.children)
+
+method `$`*(token: tStrong): string =
+  strong($token.children)
+
 method `$`*(token: tThematicBreak): string = "<hr />"
 
 proc renderToken(state: State, token: Token): string =
@@ -2599,16 +2637,11 @@ proc renderToken(state: State, token: Token): string =
   of THeadCellToken: state.renderTableHeadCell(token)
   of TBodyCellToken: state.renderTableBodyCell(token)
   of FencedCodeToken: state.renderFencedCode(token)
-  of LinkToken: state.renderLink(token)
-  of ImageToken: state.renderImage(token)
-  of AutoLinkToken: state.renderAutoLink(token)
   of HTMLBlockToken: token.doc.strip(chars={'\n'})
   of ListItemToken: state.renderListItem(token)
   of UnorderedListToken: state.renderUnorderedList(token)
   of OrderedListToken: state.renderOrderedList(token)
   of BlockquoteToken: blockquote("\n", state.render(token))
-  of EmphasisToken: em(state.renderInline(token))
-  of StrongToken: strong(state.renderInline(token))
   else: $token
 
 proc render(state: State, token: Token): string =

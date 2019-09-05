@@ -164,6 +164,16 @@ type
   tHeading* = ref object of tBlock
   tCodeBlock* = ref object of tBlock
   tHtmlBlock* = ref object of tBlock
+  tBlockquote* = ref object of tBlock
+  tUl* = ref object of tBlock
+  tOl* = ref object of tBlock
+  tLi* = ref object of tBlock
+  tTable* = ref object of tBlock
+  tTHead* = ref object of tBlock
+  tTBody* = ref object of tBlock
+  tTableRow* = ref object of tBlock
+  tTHeadCell* = ref object of tBlock
+  tTBodyCell* = ref object of tBlock
 
   tInline* = ref object of Token
   tText* = ref object of tInline
@@ -564,7 +574,7 @@ proc parseUnorderedList(doc: string, start: int): ParseResult =
     if itemSize == -1:
       break
 
-    var listItem = Token(
+    var listItem = tLi(
       type: ListItemToken,
       doc: listItemDoc.strip(chars={'\n'}),
       listItemVal: ListItem(
@@ -579,7 +589,7 @@ proc parseUnorderedList(doc: string, start: int): ParseResult =
   if marker == "":
     return ParseResult(token: nil, pos: -1)
 
-  var ulToken = Token(
+  var ulToken = tUl(
     type: UnorderedListToken,
     doc: doc[start ..< pos],
     ulVal: UnorderedList(
@@ -608,7 +618,7 @@ proc parseOrderedList(doc: string, start: int): ParseResult =
       startIndex = index
       found = true
 
-    var listItem = Token(
+    var listItem = tLi(
       type: ListItemToken,
       doc: listItemDoc.strip(chars={'\n'}),
       listItemVal: ListItem(
@@ -623,7 +633,7 @@ proc parseOrderedList(doc: string, start: int): ParseResult =
   if marker == "":
     return ParseResult(token: nil, pos: -1)
 
-  var olToken = Token(
+  var olToken = tOl(
     type: OrderedListToken,
     doc: doc[start ..< pos],
     olVal: OrderedList(
@@ -944,18 +954,18 @@ proc parseHTMLTable(doc: string, start: int): ParseResult =
   if heads.len > aligns.len:
     return ParseResult(token: nil, pos: -1)
 
-  var theadToken = Token(
+  var theadToken = tTHead(
     type: THeadToken,
     doc: lines[0],
     theadVal: HTMLTableHead(size: 1)
   )
-  var theadRowToken = Token(
+  var theadRowToken = tTableRow(
     type: TableRowToken,
     doc: lines[0],
     tableRowVal: HTMLTableRow(th: true, td: false),
   )
   for index, elem in heads:
-    var thToken = Token(
+    var thToken = tTHeadCell(
       type: THeadCellToken,
       doc: elem.strip,
       theadCellVal: HTMLTableCell(
@@ -978,7 +988,7 @@ proc parseHTMLTable(doc: string, start: int): ParseResult =
 
     var rowColumns = parseTableRow(line.replace(re"^\||\|$", ""))
 
-    var tableRowToken = Token(
+    var tableRowToken = tTableRow(
       type: TableRowToken,
       doc: "",
       tableRowVal: HTMLTableRow(th: false, td: true),
@@ -989,7 +999,7 @@ proc parseHTMLTable(doc: string, start: int): ParseResult =
           ""
         else:
           rowColumns[index]
-      var tdToken = Token(
+      var tdToken = tTBodyCell(
         type: TBodyCellToken,
         doc: doc.replace(re"\\\|", "|").strip,
         tbodyCellVal: HTMLTableCell(
@@ -1002,7 +1012,7 @@ proc parseHTMLTable(doc: string, start: int): ParseResult =
     tbodyRows.add(tableRowToken)
     pos += line.len
 
-  var tableToken = Token(
+  var tableToken = tTable(
     type: TableToken,
     doc: doc[start ..< pos],
     tableVal: HTMLTable(
@@ -1011,7 +1021,7 @@ proc parseHTMLTable(doc: string, start: int): ParseResult =
   )
   tableToken.appendChild(theadToken)
   if tbodyRows.len > 0:
-    var tbodyToken = Token(
+    var tbodyToken = tTBody(
       type: TBodyToken,
       doc: doc[start+lines[0].len+lines[1].len ..< pos],
       tbodyVal: HTMLTableBody(size: tbodyRows.len)
@@ -1195,7 +1205,7 @@ proc parseBlockquote(doc: string, start: int): ParseResult =
   if not found:
     return ParseResult(token: nil, pos: -1)
 
-  let blockquote = Token(
+  let blockquote = tBlockquote(
     type: BlockquoteToken,
     doc: document,
     chunks: chunks,
@@ -2473,59 +2483,6 @@ proc renderOrderedList(state: State, token: Token): string =
 proc renderListItem(state: State, token: Token): string =
   result = li(state.renderListItemChildren(token))
 
-proc renderTableHeadCell(state: State, token: Token): string =
-  let align = token.theadCellVal.align
-  if align == "":
-    fmt"<th>{state.renderInline(token)}</th>"
-  else:
-    fmt("<th align=\"{align}\">{state.renderInline(token)}</th>")
-
-proc renderTableBodyCell(state: State, token: Token): string =
-  let align = token.tbodyCellVal.align
-  if align == "":
-    fmt"<td>{state.renderInline(token)}</td>"
-  else:
-    fmt("<td align=\"{align}\">{state.renderInline(token)}</td>")
-
-proc renderTableRow(state: State, token: Token): string =
-  var s = state
-  tr(
-    "\n",
-    token.children.toSeq.map(
-      proc(x: Token): string =
-        s.renderToken(x)
-    ).join("\n"),
-    "\n"
-  )
-
-proc renderTableHead(state: State, token: Token): string =
-  thead(
-    "\n",
-    state.renderTableRow(token.children.head.value.children.head.value),
-    "\n"
-  )
-
-proc renderTableBody(state: State, token: Token): string =
-  if token.children.head.next == nil:
-    return ""
-  var s = state
-  tbody(
-    "\n",
-    token.children.tail.value.children.toSeq.map(
-      proc(x: Token): string =
-        s.renderToken(x)
-    ).join("\n"),
-  )
-
-proc renderTable(state: State, token: Token): string =
-  let thead = state.renderTableHead(token)
-  var tbody = state.renderTableBody(token)
-  if tbody != "":
-    tbody = "\n" & tbody.strip
-  table("\n", thead, tbody)
-
-
-
 method `$`(token: Token): string {.base.} = ""
 
 method `$`*(token: tCodeSpan): string =
@@ -2549,8 +2506,11 @@ method `$`*(token: tHtmlEntity): string =
 method `$`*(token: tText): string =
   token.doc.escapeAmpersandSeq.escapeTag.escapeQuote
 
+proc toStringSeq(tokens: DoublyLinkedList[Token]): seq[string] =
+  tokens.toSeq.map((t: Token) => $t)
+
 method `$`*(tokens: DoublyLinkedList[Token]): string {.base.} =
-  tokens.toSeq.map((t: Token) => $t).join("")
+  tokens.toStringSeq.join("")
 
 method `$`*(token: tLink): string =
   let href = token.linkVal.url.escapeBackslash.escapeLinkUrl
@@ -2609,19 +2569,40 @@ method `$`*(token: tCodeBlock): string =
 
 method `$`*(token: tHtmlBlock): string = token.doc.strip(chars={'\n'})
 
+method `$`*(token: tTHeadCell): string =
+  let align = token.theadCellVal.align
+  if align == "": th($token.children)
+  else: fmt("<th align=\"{align}\">{$token.children}</th>")
+
+method `$`*(token: tTBodyCell): string =
+  let align = token.tbodyCellVal.align
+  if align == "": td($token.children)
+  else: fmt("<td align=\"{align}\">{$token.children}</td>")
+
+method `$`*(token: tTableRow): string =
+  let cells = token.children.toStringSeq.join("\n")
+  tr("\n", cells , "\n")
+
+method `$`*(token: tTBody): string =
+  let rows = token.children.toStringSeq.join("\n")
+  tbody("\n", rows)
+
+method `$`*(token: tTHead): string =
+  let tr = $token.children.head.value # table>thead>tr
+  thead("\n", tr, "\n")
+
+method `$`*(token: tTable): string =
+  let thead = $token.children.head.value # table>thead
+  var tbody = $token.children.tail.value
+  if tbody != "": tbody = "\n" & tbody.strip
+  table("\n", thead, tbody)
+
 proc renderToken(state: State, token: Token): string =
   case token.type
   of ListItemToken: state.renderListItem(token)
   of UnorderedListToken: state.renderUnorderedList(token)
   of OrderedListToken: state.renderOrderedList(token)
   of BlockquoteToken: blockquote("\n", state.render(token))
-
-  of TableToken: state.renderTable(token)
-  of THeadToken: state.renderTableHead(token)
-  of TBodyToken: state.renderTableBody(token)
-  of TableRowToken: state.renderTableRow(token)
-  of THeadCellToken: state.renderTableHeadCell(token)
-  of TBodyCellToken: state.renderTableBodyCell(token)
   else: $token
 
 proc render(state: State, token: Token): string =

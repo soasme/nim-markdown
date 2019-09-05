@@ -26,25 +26,8 @@ type
     canOpen: bool
     canClose: bool
 
-  Reference = object
-    text: string
-    title: string
-    url: string
-
   Blockquote = object
     doc: string
-
-  UnorderedList = object
-    loose: bool
-
-  OrderedList = object
-    loose: bool
-    start: int
-
-  ListItem = object
-    loose: bool
-    marker: string
-    verbatim: string
 
   TokenType* {.pure.} = enum
     ParagraphToken,
@@ -96,17 +79,17 @@ type
     children: DoublyLinkedList[Token]
     chunks: seq[Chunk]
     case type*: TokenType
-    of BlockquoteToken: blockquoteVal*: Blockquote
-    of UnorderedListToken: ulVal*: UnorderedList
-    of OrderedListToken: olVal*: OrderedList
-    of ListItemToken: listItemVal*: ListItem
-    of ReferenceToken: referenceVal*: Reference
     else: discard
 
   tBlock* = ref object of Token
   Paragraph* = ref object of tBlock
     loose: bool
     trailing: string
+
+  Reference = ref object of tBlock
+    text: string
+    title: string
+    url: string
 
   tThematicBreak* = ref object of tBlock
   Heading* = ref object of tBlock
@@ -118,7 +101,11 @@ type
   tBlockquote* = ref object of tBlock
   tUl* = ref object of tBlock
   tOl* = ref object of tBlock
+    start: int
   tLi* = ref object of tBlock
+    loose: bool
+    marker: string
+    verbatim: string
   HtmlTable* = ref object of tBlock
   THead* = ref object of tBlock
   TBody* = ref object of tBlock
@@ -517,15 +504,15 @@ method `$`*(token: tUl): string =
   ul("\n", render(token))
 
 method `$`*(token: tOl): string =
-  if token.olVal.start != 1:
-    ol(start=fmt"{token.olVal.start}", "\n", render(token))
+  if token.start != 1:
+    ol(start=fmt"{token.start}", "\n", render(token))
   else:
     ol("\n", render(token))
 
 method `$`*(token: tBlockquote): string =
   blockquote("\n", render(token))
 
-proc renderListItemChildren(token: Token): string =
+proc renderListItemChildren(token: tLi): string =
   var html: string
   if token.children.head == nil: return ""
 
@@ -542,7 +529,7 @@ proc renderListItemChildren(token: Token): string =
       if html != "":
         result &= "\n"
         result &= html
-  if token.listItemVal.loose or token.children.tail != nil:
+  if token.loose or token.children.tail != nil:
     result &= "\n"
 
 method `$`*(token: tLi): string =
@@ -558,7 +545,7 @@ proc endsWithBlankLine(token: Token): bool =
   if token of Paragraph:
     Paragraph(token).trailing.len > 1
   elif token of tLi:
-    token.listItemVal.verbatim.find(re"\n\n$") != -1
+    tLi(token).verbatim.find(re"\n\n$") != -1
   else:
     token.doc.find(re"\n\n$") != -1
 
@@ -699,10 +686,8 @@ proc parseUnorderedList(doc: string, start: int): ParseResult =
     var listItem = tLi(
       type: ListItemToken,
       doc: listItemDoc.strip(chars={'\n'}),
-      listItemVal: ListItem(
-        verbatim: listItemDoc,
-        marker: marker
-      )
+      verbatim: listItemDoc,
+      marker: marker
     )
     listItems.add(listItem)
 
@@ -714,9 +699,6 @@ proc parseUnorderedList(doc: string, start: int): ParseResult =
   var ulToken = tUl(
     type: UnorderedListToken,
     doc: doc[start ..< pos],
-    ulVal: UnorderedList(
-      loose: false
-    )
   )
   for listItem in listItems:
     ulToken.appendChild(listItem)
@@ -743,10 +725,8 @@ proc parseOrderedList(doc: string, start: int): ParseResult =
     var listItem = tLi(
       type: ListItemToken,
       doc: listItemDoc.strip(chars={'\n'}),
-      listItemVal: ListItem(
-        verbatim: listItemDoc,
-        marker: marker
-      )
+      verbatim: listItemDoc,
+      marker: marker
     )
     listItems.add(listItem)
 
@@ -758,10 +738,7 @@ proc parseOrderedList(doc: string, start: int): ParseResult =
   var olToken = tOl(
     type: OrderedListToken,
     doc: doc[start ..< pos],
-    olVal: OrderedList(
-      start: startIndex,
-      loose: false
-    )
+    start: startIndex,
   )
   for listItem in listItems:
     olToken.appendChild(listItem)
@@ -1398,14 +1375,12 @@ proc parseReference*(doc: string, start: int): ParseResult =
 
   var url = doc[destinationSlice]
 
-  var reference = Token(
+  var reference = Reference(
     type: ReferenceToken,
     doc: doc[start ..< pos],
-    referenceVal: Reference(
-      text: label,
-      url: url,
-      title: title,
-    )
+    text: label,
+    url: url,
+    title: title,
   )
   return ParseResult(token: reference, pos: pos)
 
@@ -1535,28 +1510,26 @@ proc parseBlock(state: State, token: Token) =
           for listItem in res.token.children.items:
             if listItem.doc != "":
               parseBlock(state, listItem)
-          res.token.ulVal.loose = res.token.parseLoose
+          let loose = res.token.parseLoose
           for listItem in res.token.children.items:
-            listItem.listItemVal.loose = res.token.ulVal.loose
             for child in listItem.children.items:
               if child of Paragraph:
-                Paragraph(child).loose = res.token.ulVal.loose
+                Paragraph(child).loose = loose
       of OrderedListToken:
         res = parseOrderedList(doc, pos)
         if res.pos != -1:
           for listItem in res.token.children.items:
             if listItem.doc != "":
               parseBlock(state, listItem)
-          res.token.olVal.loose = res.token.parseLoose
+          let loose = res.token.parseLoose
           for listItem in res.token.children.items:
-            listItem.listItemVal.loose = res.token.olVal.loose
             for child in listItem.children.items:
               if child of Paragraph:
-                Paragraph(child).loose = res.token.olVal.loose
+                Paragraph(child).loose = loose
       of ReferenceToken:
         res = parseReference(doc, pos)
-        if res.pos != -1 and not state.references.contains(res.token.referenceVal.text):
-          state.references[res.token.referenceVal.text] = res.token.referenceVal
+        if res.pos != -1 and not state.references.contains(Reference(res.token).text):
+          state.references[Reference(res.token).text] = Reference(res.token)
       of BlockquoteToken:
         res = parseBlockquote(doc, pos)
         if res.pos != -1 and res.token.doc.strip != "":

@@ -31,11 +31,6 @@ type
     title: string
     url: string
 
-  Image = object
-    url: string
-    alt: string
-    title: string
-
   AutoLink = object
     text: string
     url: string
@@ -140,7 +135,6 @@ type
     of ReferenceToken: referenceVal*: Reference
     of AutoLinkToken: autoLinkVal*: AutoLink
     of EscapeToken: escapeVal*: string
-    of ImageToken: imageVal*: Image
     else: discard
 
   tBlock* = ref object of Token
@@ -180,7 +174,10 @@ type
     url: string ## A link contains destination (the URI that is the link destination).
     title: string ## A link contains a optional title.
   tAutoLink* = ref object of tInline
-  tImage* = ref object of tInline
+  Image* = ref object of tInline
+    url: string
+    alt: string
+    title: string
   tEm* = ref object of tInline
   tStrong* = ref object of tInline
 
@@ -474,11 +471,11 @@ method alt*(token: tStrong): string = $token.children
 
 method alt*(token: Link): string = token.text
 
-method alt*(token: tImage): string = token.imageval.alt
+method alt*(token: Image): string = token.alt
 
-method `$`*(token: tImage): string =
-  let src = token.imageVal.url.escapeBackslash.escapeLinkUrl
-  let title=token.imageVal.title.escapeBackslash.escapeHTMLEntity.escapeAmpersandSeq.escapeQuote
+method `$`*(token: Image): string =
+  let src = token.url.escapeBackslash.escapeLinkUrl
+  let title=token.title.escapeBackslash.escapeHTMLEntity.escapeAmpersandSeq.escapeQuote
   let alt = token.children.toSeq.map((t: Token) => t.alt).join("")
   if title == "": img(src=src, alt=alt)
   else: img(src=src, alt=alt, title=title)
@@ -2116,14 +2113,12 @@ proc parseInlineImage(state: State, token: Token, start: int, labelSlice: Slice[
   var url = token.doc[destinationSlice]
   var text = token.doc[labelSlice.a+1 ..< labelSlice.b]
 
-  var image = tImage(
+  var image = Image(
     type: ImageToken,
     doc: token.doc[start-1 ..< pos+1],
-    imageVal: Image(
-      alt: text,
-      url: url,
-      title: title,
-    )
+    alt: text,
+    url: url,
+    title: title,
   )
 
   parseLinkInlines(state, image, allowNested=true)
@@ -2145,14 +2140,12 @@ proc parseFullReferenceImage(state: State, token: Token, start: int, altSlice: S
     return -1
 
   var reference = state.references[label]
-  var image = tImage(
+  var image = Image(
     type: ImageToken,
     doc: token.doc[start ..< pos-1],
-    imageVal: Image(
-      url: reference.url,
-      title: reference.title,
-      alt: alt
-    )
+    url: reference.url,
+    title: reference.title,
+    alt: alt
   )
   parseLinkInlines(state, image, allowNested=true)
   token.appendChild(image)
@@ -2165,14 +2158,12 @@ proc parseCollapsedReferenceImage(state: State, token: Token, start: int, label:
     return -1
 
   var reference = state.references[id]
-  var image = tImage(
+  var image = Image(
     type: ImageToken,
     doc: token.doc[start ..< label.b+2],
-    imageVal: Image(
-      url: reference.url,
-      title: reference.title,
-      alt: alt
-    )
+    url: reference.url,
+    title: reference.title,
+    alt: alt
   )
   parseLinkInlines(state, image)
   token.appendChild(image)
@@ -2185,14 +2176,12 @@ proc parseShortcutReferenceImage(state: State, token: Token, start: int, label: 
     return -1
 
   var reference = state.references[id]
-  var image = tImage(
+  var image = Image(
     type: ImageToken,
     doc: token.doc[start ..< label.b+1],
-    imageVal: Image(
-      url: reference.url,
-      title: reference.title,
-      alt: alt
-    )
+    url: reference.url,
+    title: reference.title,
+    alt: alt
   )
   parseLinkInlines(state, image)
   token.appendChild(image)
@@ -2497,9 +2486,9 @@ proc parseLinkInlines*(state: State, token: Token, allowNested: bool = false) =
   if token of Link:
     pos = 1
     size = Link(token).text.len - 1
-  elif token of tImage:
+  elif token of Image:
     pos = 2
-    size = token.imageVal.alt.len
+    size = Image(token).alt.len
   else:
     raise newException(MarkdownError, fmt"{token.type} has no link inlines.")
 

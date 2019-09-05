@@ -2,7 +2,7 @@ import re, strutils, strformat, tables, sequtils, math, uri, htmlparser, lists, 
 import unicode except `strip`, `splitWhitespace`
 from sequtils import map
 from lists import DoublyLinkedList, prepend, append
-from htmlgen import nil, p, br, em, strong, a, img, code, del, blockquote, li, ul, ol, pre, code, table, thead, tbody, th, tr, td
+from htmlgen import nil, p, br, em, strong, a, img, code, del, blockquote, li, ul, ol, pre, code, table, thead, tbody, th, tr, td, hr
 
 type
   MarkdownError* = object of Exception ## The error object for markdown parsing and rendering.
@@ -2532,38 +2532,6 @@ proc renderFencedCode(state: State, token: Token): string =
       codeHTML,
       ))
 
-proc renderLink(state: State, token: Token): string =
-  if token.linkVal.title == "":
-    a(
-      href=token.linkVal.url.escapeBackslash.escapeLinkUrl,
-      state.renderInline(token)
-    )
-  else:
-    a(
-      href=token.linkVal.url.escapeBackslash.escapeLinkUrl,
-      title=token.linkVal.title.escapeBackslash.escapeHTMLEntity.escapeAmpersandSeq.escapeQuote,
-      state.renderInline(token)
-    )
-
-proc renderImage(state: State, token: Token): string =
-  if token.imageVal.title == "":
-    img(
-      src=token.imageVal.url.escapeBackslash.escapeLinkUrl,
-      alt=state.renderImageAlt(token)
-    )
-  else:
-    img(
-      src=token.imageVal.url.escapeBackslash.escapeLinkUrl,
-      alt=state.renderImageAlt(token),
-      title=token.imageVal.title.escapeBackslash.escapeHTMLEntity.escapeAmpersandSeq.escapeQuote,
-    )
-
-proc renderAutoLink(state: State, token: Token): string =
-  a(
-    href=token.autoLinkVal.url.escapeLinkUrl.escapeAmpersandSeq,
-    token.autoLinkVal.text.escapeAmpersandSeq
-  )
-
 proc renderHeading(state: State, token: Token): string =
   fmt"<h{token.headingVal.level}>{state.renderInline(token)}</h{token.headingVal.level}>"
 
@@ -2600,9 +2568,13 @@ method `$`*(token: tLink): string =
   else: a(href=href, title=title, $token.children)
 
 method alt*(token: Token): string {.base.} = $token
+
 method alt*(token: tEm): string = $token.children
+
 method alt*(token: tStrong): string = $token.children
+
 method alt*(token: tLink): string = token.linkVal.text
+
 method alt*(token: tImage): string = token.imageval.alt
 
 method `$`*(token: tImage): string =
@@ -2617,13 +2589,11 @@ method `$`*(token: tAutoLink): string =
   let text = token.autoLinkVal.text.escapeAmpersandSeq
   a(href=href, text)
 
-method `$`*(token: tEm): string =
-  em($token.children)
+method `$`*(token: tEm): string = em($token.children)
 
-method `$`*(token: tStrong): string =
-  strong($token.children)
+method `$`*(token: tStrong): string = strong($token.children)
 
-method `$`*(token: tThematicBreak): string = "<hr />"
+method `$`*(token: tThematicBreak): string = hr()
 
 proc renderToken(state: State, token: Token): string =
   case token.type

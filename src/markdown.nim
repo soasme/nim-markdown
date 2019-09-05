@@ -7,13 +7,8 @@ from htmlgen import nil, p, br, em, strong, a, img, code, del, blockquote, li, u
 type
   MarkdownError* = object of Exception ## The error object for markdown parsing and rendering.
 
-  MarkdownConfig* = object ## Options for configuring parsing or rendering behavior.
-    escape: bool ## escape ``<``, ``>``, and ``&`` characters to be HTML-safe
-    keepHtml: bool ## deprecated: preserve HTML tags rather than escape it
-
   RuleSet = object
     preProcessingRules: seq[TokenType]
-    blockRules: seq[TokenType]
     inlineRules: seq[TokenType]
     postProcessingRules: seq[TokenType]
 
@@ -163,33 +158,23 @@ type
     token: Token
     pos: int
 
-  Parser = (string, int) -> ParseResult
+  BlockParser* = (string, int) -> ParseResult
+
+  MarkdownConfig* = object ## Options for configuring parsing or rendering behavior.
+    escape: bool ## escape ``<``, ``>``, and ``&`` characters to be HTML-safe
+    keepHtml: bool ## deprecated: preserve HTML tags rather than escape it
+    blockParsers: seq[(string, int) -> ParseResult]
 
   State* = ref object
     ruleSet: RuleSet
-    blockParsers: seq[Parser]
-    references: Table[string, Reference]
+    references*: Table[string, Reference]
+    config*: MarkdownConfig
 
 proc appendChild*(token: Token, child: Token) =
   token.children.append(child)
 
 var gfmRuleSet = RuleSet(
   preProcessingRules: @[],
-  blockRules: @[
-    ReferenceToken,
-    ThematicBreakToken,
-    BlockquoteToken,
-    UnorderedListToken,
-    OrderedListToken,
-    IndentedCodeToken,
-    FencedCodeToken,
-    HTMLBlockToken,
-    TableToken,
-    BlankLineToken,
-    ATXHeadingToken,
-    SetextHeadingToken,
-    ParagraphToken,
-  ],
   inlineRules: @[
     EmphasisToken, # including strong.
     ImageToken,
@@ -1532,36 +1517,18 @@ proc parseBlock(state: State, token: Token) =
   var pos = 0
   var res: ParseResult
   while pos < doc.len:
-    for rule in state.ruleSet.blockRules:
-      case rule
-      of UnorderedListToken:
-        res = parseUnorderedList(doc, pos)
-        if res.pos != -1: state.finalizeList(res.token)
-      of OrderedListToken:
-        res = parseOrderedList(doc, pos)
-        if res.pos != -1: state.finalizeList(res.token)
-      of ReferenceToken:
-        res = parseReference(doc, pos)
-        if res.pos != -1:
+    for blockParser in state.config.blockParsers:
+      res = blockParser(doc, pos)
+      if res.pos != -1:
+        ### FIXME: These code should be moved into block-specific finalization procs.
+        if (res.token of Ul) or (res.token of Ol):
+          state.finalizeList(res.token)
+        elif res.token of Blockquote:
+          res = state.parseContainerBlock(res.token)
+        elif res.token of Reference:
           let reference = Reference(res.token)
           if not state.references.contains(reference.text):
             state.references[reference.text] = reference
-      of BlockquoteToken:
-        res = parseBlockquote(doc, pos)
-        if res.pos != -1: res = parseContainerBlock(state, res.token)
-      of TableToken: res = parseHTMLTable(doc, pos)
-      of FencedCodeToken: res = parseFencedCode(doc, pos)
-      of IndentedCodeToken: res = parseIndentedCode(doc, pos)
-      of HTMLBlockToken: res = parseHTMLBlock(doc, pos)
-      of SetextHeadingToken: res = parseSetextHeading(doc, pos)
-      of BlankLineToken: res = parseBlankLine(doc, pos)
-      of ThematicBreakToken:
-        res = parseThematicBreak(doc, pos)
-      of ATXHeadingToken: res = parseATXHeading(doc, pos)
-      of ParagraphToken: res = parseParagraph(doc, pos)
-      else: raise newException(MarkdownError, fmt"unknown rule.")
-
-      if res.pos != -1:
         pos = res.pos
         token.appendChild(res.token)
         break
@@ -2490,19 +2457,54 @@ proc parse(state: State, token: Token) =
   parseInline(state, token)
   postProcessing(state, token)
 
-proc initMarkdownConfig*(
+proc initCommonmarkConfig*(
   escape = true,
   keepHtml = true,
 ): MarkdownConfig =
-  MarkdownConfig(
+  result = MarkdownConfig(
     escape: escape,
-    keepHtml: keepHtml
+    keepHtml: keepHtml,
   )
+  result.blockParsers.add(parseReference)
+  result.blockParsers.add(parseThematicBreak)
+  result.blockParsers.add(parseBlockquote)
+  result.blockParsers.add(parseUnorderedList)
+  result.blockParsers.add(parseOrderedList)
+  result.blockParsers.add(parseIndentedCode)
+  result.blockParsers.add(parseFencedCode)
+  result.blockParsers.add(parseHTMLBlock)
+  result.blockParsers.add(parseBlankLine)
+  result.blockParsers.add(parseATXHeading)
+  result.blockParsers.add(parseSetextHeading)
+  result.blockParsers.add(parseParagraph)
 
-proc markdown*(doc: string, config: MarkdownConfig = initMarkdownConfig()): string =
+proc initGfmConfig*(
+  escape = true,
+  keepHtml = true,
+): MarkdownConfig =
+  result = MarkdownConfig(
+    escape: escape,
+    keepHtml: keepHtml,
+  )
+  result.blockParsers.add(parseReference)
+  result.blockParsers.add(parseThematicBreak)
+  result.blockParsers.add(parseBlockquote)
+  result.blockParsers.add(parseUnorderedList)
+  result.blockParsers.add(parseOrderedList)
+  result.blockParsers.add(parseIndentedCode)
+  result.blockParsers.add(parseFencedCode)
+  result.blockParsers.add(parseHTMLBlock)
+  result.blockParsers.add(parseHTMLTable)
+  result.blockParsers.add(parseBlankLine)
+  result.blockParsers.add(parseATXHeading)
+  result.blockParsers.add(parseSetextHeading)
+  result.blockParsers.add(parseParagraph)
+
+proc markdown*(doc: string, config: MarkdownConfig = initCommonmarkConfig()): string =
   var state = State(
     ruleSet: gfmRuleSet,
     references: initTable[string, Reference](),
+    config: config,
   )
   var document = Token(
     type: DocumentToken,
@@ -2521,7 +2523,7 @@ proc readCLIOptions*(): MarkdownConfig =
   ## * `-k` / `--keep-html`
   ## * '--no-keep-html`
   ##
-  result = initMarkdownConfig()
+  result = initCommonmarkConfig()
   when declared(commandLineParams):
     for opt in commandLineParams():
       case opt

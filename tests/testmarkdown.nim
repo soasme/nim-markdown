@@ -7,8 +7,8 @@ import re, strutils, os, json, strformat, sequtils
 import markdown
 
 const
-  config = initMarkdownConfig()
-  configNoEscape = initMarkdownConfig(escape = false)
+  gfmConfig = initGfmConfig()
+  configNoEscape = initGfmConfig(escape = false)
 
 test "newline":
   check markdown("\n\n\n") == ""
@@ -149,7 +149,8 @@ test "table":
 | :------: | -------: | :------- | -------- |
 | Cell 1   | Cell 2   | Cell 3   | Cell 4   |
 | Cell 5   | Cell 6   | Cell 7   | Cell 8   |
-  """
+  """,
+    config=gfmConfig,
   ) == """<table>
 <thead>
 <tr>
@@ -178,7 +179,8 @@ test "table":
 | Header 1 | Header 2
 | -------- | --------
 | Cell 1   | Cell 2
-| Cell 3   | Cell 4"""
+| Cell 3   | Cell 4""",
+    config=gfmConfig,
   ) == """<table>
 <thead>
 <tr>
@@ -231,63 +233,6 @@ check markdown("""
 </ul>
 """
 
-test "get link test":
-  var slice: Slice[int]
-  check getLinkText("[a]", 0, slice) == 3; check slice == (0 .. 2)
-  check getLinkText("[[a]", 0, slice) == -1;
-  check getLinkText("[[a]", 1, slice) == 3; check slice == (1 .. 3)
-  check getLinkText("[[a]]", 0, slice) == 5; check slice == (0 .. 4)
-  check getLinkText("[a]]", 0, slice) == 3; check slice == (0 .. 2)
-  check getLinkText(r"[a\]]", 0, slice) == 5; check slice == (0 .. 4)
-  check getLinkText("[link]", 0, slice) == 6; check slice == (0 .. 5)
-  check getLinkText("[link [foo [bar]]]", 0, slice) == 18; check slice == (0 .. 17)
-  check getLinkText("[link] bar]", 0, slice) == 6; check slice == (0 .. 5)
-  check getLinkText("[link [bar]", 0, slice) == -1;
-  check getLinkText(r"[link \[bar]", 0, slice) == 12; check slice == (0 .. 11)
-  check getLinkText("[foo [bar](/uri)]", 0, slice) == -1
-  check getLinkText("[foo *[bar [baz](/uri)](/uri)*]", 0, slice) == -1
-  check getLinkText("![[[foo](uri1)](uri2)]", 1, slice, allowNested=true) == 21; check slice == (1 .. 21)
-  check getLinkText("*[foo*]", 1, slice) == 6; check slice == (1 .. 6)
-  check getLinkText("[foo`]`", 0, slice) == -1;
-  check getLinkText("[foo`]`]", 0, slice) == 8; check slice == (0 .. 7);
-  check getLinkText("[foo <a href=]>]", 0, slice) == 16; check slice == (0 .. 15);
-  check getLinkText("[[foo](/uri)]", 0, slice) == -1
-  check getLinkText("[![foo](/uri)]", 0, slice) == 14; check slice == (0 .. 13)
-
-test "get link destination":
-  var doc = ""
-  var slice: Slice[int]
-
-  doc = "(<a>)"; check getLinkDestination(doc, 1, slice) == 3; check doc[slice] == "a"
-  doc = "(/uri)";  check getLinkDestination(doc, 1, slice) == 4; check doc[slice] == "/uri"
-  doc = "(/uri \"title\")";  check getLinkDestination(doc, 1, slice) == 4; check doc[slice] == "/uri"
-  doc = "()";  check getLinkDestination(doc, 1, slice) == 0; check doc[slice] == ""
-  doc = "(<>)";  check getLinkDestination(doc, 1, slice) == 2; check doc[slice] == ""
-  doc = "(/my uri)";  check getLinkDestination(doc, 1, slice) == 3; check doc[slice] == "/my" # we'll abort at link title step
-  doc = "(</my uri>)";  check getLinkDestination(doc, 1, slice) == 9; check doc[slice] == "/my uri"
-  doc = "(foo\nbar)"; check getLinkDestination(doc, 1, slice) == 3; # we'll abort at link title step
-  doc = "(<foo\nbar>)"; check getLinkDestination(doc, 1, slice) == -1;
-  doc = r"(\(foo\))";  check getLinkDestination(doc, 1, slice) == 7; check doc[slice] == r"\(foo\)"
-  doc = r"(foo(and(bar)))";  check getLinkDestination(doc, 1, slice) == 13; check doc[slice] == r"foo(and(bar))"
-  doc = r"(foo\(and\(bar\))";  check getLinkDestination(doc, 1, slice) == 15; check doc[slice] == r"foo\(and\(bar\)"
-  doc = r"(<foo(and(bar)>)";  check getLinkDestination(doc, 1, slice) == 14; check doc[slice] == r"foo(and(bar)"
-  doc = r"(foo\)\:)";  check getLinkDestination(doc, 1, slice) == 7; check doc[slice] == r"foo\)\:"
-  doc = r"(#fragment)";  check getLinkDestination(doc, 1, slice) == 9; check doc[slice] == r"#fragment"
-  doc = "(\"title\")";   check getLinkDestination(doc, 1, slice) == 7; check doc[slice] == "\"title\""
-  doc = "(   /uri\n  \"title\""; check getLinkDestination(doc, 4, slice) == 4; check doc[slice] == "/uri"
-
-test "get link title":
-  var slice: Slice[int]
-  check getLinkTitle("/url \"title\"", 5, slice) == 7; check "/url \"title\""[slice] == "title"
-  check getLinkTitle("/url 'title'", 5, slice) == 7; check "/url 'title'"[slice] == "title"
-  check getLinkTitle("/url (title)", 5, slice) == 7; check "/url (title)"[slice] == "title"
-
-test "get link label":
-  var label = ""
-  check getLinkLabel("[a]", 0, label) == 3; check label == "a"
-  check getLinkLabel("[a]]", 0, label) == 3; check label == "a"
-  check getLinkLabel("[a[]", 0, label) == -1
-
 test "parse table rows & aligns":
   check parseTableRow("|a|") == @["", "a", ""]
   check parseTableRow("|a|b|") == @["", "a", "b", ""]
@@ -295,12 +240,6 @@ test "parse table rows & aligns":
   check parseTableRow(r"|\`a|\`b|") == @["", r"\`a", r"\`b", ""]
   check parseTableRow("a") == @["a"]
   check parseTableRow("a|b") == @["a", "b"]
-  var tableAlignMatches: seq[string] = @[]
-  check parseTableAligns("| --- | --- |", tableAlignMatches) == true
-  check tableAlignMatches == @["", ""]
-  tableAlignMatches = @[]
-  check parseTableAligns(":-: | -----------:", tableAlignMatches) == true
-  check tableAlignMatches == @["center", "right"]
-  tableAlignMatches = @[]
-  check parseTableAligns("| ------ |", tableAlignMatches) == true
-  check tableAlignMatches == @[""]
+  check parseTableAligns("| --- | --- |") == (@["", ""], true)
+  check parseTableAligns(":-: | -----------:") == (@["center", "right"], true)
+  check parseTableAligns("| ------ |") == (@[""], true)

@@ -161,6 +161,7 @@ type
   tInline* = ref object of Token
   tCodeSpan* = ref object of tInline
   tSoftBreak* = ref object of tInline
+  tHardBreak* = ref object of tInline
 
   ParseResult* = tuple[token: Token, pos: int]
   Parser = (string, int) -> ParseResult
@@ -2121,7 +2122,7 @@ proc parseHardLineBreak*(state: State, token: Token, start: int): int =
   if size == -1:
     return -1
 
-  token.appendChild(Token(type: HardLineBreakToken))
+  token.appendChild(tHardBreak(type: HardLineBreakToken))
   return size
 
 proc parseCodeSpan*(state: State, token: Token, start: int): int =
@@ -2551,10 +2552,13 @@ proc renderHeading(state: State, token: Token): string =
 
 method `$`(token: Token): string {.base.} = ""
 
-method `$`*(token: tCodeSpan): string =
-  code(token.doc.escapeAmpersandChar.escapeTag.escapeQuote)
+method `$`*(token: tCodeSpan): string = code(
+  token.doc.escapeAmpersandChar.escapeTag.escapeQuote
+)
 
 method `$`*(token: tSoftBreak): string = "\n"
+
+method `$`*(token: tHardBreak): string = br() & "\n"
 
 proc renderToken(state: State, token: Token): string =
   case token.type
@@ -2586,7 +2590,6 @@ proc renderToken(state: State, token: Token): string =
   of EmphasisToken: em(state.renderInline(token))
   of StrongToken: strong(state.renderInline(token))
   of StrikethroughToken: del(token.doc)
-  of HardLineBreakToken: br() & "\n"
   else: $token
 
 proc render(state: State, token: Token): string =

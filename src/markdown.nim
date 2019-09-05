@@ -26,9 +26,6 @@ type
     canOpen: bool
     canClose: bool
 
-  Blockquote = object
-    doc: string
-
   TokenType* {.pure.} = enum
     ParagraphToken,
     ATXHeadingToken,

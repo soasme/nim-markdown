@@ -46,9 +46,6 @@ type
     marker: string
     verbatim: string
 
-  Code= object
-    info: string
-
   HTMLTableCell = object
     align: string
     i: int
@@ -117,7 +114,6 @@ type
     children: DoublyLinkedList[Token]
     chunks: seq[Chunk]
     case type*: TokenType
-    of FencedCodeToken, IndentedCodeToken: codeVal*: Code
     of BlockquoteToken: blockquoteVal*: Blockquote
     of UnorderedListToken: ulVal*: UnorderedList
     of OrderedListToken: olVal*: OrderedList
@@ -142,7 +138,8 @@ type
   Heading* = ref object of tBlock
     level: int
 
-  tCodeBlock* = ref object of tBlock
+  CodeBlock* = ref object of tBlock
+    info: string
   tHtmlBlock* = ref object of tBlock
   tBlockquote* = ref object of tBlock
   tUl* = ref object of tBlock
@@ -499,14 +496,14 @@ method `$`*(token: Heading): string =
   let child = $token.children
   fmt"<h{num}>{child}</h{num}>"
 
-method `$`*(token: tCodeBlock): string =
+method `$`*(token: CodeBlock): string =
   var codeHTML = token.doc.escapeCode.escapeQuote
   if codeHTML != "" and not codeHTML.endsWith("\n"):
     codeHTML &= "\n"
-  if token.codeVal.info == "":
+  if token.info == "":
     pre(code(codeHTML))
   else:
-    let info = token.codeVal.info.escapeBackslash.escapeHTMLEntity
+    let info = token.info.escapeBackslash.escapeHTMLEntity
     let lang = fmt"language-{info}"
     pre(code(class=lang, codeHTML))
 
@@ -877,10 +874,10 @@ proc parseFencedCode(doc: string, start: int): ParseResult =
   if doc.since(pos).matchLen(re"\n$") != -1:
     pos += 1
 
-  let codeToken = tCodeBlock(
+  let codeToken = CodeBlock(
     type: FencedCodeToken,
     doc: codeContent,
-    codeVal: Code(info: info),
+    info: info,
   )
   return ParseResult(token: codeToken, pos: pos)
 
@@ -918,7 +915,7 @@ proc parseIndentedCode*(doc: string, start: int): ParseResult =
   code = code.removeBlankLines
   pos += res.size
   return ParseResult(
-    token: tCodeBlock(type: IndentedCodeToken, doc: code, codeVal: Code(info: "")),
+    token: CodeBlock(type: IndentedCodeToken, doc: code, info: ""),
     pos: pos
   )
 

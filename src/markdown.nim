@@ -804,23 +804,23 @@ proc parseCodeContent*(doc: string, indent: int, fence: string): tuple[code: str
     pos += line.len
   return (codeContent, pos)
 
-proc parseCodeInfo*(doc: string, size: var int): string =
+proc parseCodeInfo*(doc: string): tuple[info: string, size: int] =
   var matches: array[1, string]
-  size = doc.matchLen(re"(?: |\t)*([^`\n]*)?(?:\n|$)", matches=matches)
+  let size = doc.matchLen(re"(?: |\t)*([^`\n]*)?(?:\n|$)", matches=matches)
   if size == -1:
-    return ""
+    return ("", -1)
   for item in matches[0].splitWhitespace:
-    return item
-  return ""
+    return (item, size)
+  return ("", size)
 
-proc parseTildeBlockCodeInfo*(doc: string, size: var int): string =
+proc parseTildeBlockCodeInfo*(doc: string): tuple[info: string, size: int] =
   var matches: array[1, string]
-  size = doc.matchLen(re"(?: |\t)*(.*)?(?:\n|$)", matches=matches)
+  let size = doc.matchLen(re"(?: |\t)*(.*)?(?:\n|$)", matches=matches)
   if size == -1:
-    return ""
+    return ("", -1)
   for item in matches[0].splitWhitespace:
-    return item
-  return ""
+    return (item, size)
+  return ("", size)
 
 proc parseFencedCode(doc: string, start: int): ParseResult =
   var pos = start
@@ -833,9 +833,9 @@ proc parseFencedCode(doc: string, start: int): ParseResult =
   var infoSize = -1
   var info: string
   if fence.startsWith("`"):
-    info = doc.since(pos).parseCodeInfo(infoSize)
+    (info, infoSize) = doc.since(pos).parseCodeInfo()
   else:
-    info = doc.since(pos).parseTildeBlockCodeInfo(infoSize)
+    (info, infosize) = doc.since(pos).parseTildeBlockCodeInfo()
   if infoSize == -1: return ParseResult(token: nil, pos: -1)
 
   pos += infoSize

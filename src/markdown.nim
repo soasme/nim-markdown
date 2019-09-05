@@ -2589,7 +2589,6 @@ method `$`*(token: tThematicBreak): string = "<hr />"
 
 proc renderToken(state: State, token: Token): string =
   case token.type
-  of ReferenceToken: ""
   of ParagraphToken: state.renderParagraph(token)
   of ATXHeadingToken, SetextHeadingToken: state.renderHeading(token)
   of IndentedCodeToken: pre(code(token.doc.removeBlankLines.escapeCode.escapeQuote, "\n"))

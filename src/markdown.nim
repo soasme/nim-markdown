@@ -67,7 +67,7 @@ type
   Heading = object
     level: int
 
-  Fenced = object
+  Code= object
     info: string
 
   HTMLTableCell = object
@@ -140,7 +140,7 @@ type
     case type*: TokenType
     of ParagraphToken: paragraphVal*: Paragraph
     of ATXHeadingToken, SetextHeadingToken: headingVal*: Heading
-    of FencedCodeToken: fenceCodeVal*: Fenced
+    of FencedCodeToken, IndentedCodeToken: codeVal*: Code
     of BlockquoteToken: blockquoteVal*: Blockquote
     of UnorderedListToken: ulVal*: UnorderedList
     of OrderedListToken: olVal*: OrderedList
@@ -162,6 +162,7 @@ type
   tParagraph* = ref object of tBlock
   tThematicBreak* = ref object of tBlock
   tHeading* = ref object of tBlock
+  tCodeBlock* = ref object of tBlock
 
   tInline* = ref object of Token
   tText* = ref object of tInline
@@ -716,10 +717,10 @@ proc parseFencedCode(doc: string, start: int): ParseResult =
   if doc.since(pos).matchLen(re"\n$") != -1:
     pos += 1
 
-  let codeToken = Token(
+  let codeToken = tCodeBlock(
     type: FencedCodeToken,
     doc: codeContent,
-    fenceCodeVal: Fenced(info: info),
+    codeVal: Code(info: info),
   )
   return ParseResult(token: codeToken, pos: pos)
 
@@ -754,9 +755,10 @@ proc parseIndentedCode*(doc: string, start: int): ParseResult =
   var pos = start + res.size
   res = doc.since(start).getIndentedCodeRestLines()
   code &= res.code
+  code = code.removeBlankLines
   pos += res.size
   return ParseResult(
-    token: Token(type: IndentedCodeToken, doc: code),
+    token: tCodeBlock(type: IndentedCodeToken, doc: code, codeVal: Code(info: "")),
     pos: pos
   )
 
@@ -2521,18 +2523,6 @@ proc renderTable(state: State, token: Token): string =
     tbody = "\n" & tbody.strip
   table("\n", thead, tbody)
 
-proc renderFencedCode(state: State, token: Token): string =
-  var codeHTML = token.doc.escapeCode.escapeQuote
-  if codeHTML != "" and not codeHTML.endsWith("\n"):
-    codeHTML &= "\n"
-
-  if token.fenceCodeVal.info == "":
-    pre(code(codeHTML))
-  else:
-    pre(code(
-      class=fmt"language-{token.fenceCodeVal.info.escapeBackslash.escapeHTMLEntity}",
-      codeHTML,
-      ))
 
 
 method `$`(token: Token): string {.base.} = ""
@@ -2605,16 +2595,25 @@ method `$`*(token: tHeading): string =
   let child = $token.children
   fmt"<h{num}>{child}</h{num}>"
 
+method `$`(token: tCodeBlock): string =
+  var codeHTML = token.doc.escapeCode.escapeQuote
+  if codeHTML != "" and not codeHTML.endsWith("\n"):
+    codeHTML &= "\n"
+  if token.codeVal.info == "":
+    pre(code(codeHTML))
+  else:
+    let info = token.codeVal.info.escapeBackslash.escapeHTMLEntity
+    let lang = fmt"language-{info}"
+    pre(code(class=lang, codeHTML))
+
 proc renderToken(state: State, token: Token): string =
   case token.type
-  of IndentedCodeToken: pre(code(token.doc.removeBlankLines.escapeCode.escapeQuote, "\n"))
   of TableToken: state.renderTable(token)
   of THeadToken: state.renderTableHead(token)
   of TBodyToken: state.renderTableBody(token)
   of TableRowToken: state.renderTableRow(token)
   of THeadCellToken: state.renderTableHeadCell(token)
   of TBodyCellToken: state.renderTableBodyCell(token)
-  of FencedCodeToken: state.renderFencedCode(token)
   of HTMLBlockToken: token.doc.strip(chars={'\n'})
   of ListItemToken: state.renderListItem(token)
   of UnorderedListToken: state.renderUnorderedList(token)

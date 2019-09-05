@@ -160,6 +160,7 @@ type
 
   tInline* = ref object of Token
   tCodeSpan* = ref object of tInline
+  tSoftBreak* = ref object of tInline
 
   ParseResult* = tuple[token: Token, pos: int]
   Parser = (string, int) -> ParseResult
@@ -1456,7 +1457,7 @@ proc parseText(state: State, token: Token, start: int): int =
 proc parseSoftLineBreak(state: State, token: Token, start: int): int =
   result = token.doc[start ..< token.doc.len].matchLen(re"^ \n *")
   if result != -1:
-    token.appendChild(Token(type: SoftLineBreakToken))
+    token.appendChild(tSoftBreak(type: SoftLineBreakToken))
 
 proc parseAutoLink(state: State, token: Token, start: int): int =
   if token.doc[start] != '<':
@@ -2550,8 +2551,10 @@ proc renderHeading(state: State, token: Token): string =
 
 method `$`(token: Token): string {.base.} = ""
 
-method `$`(token: tCodeSpan): string =
+method `$`*(token: tCodeSpan): string =
   code(token.doc.escapeAmpersandChar.escapeTag.escapeQuote)
+
+method `$`*(token: tSoftBreak): string = "\n"
 
 proc renderToken(state: State, token: Token): string =
   case token.type
@@ -2584,7 +2587,6 @@ proc renderToken(state: State, token: Token): string =
   of StrongToken: strong(state.renderInline(token))
   of StrikethroughToken: del(token.doc)
   of HardLineBreakToken: br() & "\n"
-  of SoftLineBreakToken: "\n"
   else: $token
 
 proc render(state: State, token: Token): string =

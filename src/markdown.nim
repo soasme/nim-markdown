@@ -165,6 +165,7 @@ type
   tStrickthrough* = ref object of tInline
   tEscape* = ref object of tInline
   tInlineHtml* = ref object of tInline
+  tHtmlEntity* = ref object of tInline
 
   ParseResult* = tuple[token: Token, pos: int]
   Parser = (string, int) -> ParseResult
@@ -2079,7 +2080,7 @@ proc parseHTMLEntity*(state: State, token: Token, start: int): int =
   else:
     entity = escapeHTMLEntity(matches[0])
 
-  token.appendChild(Token(
+  token.appendChild(tHtmlEntity(
     type: HTMLEntityToken,
     doc: entity
   ))
@@ -2570,6 +2571,9 @@ method `$`*(token: tEscape): string =
 method `$`*(token: tInlineHtml): string =
   token.doc.escapeInvalidHTMLTag
 
+method `$`*(token: tHtmlEntity): string =
+  token.doc.escapeHTMLEntity.escapeQuote
+
 proc renderToken(state: State, token: Token): string =
   case token.type
   of ReferenceToken: ""
@@ -2594,7 +2598,6 @@ proc renderToken(state: State, token: Token): string =
   of BlankLineToken: ""
   of BlockquoteToken: blockquote("\n", state.render(token))
   of TextToken: token.doc.escapeAmpersandSeq.escapeTag.escapeQuote
-  of HTMLEntityToken: token.doc.escapeHTMLEntity.escapeQuote
   of EmphasisToken: em(state.renderInline(token))
   of StrongToken: strong(state.renderInline(token))
   else: $token

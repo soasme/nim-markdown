@@ -161,6 +161,7 @@ type
   tBlock* = ref object of Token
   tParagraph* = ref object of tBlock
   tThematicBreak* = ref object of tBlock
+  tHeading* = ref object of tBlock
 
   tInline* = ref object of Token
   tText* = ref object of tInline
@@ -794,7 +795,7 @@ proc parseSetextHeading(doc: string, start: int): ParseResult =
   let res = doc.since(start).getSetextHeading()
   if res.size == -1: return ParseResult(token: nil, pos: -1)
   return ParseResult(
-    token: Token(
+    token: tHeading(
       type: SetextHeadingToken,
       doc: res.doc,
       headingVal: Heading(
@@ -823,7 +824,7 @@ proc parseATXHeading(doc: string, start: int = 0): ParseResult =
   let res = doc.since(start).getAtxHeading()
   if res.size == -1: return ParseResult(token: nil, pos: -1)
   return ParseResult(
-    token: Token(
+    token: tHeading(
       type: ATXHeadingToken,
       doc: res.doc,
       headingVal: Heading(
@@ -2533,8 +2534,6 @@ proc renderFencedCode(state: State, token: Token): string =
       codeHTML,
       ))
 
-proc renderHeading(state: State, token: Token): string =
-  fmt"<h{token.headingVal.level}>{state.renderInline(token)}</h{token.headingVal.level}>"
 
 method `$`(token: Token): string {.base.} = ""
 
@@ -2601,9 +2600,13 @@ method `$`*(token: tParagraph): string =
   elif token.paragraphVal.loose: p($token.children)
   else: $token.children
 
+method `$`*(token: tHeading): string =
+  let num = fmt"{token.headingVal.level}"
+  let child = $token.children
+  fmt"<h{num}>{child}</h{num}>"
+
 proc renderToken(state: State, token: Token): string =
   case token.type
-  of ATXHeadingToken, SetextHeadingToken: state.renderHeading(token)
   of IndentedCodeToken: pre(code(token.doc.removeBlankLines.escapeCode.escapeQuote, "\n"))
   of TableToken: state.renderTable(token)
   of THeadToken: state.renderTableHead(token)

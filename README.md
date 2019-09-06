@@ -63,10 +63,10 @@ Test markdown modules:
 $ nimble test
 ```
 
-Test markdown modules incrementally whenever modified the code. It requires you to have `watchdog` installed.
+Build document:
 
 ```bash
-$ nimble watch
+$ nim doc --project --git.url=https://github.com/soasme/nim-markdown --git.commit=v0.7.0 src/markdown.nim
 ```
 
 The [Markdown Parser](https://enqueuezero.com/markdown-parser.html) serves as a guidance on the implementation of `nim-markdown`, or in any generic programming language.

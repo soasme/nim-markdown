@@ -303,19 +303,22 @@ proc escapeHTMLEntity*(doc: string): string =
         result = result.replace(re(entity), utf8Char)
 
 proc escapeLinkUrl*(url: string): string =
-  encodeUrl(url.escapeHTMLEntity, usePlus=false).replace("%40", "@"
-    ).replace("%3A", ":"
-    ).replace("%2B", "+"
-    ).replace("%3F", "?"
-    ).replace("%3D", "="
-    ).replace("%26", "&"
-    ).replace("%28", "("
-    ).replace("%29", ")"
-    ).replace("%25", "%"
-    ).replace("%23", "#"
-    ).replace("%2A", "*"
-    ).replace("%2C", ","
-    ).replace("%2F", "/")
+  encodeUrl(url.escapeHTMLEntity, usePlus=false).multiReplace([
+    ("%40", "@"),
+    ("%3A", ":"),
+    ("%3A", ":"),
+    ("%2B", "+"),
+    ("%3F", "?"),
+    ("%3D", "="),
+    ("%26", "&"),
+    ("%28", "("),
+    ("%29", ")"),
+    ("%25", "%"),
+    ("%23", "#"),
+    ("%2A", "*"),
+    ("%2C", ","),
+    ("%2F", "/"),
+  ])
 
 proc escapeBackslash*(doc: string): string =
   doc.replacef(re"\\([\\`*{}\[\]()#+\-.!_<>~|""$%&',/:;=?@^])", "$1")

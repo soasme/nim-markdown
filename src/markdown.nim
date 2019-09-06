@@ -2388,14 +2388,10 @@ proc parseInline(state: State, token: Token) =
   else:
     parseLeafBlockInlines(state, token)
 
-proc postProcessing(state: State, token: Token) =
-  discard
-
 proc parse(state: State, token: Token) =
   preProcessing(state, token)
   parseBlock(state, token)
   parseInline(state, token)
-  postProcessing(state, token)
 
 proc initCommonmarkConfig*(
   escape = true,

@@ -1927,15 +1927,11 @@ proc parseFullReferenceLink(state: State, token: Token, start: int, textSlice: S
   return ParseResult(token: link, pos: pos)
 
 proc parseCollapsedReferenceLink(state: State, token: Token, start: int, label: Slice[int]): ParseResult =
-  var id = token.doc[label.a+1 ..< label.b].toLower.replace(re"\s+", " ")
   var text = token.doc[label.a+1 ..< label.b]
-  var reference = state.references[id]
   var link = Link(
     type: LinkToken,
     isRef: true,
     doc: token.doc[start ..< label.b+1],
-    url: reference.url,
-    title: reference.title,
     text: text
   )
   return ParseResult(token: link, pos: label.b + 3)
@@ -1943,15 +1939,10 @@ proc parseCollapsedReferenceLink(state: State, token: Token, start: int, label: 
 proc parseShortcutReferenceLink(state: State, token: Token, start: int, label: Slice[int]): ParseResult =
   var id = token.doc[label.a+1 ..< label.b].toLower.replace(re"\s+", " ")
   var text = token.doc[label.a+1 ..< label.b]
-  if not state.references.contains(id):
-    return skipParsing()
-
-  var reference = state.references[id]
   var link = Link(
     type: LinkToken,
+    isRef: true,
     doc: token.doc[start ..< label.b+1],
-    url: reference.url,
-    title: reference.title,
     text: text
   )
   return ParseResult(token: link, pos: label.b + 1)

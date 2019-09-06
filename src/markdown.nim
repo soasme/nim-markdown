@@ -65,6 +65,7 @@ type
     case type*: TokenType
     else: discard
 
+  Document* = ref object of Token
   Block* = ref object of Token
 
   Paragraph* = ref object of Block
@@ -1495,7 +1496,7 @@ proc parseContainerBlock(state: State, token: Token): ParseResult =
     pos = chunk.pos
     if chunk.kind == BlockChunk:
       token.doc = chunk.doc
-      var t = Token(type: token.type, doc: chunk.doc)
+      var t = Token(doc: chunk.doc)
       parseBlock(state, t)
       var p = t.children.head
       if p != nil and p.value of Paragraph and token.tipToken of Paragraph:
@@ -2209,75 +2210,6 @@ proc parseStrikethrough*(doc: string, start: int): ParseResult =
   )
   return ParseResult(token: token, pos: start+size)
 
-proc findInlineToken(state: State, token: Token, rule: TokenType, start: int): int =
-  var res: ParseResult
-
-  case rule
-  of EmphasisToken:
-    res = token.doc.parseDelimiter(start)
-    if res.pos == -1: return -1
-    token.appendChild(res.token)
-    result = res.pos - start
-  of AutoLinkToken:
-    res = token.doc.parseAutoLink(start)
-    if res.pos == -1: return -1
-    token.appendChild(res.token)
-    result = res.pos - start
-  of HTMLEntityToken:
-    res = token.doc.parseHTMLEntity(start)
-    if res.pos == -1: return -1
-    token.appendChild(res.token)
-    result = res.pos - start
-  of InlineHTMLToken:
-    res = token.doc.parseInlineHTML(start)
-    if res.pos == -1: return -1
-    token.appendChild(res.token)
-    result = res.pos - start
-  of EscapeToken:
-    res = token.doc.parseEscape(start)
-    if res.pos == -1: return -1
-    token.appendChild(res.token)
-    result = res.pos - start
-  of CodeSpanToken:
-    res = token.doc.parseCodeSpan(start)
-    if res.pos == -1: return -1
-    token.appendChild(res.token)
-    result = res.pos - start
-  of StrikethroughToken:
-    res = token.doc.parseStrikethrough(start)
-    if res.pos == -1: return -1
-    token.appendChild(res.token)
-    result = res.pos - start
-  of HardLineBreakToken:
-    res = token.doc.parseHardLineBreak(start)
-    if res.pos == -1: return -1
-    token.appendChild(res.token)
-    result = res.pos - start
-  of SoftLineBreakToken:
-    res = token.doc.parseSoftLineBreak(start)
-    if res.pos == -1: return -1
-    token.appendChild(res.token)
-    result = res.pos - start
-  of TextToken:
-    res = token.doc.parseText(start)
-    if res.pos == -1: return -1
-    token.appendChild(res.token)
-    result = res.pos - start
-  of LinkToken:
-    res = token.doc.parseLink(start)
-    if res.pos != -1: res = res.token.apply(state, res)
-    if res.pos == -1: return -1
-    token.appendChild(res.token)
-    result = res.pos - start
-  of ImageToken:
-    res = token.doc.parseImage(start)
-    if res.pos != -1: res = res.token.apply(state, res)
-    if res.pos == -1: return -1
-    token.appendChild(res.token)
-    result = res.pos - start
-  else: raise newException(MarkdownError, fmt"{token.type} has no inline rule.")
-
-
 proc removeDelimiter*(delimiter: var DoublyLinkedNode[Delimiter]) =
   if delimiter.prev != nil:
     delimiter.prev.next = delimiter.next
@@ -2445,8 +2377,9 @@ proc parseLeafBlockInlines(state: State, token: Token) =
   processEmphasis(state, token)
 
 proc isContainerToken(token: Token): bool =
-  {DocumentToken, BlockquoteToken, ListItemToken, UnorderedListToken,
-   OrderedListToken, TableToken, THeadToken, TBodyToken, TableRowToken, }.contains(token.type)
+  if token of Inline: return false
+  if token of Document: return true
+  if token of Block: return token.children.head != nil
 
 proc parseInline(state: State, token: Token) =
   if isContainerToken(token):
@@ -2537,7 +2470,7 @@ proc markdown*(doc: string, config: MarkdownConfig = initCommonmarkConfig()): st
     references: initTable[string, Reference](),
     config: config,
   )
-  var document = Token(
+  var document = Document(
     type: DocumentToken,
     doc: doc.strip(chars={'\n'})
   )

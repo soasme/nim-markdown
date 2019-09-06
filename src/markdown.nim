@@ -3,7 +3,7 @@ import unicode except `strip`, `splitWhitespace`
 from sequtils import map
 from lists import DoublyLinkedList, prepend, append
 from htmlgen import nil, p, br, em, strong, a, img, code, del, blockquote, li, ul, ol, pre, code, table, thead, tbody, th, tr, td, hr
-from markdown/entities import getEntities
+from markdown/entities import htmlEntityToUtf8
 
 type
   MarkdownError* = object of Exception ## The error object for markdown parsing and rendering.
@@ -290,16 +290,13 @@ proc escapeInvalidHTMLTag(doc: string): string =
     "&lt;$1>")
 
 const IGNORED_HTML_ENTITY = ["&lt;", "&gt;", "&amp;"]
-let ENTITIES = getEntities()
 
 proc escapeHTMLEntity*(doc: string): string =
   var entities = doc.findAll(re"&([^;]+);")
   result = doc
   for entity in entities:
     if not IGNORED_HTML_ENTITY.contains(entity):
-      var utf8Char = if ENTITIES{entity} != nil: ENTITIES{entity}{"characters"}.getStr else: ""
-      if utf8Char == "":
-        utf8Char = entity[1 .. entity.len-2].entityToUtf8
+      let utf8Char = entity.htmlEntityToUtf8
       if utf8Char == "":
         result = result.replace(re(entity), entity.escapeAmpersandChar)
       else:

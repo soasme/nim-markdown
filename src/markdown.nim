@@ -130,7 +130,7 @@ type
   HtmlEntity* = ref object of Inline
 
   Link* = ref object of Inline
-    isRef: bool
+    refId: string
     text: string ## A link contains link text (the visible text).
     url: string ## A link contains destination (the URI that is the link destination).
     title: string ## A link contains a optional title.
@@ -1833,12 +1833,13 @@ proc getLinkText*(doc: string, start: int, allowNested: bool = false): tuple[sli
   return ((0..<0), -1)
 
 method apply*(this: Link, state: State, res: ParseResult): ParseResult =
-  if this.isRef:
-    let id = this.text.toLower.replace(re"\s+", " ")
-    if not state.references.contains(id):
+  if this.text == "":
+    return skipParsing()
+  if this.refId != "":
+    if not state.references.contains(this.refId):
       return skipParsing()
     else:
-      let reference = state.references[id]
+      let reference = state.references[this.refId]
       this.url = reference.url
       this.title = reference.title
 
@@ -1910,19 +1911,14 @@ proc parseFullReferenceLink(state: State, token: Token, start: int, textSlice: S
   if labelSize == -1:
     return skipParsing()
 
-  if not state.references.contains(label):
-    return skipParsing()
-
   pos += labelSize
 
   var text = token.doc[textSlice.a+1 ..< textSlice.b]
-  var reference = state.references[label]
   var link = Link(
     type: LinkToken,
     doc: token.doc[start ..< pos],
-    url: reference.url,
-    title: reference.title,
-    text: text
+    refId: label,
+    text: text,
   )
   return ParseResult(token: link, pos: pos)
 
@@ -1930,9 +1926,9 @@ proc parseCollapsedReferenceLink(state: State, token: Token, start: int, label: 
   var text = token.doc[label.a+1 ..< label.b]
   var link = Link(
     type: LinkToken,
-    isRef: true,
     doc: token.doc[start ..< label.b+1],
-    text: text
+    text: text,
+    refId: text.toLower.replace(re"\s+", " ")
   )
   return ParseResult(token: link, pos: label.b + 3)
 
@@ -1941,9 +1937,9 @@ proc parseShortcutReferenceLink(state: State, token: Token, start: int, label: S
   var text = token.doc[label.a+1 ..< label.b]
   var link = Link(
     type: LinkToken,
-    isRef: true,
     doc: token.doc[start ..< label.b+1],
-    text: text
+    text: text,
+    refId: id,
   )
   return ParseResult(token: link, pos: label.b + 1)
 

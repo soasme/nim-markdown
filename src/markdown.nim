@@ -130,6 +130,7 @@ type
   HtmlEntity* = ref object of Inline
 
   Link* = ref object of Inline
+    isRef: bool
     text: string ## A link contains link text (the visible text).
     url: string ## A link contains destination (the URI that is the link destination).
     title: string ## A link contains a optional title.
@@ -1831,8 +1832,17 @@ proc getLinkText*(doc: string, start: int, allowNested: bool = false): tuple[sli
 
   return ((0..<0), -1)
 
-method apply*(token: Link, state: State, res: ParseResult): ParseResult =
-  parseLinkInlines(state, token)
+method apply*(this: Link, state: State, res: ParseResult): ParseResult =
+  if this.isRef:
+    let id = this.text.toLower.replace(re"\s+", " ")
+    if not state.references.contains(id):
+      return skipParsing()
+    else:
+      let reference = state.references[id]
+      this.url = reference.url
+      this.title = reference.title
+
+  parseLinkInlines(state, this)
   res
 
 proc parseInlineLink(doc: string, start: int, labelSlice: Slice[int]): ParseResult =
@@ -1919,12 +1929,10 @@ proc parseFullReferenceLink(state: State, token: Token, start: int, textSlice: S
 proc parseCollapsedReferenceLink(state: State, token: Token, start: int, label: Slice[int]): ParseResult =
   var id = token.doc[label.a+1 ..< label.b].toLower.replace(re"\s+", " ")
   var text = token.doc[label.a+1 ..< label.b]
-  if not state.references.contains(id):
-    return skipParsing()
-
   var reference = state.references[id]
   var link = Link(
     type: LinkToken,
+    isRef: true,
     doc: token.doc[start ..< label.b+1],
     url: reference.url,
     title: reference.title,

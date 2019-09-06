@@ -2418,6 +2418,29 @@ proc processEmphasis*(state: State, token: Token) =
   while delimiterStack.head != nil:
     removeDelimiter(delimiterStack.head)
 
+proc applyInlineParsers(state: State, doc: string, start: int): ParseResult =
+  result = new(ParseResult)
+  result.pos = -1
+  for inlineParser in state.config.inlineParsers:
+    result = inlineParser(doc, start)
+    if result.pos != -1:
+      result = result.token.apply(state, result)
+    if result.pos != -1:
+      break
+  if doc.len>0 and result.pos == start:
+    result = ParseResult(token: Text(type: TextToken, doc: fmt"{doc[start]}"), pos: start+1)
+
+proc parseLeafBlockInlines(state: State, token: Token) =
+  var pos = 0
+  var res = new(ParseResult)
+  for index, ch in token.doc[0 ..< token.doc.len].strip:
+    if index < pos:
+      continue
+    res = state.applyInlineParsers(token.doc, index)
+    pos = res.pos
+    token.appendChild(res.token)
+  processEmphasis(state, token)
+
 proc parseLinkInlines*(state: State, token: Token, allowNested: bool = false) =
   var pos = 0
   var size = 0
@@ -2445,25 +2468,6 @@ proc parseLinkInlines*(state: State, token: Token, allowNested: bool = false) =
       token.appendChild(Text(type: TextToken, doc: fmt"{ch}"))
       pos += 1
 
-  processEmphasis(state, token)
-
-proc parseLeafBlockInlines(state: State, token: Token) =
-  var pos = 0
-  var res = new(ParseResult)
-  for index, ch in token.doc[0 ..< token.doc.len].strip:
-    if index < pos:
-      continue
-    for inlineParser in state.config.inlineParsers:
-      res = inlineParser(token.doc, index)
-      if res.pos != -1:
-        res = res.token.apply(state, res)
-      if res.pos != -1:
-        pos = res.pos
-        break
-    if pos == index:
-      res = ParseResult(token: Text(type: TextToken, doc: fmt"{ch}"), pos: index+1)
-      pos += 1
-    token.appendChild(res.token)
   processEmphasis(state, token)
 
 proc isContainerToken(token: Token): bool =

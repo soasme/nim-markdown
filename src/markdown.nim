@@ -1970,7 +1970,7 @@ proc parseLink*(doc: string, start: int): ParseResult =
   # definition elsewhere in the document and is not followed by [] or a link label.
   return doc.parseShortcutReferenceLink(start, labelSlice)
 
-proc parseInlineImage(state: State, token: Token, start: int, labelSlice: Slice[int]): int =
+proc parseInlineImage(state: State, token: Token, start: int, labelSlice: Slice[int]): ParseResult =
   var pos = labelSlice.b + 2 # ![link](
 
   # parse whitespace
@@ -1979,8 +1979,7 @@ proc parseInlineImage(state: State, token: Token, start: int, labelSlice: Slice[
 
   # parse destination
   var (destinationslice, destinationLen) = getLinkDestination(token.doc, pos)
-  if destinationLen == -1:
-    return -1
+  if destinationLen == -1: return skipParsing()
 
   pos += destinationLen
 
@@ -1990,7 +1989,7 @@ proc parseInlineImage(state: State, token: Token, start: int, labelSlice: Slice[
 
   # parse title (optional)
   if token.doc[pos] != '(' and token.doc[pos] != '\'' and token.doc[pos] != '"' and token.doc[pos] != ')':
-    return -1
+    return skipParsing()
 
   var (titleSlice, titleLen) = getLinkTitle(token.doc, pos)
 
@@ -2003,9 +2002,9 @@ proc parseInlineImage(state: State, token: Token, start: int, labelSlice: Slice[
 
   # require )
   if pos >= token.doc.len:
-    return -1
+    return skipParsing()
   if token.doc[pos] != ')':
-    return -1
+    return skipParsing()
 
   # construct token
   var title = ""
@@ -2023,21 +2022,18 @@ proc parseInlineImage(state: State, token: Token, start: int, labelSlice: Slice[
   )
 
   parseLinkInlines(state, image, allowNested=true)
-  token.appendChild(image)
-  result = pos - start + 2
+  return ParseResult(token: image, pos: pos+2)
 
-proc parseFullReferenceImage(state: State, token: Token, start: int, altSlice: Slice[int]): int =
+proc parseFullReferenceImage(state: State, token: Token, start: int, altSlice: Slice[int]): ParseResult =
   var pos = altSlice.b + 1
   var (label, labelSize) = getLinkLabel(token.doc, pos)
 
-  if labelSize == -1:
-    return -1
+  if labelSize == -1: return skipParsing()
 
   pos += labelSize
 
   var alt = token.doc[altSlice.a+1 ..< altSlice.b]
-  if not state.references.contains(label):
-    return -1
+  if not state.references.contains(label): return skipParsing()
 
   var reference = state.references[label]
   var image = Image(
@@ -2048,14 +2044,13 @@ proc parseFullReferenceImage(state: State, token: Token, start: int, altSlice: S
     alt: alt
   )
   parseLinkInlines(state, image, allowNested=true)
-  token.appendChild(image)
-  return pos - start + 1
+  return ParseResult(token: image, pos: pos+1)
 
-proc parseCollapsedReferenceImage(state: State, token: Token, start: int, label: Slice[int]): int =
+proc parseCollapsedReferenceImage(state: State, token: Token, start: int, label: Slice[int]): ParseResult =
   var id = token.doc[label.a+1 ..< label.b].toLower.replace(re"\s+", " ")
   var alt = token.doc[label.a+1 ..< label.b]
   if not state.references.contains(id):
-    return -1
+    return skipParsing()
 
   var reference = state.references[id]
   var image = Image(
@@ -2066,14 +2061,14 @@ proc parseCollapsedReferenceImage(state: State, token: Token, start: int, label:
     alt: alt
   )
   parseLinkInlines(state, image)
-  token.appendChild(image)
-  return label.b - start + 3
+  let pos = label.b + 3
+  return ParseResult(token: image, pos: pos)
 
-proc parseShortcutReferenceImage(state: State, token: Token, start: int, label: Slice[int]): int =
+proc parseShortcutReferenceImage(state: State, token: Token, start: int, label: Slice[int]): ParseResult =
   var id = token.doc[label.a+1 ..< label.b].toLower.replace(re"\s+", " ")
   var alt = token.doc[label.a+1 ..< label.b]
   if not state.references.contains(id):
-    return -1
+    return skipParsing()
 
   var reference = state.references[id]
   var image = Image(
@@ -2084,20 +2079,18 @@ proc parseShortcutReferenceImage(state: State, token: Token, start: int, label: 
     alt: alt
   )
   parseLinkInlines(state, image)
-  token.appendChild(image)
-  return label.b - start + 1
+  let pos = label.b + 1
+  return ParseResult(token: image, pos: pos)
 
 
-proc parseImage*(state: State, token: Token, start: int): int =
+proc parseImage*(state: State, token: Token, start: int): ParseResult =
   # Image should start with ![
-  if not token.doc[start ..< token.doc.len].match(re"^!\["):
-    return -1
+  if not token.doc[start ..< token.doc.len].match(re"^!\["): return skipParsing()
 
   var (labelSlice, labelSize) = getLinkText(token.doc, start+1, allowNested=true)
 
   # Image should have matching ] for [.
-  if labelSize == -1:
-    return -1
+  if labelSize == -1: return skipParsing()
 
   # An inline image consists of a link text followed immediately by a left parenthesis (
   if labelSlice.b + 1 < token.doc.len and token.doc[labelSlice.b + 1] == '(':
@@ -2115,8 +2108,7 @@ proc parseImage*(state: State, token: Token, start: int): int =
 
   # A shortcut reference link consists of a link label that matches a link reference 
   # definition elsewhere in the document and is not followed by [] or a link label.
-  else:
-    return parseShortcutReferenceImage(state, token, start, labelSlice)
+  return parseShortcutReferenceImage(state, token, start, labelSlice)
 
 const ENTITY = r"&(?:#x[a-f0-9]{1,6}|#[0-9]{1,7}|[a-z][a-z0-9]{1,31});"
 proc parseHTMLEntity*(doc: string, start: int): ParseResult =
@@ -2275,7 +2267,11 @@ proc findInlineToken(state: State, token: Token, rule: TokenType, start: int): i
     if res.pos == -1: return -1
     token.appendChild(res.token)
     result = res.pos - start
-  of ImageToken: result = parseImage(state, token, start)
+  of ImageToken:
+    res = parseImage(state, token, start)
+    if res.pos == -1: return -1
+    token.appendChild(res.token)
+    result = res.pos - start
   else: raise newException(MarkdownError, fmt"{token.type} has no inline rule.")
 
 

@@ -140,6 +140,8 @@ type
     url: string
 
   Image* = ref object of Inline
+    refId: string
+    allowNested: bool
     url: string
     alt: string
     title: string
@@ -2016,12 +2018,12 @@ proc parseInlineImage(state: State, token: Token, start: int, labelSlice: Slice[
   var image = Image(
     type: ImageToken,
     doc: token.doc[start-1 ..< pos+1],
+    allowNested: true,
     alt: text,
     url: url,
     title: title,
   )
 
-  parseLinkInlines(state, image, allowNested=true)
   return ParseResult(token: image, pos: pos+2)
 
 proc parseFullReferenceImage(state: State, token: Token, start: int, altSlice: Slice[int]): ParseResult =
@@ -2033,17 +2035,14 @@ proc parseFullReferenceImage(state: State, token: Token, start: int, altSlice: S
   pos += labelSize
 
   var alt = token.doc[altSlice.a+1 ..< altSlice.b]
-  if not state.references.contains(label): return skipParsing()
 
-  var reference = state.references[label]
   var image = Image(
     type: ImageToken,
     doc: token.doc[start ..< pos-1],
-    url: reference.url,
-    title: reference.title,
-    alt: alt
+    alt: alt,
+    refId: label,
+    allowNested: true
   )
-  parseLinkInlines(state, image, allowNested=true)
   return ParseResult(token: image, pos: pos+1)
 
 proc parseCollapsedReferenceImage(state: State, token: Token, start: int, label: Slice[int]): ParseResult =
@@ -2060,28 +2059,33 @@ proc parseCollapsedReferenceImage(state: State, token: Token, start: int, label:
     title: reference.title,
     alt: alt
   )
-  parseLinkInlines(state, image)
   let pos = label.b + 3
   return ParseResult(token: image, pos: pos)
 
 proc parseShortcutReferenceImage(state: State, token: Token, start: int, label: Slice[int]): ParseResult =
   var id = token.doc[label.a+1 ..< label.b].toLower.replace(re"\s+", " ")
   var alt = token.doc[label.a+1 ..< label.b]
-  if not state.references.contains(id):
-    return skipParsing()
 
-  var reference = state.references[id]
   var image = Image(
     type: ImageToken,
     doc: token.doc[start ..< label.b+1],
-    url: reference.url,
-    title: reference.title,
-    alt: alt
+    alt: alt,
+    refId: id,
+    allowNested: false,
   )
-  parseLinkInlines(state, image)
-  let pos = label.b + 1
-  return ParseResult(token: image, pos: pos)
+  return ParseResult(token: image, pos: label.b+1)
 
+method apply*(this: Image, state: State, res: ParseResult): ParseResult =
+  if this.refId != "":
+    if not state.references.contains(this.refId):
+      return skipParsing()
+    else:
+      let reference = state.references[this.refId]
+      this.url = reference.url
+      this.title = reference.title
+
+  parseLinkInlines(state, this, allowNested=this.allowNested)
+  res
 
 proc parseImage*(state: State, token: Token, start: int): ParseResult =
   # Image should start with ![
@@ -2269,6 +2273,7 @@ proc findInlineToken(state: State, token: Token, rule: TokenType, start: int): i
     result = res.pos - start
   of ImageToken:
     res = parseImage(state, token, start)
+    if res.pos != -1: res = res.token.apply(state, res)
     if res.pos == -1: return -1
     token.appendChild(res.token)
     result = res.pos - start

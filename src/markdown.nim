@@ -1,8 +1,19 @@
-import re, strutils, strformat, tables, sequtils, math, uri, htmlparser, lists, sugar, json
+import re
+from sequtils import map, keepIf
+from sugar import `->`, `=>`
+from strformat import fmt, `&`
+from uri import encodeUrl
+from strutils import join, splitLines, repeat, replace,
+  strip, split, multiReplace, startsWith, endsWith,
+  parseInt, intToStr, splitWhitespace, contains
+from tables import Table, initTable, contains, `[]=`, `[]`
 import unicode except `strip`, `splitWhitespace`
-from sequtils import map
-from lists import DoublyLinkedList, prepend, append
-from htmlgen import nil, p, br, em, strong, a, img, code, del, blockquote, li, ul, ol, pre, code, table, thead, tbody, th, tr, td, hr
+from lists import DoublyLinkedList, DoublyLinkedNode,
+  initDoublyLinkedList, newDoublyLinkedNode, prepend, append,
+  items, mitems, nodes, remove
+from htmlgen import nil, p, br, em, strong, a, img, code, del, blockquote,
+  li, ul, ol, pre, code, table, thead, tbody, th, tr, td, hr
+
 from markdown/entities import htmlEntityToUtf8
 
 type

@@ -169,6 +169,7 @@ type
     escape: bool ## escape ``<``, ``>``, and ``&`` characters to be HTML-safe
     keepHtml: bool ## deprecated: preserve HTML tags rather than escape it
     blockParsers: seq[(string, int) -> ParseResult]
+    inlineParsers: seq[(string, int) -> ParseResult]
 
   State* = ref object
     ruleSet: RuleSet
@@ -2448,22 +2449,21 @@ proc parseLinkInlines*(state: State, token: Token, allowNested: bool = false) =
 
 proc parseLeafBlockInlines(state: State, token: Token) =
   var pos = 0
-
+  var res = new(ParseResult)
   for index, ch in token.doc[0 ..< token.doc.len].strip:
     if index < pos:
       continue
-    var size = -1
-    for rule in state.ruleSet.inlineRules:
-      if token.type == rule:
-        continue
-      size = findInlineToken(state, token, rule, pos)
-      if size != -1:
-        pos += size
+    for inlineParser in state.config.inlineParsers:
+      res = inlineParser(token.doc, index)
+      if res.pos != -1:
+        res = res.token.apply(state, res)
+      if res.pos != -1:
+        pos = res.pos
         break
-    if size == -1:
-      token.appendChild(Text(type: TextToken, doc: fmt"{ch}"))
+    if pos == index:
+      res = ParseResult(token: Text(type: TextToken, doc: fmt"{ch}"), pos: index+1)
       pos += 1
-
+    token.appendChild(res.token)
   processEmphasis(state, token)
 
 proc isContainerToken(token: Token): bool =
@@ -2506,6 +2506,19 @@ proc initCommonmarkConfig*(
   result.blockParsers.add(parseATXHeading)
   result.blockParsers.add(parseSetextHeading)
   result.blockParsers.add(parseParagraph)
+  result.inlineParsers.add(parseDelimiter)
+  result.inlineParsers.add(parseImage)
+  result.inlineParsers.add(parseAutoLink)
+  result.inlineParsers.add(parseLink)
+  result.inlineParsers.add(parseHTMLEntity)
+  result.inlineParsers.add(parseInlineHTML)
+  result.inlineParsers.add(parseEscape)
+  result.inlineParsers.add(parseCodeSpan)
+  result.inlineParsers.add(parseHardLineBreak)
+  result.inlineParsers.add(parseSoftLineBreak)
+  result.inlineParsers.add(parseText)
+
+
 
 proc initGfmConfig*(
   escape = true,
@@ -2523,11 +2536,23 @@ proc initGfmConfig*(
   result.blockParsers.add(parseIndentedCode)
   result.blockParsers.add(parseFencedCode)
   result.blockParsers.add(parseHTMLBlock)
-  result.blockParsers.add(parseHTMLTable) #: Commonmark extension: Table.
+  result.blockParsers.add(parseHTMLTable) #: GFM extension: |table|
   result.blockParsers.add(parseBlankLine)
   result.blockParsers.add(parseATXHeading)
   result.blockParsers.add(parseSetextHeading)
   result.blockParsers.add(parseParagraph)
+  result.inlineParsers.add(parseDelimiter)
+  result.inlineParsers.add(parseImage)
+  result.inlineParsers.add(parseAutoLink)
+  result.inlineParsers.add(parseLink)
+  result.inlineParsers.add(parseHTMLEntity)
+  result.inlineParsers.add(parseInlineHTML)
+  result.inlineParsers.add(parseEscape)
+  result.inlineParsers.add(parseCodeSpan)
+  result.inlineParsers.add(parseStrikethrough) #: GFM extension: ~~x~~
+  result.inlineParsers.add(parseHardLineBreak)
+  result.inlineParsers.add(parseSoftLineBreak)
+  result.inlineParsers.add(parseText)
 
 proc markdown*(doc: string, config: MarkdownConfig = initCommonmarkConfig()): string =
   var state = State(

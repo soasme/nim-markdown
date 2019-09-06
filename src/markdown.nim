@@ -1835,19 +1835,19 @@ method apply*(token: Link, state: State, res: ParseResult): ParseResult =
   parseLinkInlines(state, token)
   res
 
-proc parseInlineLink(state: State, token: Token, start: int, labelSlice: Slice[int]): ParseResult =
-  if token.doc[start] != '[':
+proc parseInlineLink(doc: string, start: int, labelSlice: Slice[int]): ParseResult =
+  if doc[start] != '[':
     return skipParsing()
 
   var pos = labelSlice.b + 2 # [link](
 
   # parse whitespace
-  var whitespaceLen = token.doc[pos ..< token.doc.len].matchLen(re"^[ \t\n]*")
+  var whitespaceLen = doc.since(pos).matchLen(re"^[ \t\n]*")
   if whitespaceLen != -1:
     pos += whitespaceLen
 
   # parse destination
-  var (destinationSlice, destinationLen) = getLinkDestination(token.doc, pos)
+  var (destinationSlice, destinationLen) = getLinkDestination(doc, pos)
 
   if destinationLen == -1:
     return skipParsing()
@@ -1855,38 +1855,38 @@ proc parseInlineLink(state: State, token: Token, start: int, labelSlice: Slice[i
   pos += destinationLen
 
   # parse whitespace
-  whitespaceLen = token.doc[pos ..< token.doc.len].matchLen(re"^[\x{0020}\x{0009}\x{000A}\x{000B}\x{000C}\x{000D}]*")
+  whitespaceLen = doc.since(pos).matchLen(re"^[\x{0020}\x{0009}\x{000A}\x{000B}\x{000C}\x{000D}]*")
   if whitespaceLen != -1:
     pos += whitespaceLen
 
   # parse title (optional)
-  if token.doc[pos] != '(' and token.doc[pos] != '\'' and token.doc[pos] != '"' and token.doc[pos] != ')':
+  if not {'(', '\'', '"', ')'}.contains(doc[pos]):
     return skipParsing()
 
-  var (titleSlice, titleLen) = getLinkTitle(token.doc, pos)
+  var (titleSlice, titleLen) = getLinkTitle(doc, pos)
 
   if titleLen >= 0:
     pos += titleLen
 
   # parse whitespace
-  whitespaceLen = token.doc[pos ..< token.doc.len].matchLen(re"^[ \t\n]*")
+  whitespaceLen = doc.since(pos).matchLen(re"^[ \t\n]*")
   pos += whitespaceLen
 
   # require )
-  if pos >= token.doc.len:
+  if pos >= doc.len:
     return skipParsing()
-  if token.doc[pos] != ')':
+  if doc[pos] != ')':
     return skipParsing()
 
   # construct token
   var title = ""
   if titleLen >= 0:
-    title = token.doc[titleSlice]
-  var url = token.doc[destinationSlice]
-  var text = token.doc[labelSlice.a+1 ..< labelSlice.b]
+    title = doc[titleSlice]
+  var url = doc[destinationSlice]
+  var text = doc[labelSlice.a+1 ..< labelSlice.b]
   var link = Link(
     type: LinkToken,
-    doc: token.doc[start .. pos],
+    doc: doc[start .. pos],
     text: text,
     url: url,
     title: title,
@@ -1960,7 +1960,7 @@ proc parseLink*(state: State, token: Token, start: int): ParseResult =
 
   # An inline link consists of a link text followed immediately by a left parenthesis (
   if labelSlice.b + 1 < token.doc.len and token.doc[labelSlice.b + 1] == '(':
-    var res = parseInlineLink(state, token, start, labelSlice)
+    var res = token.doc.parseInlineLink(start, labelSlice)
     if res.pos != -1:
       res = res.token.apply(state, res)
       if res.pos != -1:

@@ -1,8 +1,8 @@
 # Package
 
-version       = "0.5.4"
+version       = "0.6.0"
 author        = "Ju Lin"
-description   = "A Markdown Parser in Nimble World."
+description   = "A Markdown Parser in Nim World."
 license       = "MIT"
 srcDir        = "src"
 installExt    = @["nim"]

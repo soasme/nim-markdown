@@ -1,6 +1,6 @@
 # Nim-markdown
 
-`nim-markdown` is a beautiful Markdown Parser in the Nim world.
+`nim-markdown` is a Markdown Parser in the Nim world.
 
 [![Documentation](https://img.shields.io/badge/documentation-passed-brightgreen.svg?style=for-the-badge&longCache=true)](https://www.soasme.com/nim-markdown/markdown.html)
 [![Build Status](https://travis-ci.org/soasme/nim-markdown.svg?branch=master)](https://travis-ci.org/soasme/nim-markdown)
@@ -13,13 +13,11 @@ Install via `nimble` in your project root.
 $ nimble install markdown
 
 # or with current stable version
-$ nimble install markdown@">= 0.5.4"
+$ nimble install markdown@">= 0.6.0"
 
 # or with the latest version
 $ nimble install markdown@#head
 ```
-
-Or simply copy paste `src/markdown.nim` into your project.
 
 ## Library Usage
 
@@ -44,11 +42,11 @@ Below are some useful links:
 
 ## Binary Usage
 
-The usage of binary `markdown` is like below:
+The usage of binary `markdown` is as below:
 
 ```
 # Read from stdin and write to stdout.
-$ markdown < hello-world.md > hello-world.html
+$ markdown < README.md > README.html
 ```
 
 ## Development
@@ -77,17 +75,10 @@ The [Markdown Parser](https://enqueuezero.com/markdown-parser.html) serves as a 
 
 Priorities:
 
-* WIP: Provide a correct implementation of GitHub Flavored Markdown Specification, or notably referred to as [GFM](https://github.github.com/gfm/). (#4)
-* Support more controlling options, for example, escaping, text wrapping, html sanitize, etc.
-* Write tutorial & document on how to extend this library.
-* Support converting from HTML to Markdown. (#1)
-* Benchmark.
-
-Notes:
-
-- **Important**: The library `nim-markdown` was originally developed for parsing a loose set of markdown features. As proposed in [#4](https://github.com/soasme/nim-markdown/issues/4), the [GFM](https://github.github.com/gfm/) will be the cornerstone. As of now, the library implements a mixture of the old style and the new style. The goal of v1.0.0 is to fully support GFM.
-- Currently, nim-markdown converts tab to four whitespaces. It'll be fixed in the future.
-- nim-markdown uses the built-in library `htmlparser` for parsing HTML5 entity names. Some entities are not properly supported, such as `&ngE;`. It'll need to be fixed from the nim-lang std code.
+* [x] Support Commonmark.
+* [ ] Support GFM.
+* [ ] Support writing extensions.
+* [ ] Benchmark.
 
 Features:
 
@@ -96,7 +87,7 @@ Features:
 - [x] Indented code block
 - [x] Fence code block
 - [x] Block Quote
-- [x] Ordered/Un-ordered List
+- [x] Ordered/Unordered List
 - [x] Nested lists
 - [x] Raw HTML block
 - [x] Table
@@ -120,6 +111,7 @@ Features:
 
 Released:
 
+* v0.6.0, 6 Sep 2019, support parsing in commonmark [v0.29](https://spec.commonmark.org/0.29/) syntax.
 * v0.5.4, 1 Aug 2019, bugfix: improved the ul & ol parsing.
 * v0.5.3, 3 Jun 2019, bugfix: Added import exceptions for strip and splitWhitespace from unicode [#20](https://github.com/soasme/nim-markdown/issues/20).
 * v0.5.2, 5 Nov 2018, bugfix: ambiguous call.

@@ -248,7 +248,6 @@ const HTML_OPEN_CLOSE_TAG_END* = r"^\n?$"
 proc parse(state: State, token: Token);
 proc parseBlock(state: State, token: Token);
 proc parseLeafBlockInlines(state: State, token: Token);
-proc parseLinkInlines*(state: State, token: Token, allowNested: bool = false);
 proc getLinkText*(doc: string, start: int, allowNested: bool = false): tuple[slice: Slice[int], size: int];
 proc getLinkLabel*(doc: string, start: int): tuple[label: string, size: int];
 proc getLinkDestination*(doc: string, start: int): tuple[slice: Slice[int], size: int];
@@ -440,20 +439,22 @@ method `$`*(token: Link): string =
   if title == "": a(href=href, $token.children)
   else: a(href=href, title=title, $token.children)
 
-method alt*(token: Token): string {.base.} = $token
+method toAlt*(token: Token): string {.base.} = $token
 
-method alt*(token: Em): string = $token.children
+method toAlt*(token: Em): string = $token.children
 
-method alt*(token: Strong): string = $token.children
+method toAlt*(token: Strong): string = $token.children
 
-method alt*(token: Link): string = token.text
+method toAlt*(token: Link): string = token.text
 
-method alt*(token: Image): string = token.alt
+method toAlt*(token: Image): string = token.alt
 
 method `$`*(token: Image): string =
   let src = token.url.escapeBackslash.escapeLinkUrl
   let title=token.title.escapeBackslash.escapeHTMLEntity.escapeAmpersandSeq.escapeQuote
-  let alt = token.children.toSeq.map((t: Token) => t.alt).join("")
+  let alt = token.children.toSeq.map(
+    (t: Token) => t.toAlt
+  ).join("")
   if title == "": img(src=src, alt=alt)
   else: img(src=src, alt=alt, title=title)
 
@@ -1846,7 +1847,8 @@ method apply*(this: Link, state: State, res: ParseResult): ParseResult =
       this.url = reference.url
       this.title = reference.title
 
-  parseLinkInlines(state, this)
+  this.doc = this.text
+  state.parseLeafBlockInlines(this)
   res
 
 proc parseInlineLink(doc: string, start: int, labelSlice: Slice[int]): ParseResult =
@@ -2079,7 +2081,8 @@ method apply*(this: Image, state: State, res: ParseResult): ParseResult =
       this.url = reference.url
       this.title = reference.title
 
-  parseLinkInlines(state, this, allowNested=this.allowNested)
+  this.doc = this.alt
+  state.parseLeafBlockInlines(this)
   res
 
 proc parseImage*(doc: string, start: int): ParseResult =
@@ -2441,35 +2444,6 @@ proc parseLeafBlockInlines(state: State, token: Token) =
     token.appendChild(res.token)
   processEmphasis(state, token)
 
-proc parseLinkInlines*(state: State, token: Token, allowNested: bool = false) =
-  var pos = 0
-  var size = 0
-  if token of Link:
-    pos = 1
-    size = Link(token).text.len - 1
-  elif token of Image:
-    pos = 2
-    size = Image(token).alt.len
-  else:
-    raise newException(MarkdownError, fmt"{token.type} has no link inlines.")
-
-  for index, ch in token.doc[pos .. pos+size]:
-    if 1+index < pos:
-      continue
-    var size = -1
-    for rule in state.ruleSet.inlineRules:
-      if not allowNested and rule == LinkToken:
-        continue
-      size = findInlineToken(state, token, rule, pos)
-      if size != -1:
-        pos += size
-        break
-    if size == -1:
-      token.appendChild(Text(type: TextToken, doc: fmt"{ch}"))
-      pos += 1
-
-  processEmphasis(state, token)
-
 proc isContainerToken(token: Token): bool =
   {DocumentToken, BlockquoteToken, ListItemToken, UnorderedListToken,
    OrderedListToken, TableToken, THeadToken, TBodyToken, TableRowToken, }.contains(token.type)
@@ -2521,7 +2495,6 @@ proc initCommonmarkConfig*(
   result.inlineParsers.add(parseHardLineBreak)
   result.inlineParsers.add(parseSoftLineBreak)
   result.inlineParsers.add(parseText)
-
 
 
 proc initGfmConfig*(

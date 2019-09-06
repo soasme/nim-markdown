@@ -3,7 +3,7 @@ import unicode except `strip`, `splitWhitespace`
 from sequtils import map
 from lists import DoublyLinkedList, prepend, append
 from htmlgen import nil, p, br, em, strong, a, img, code, del, blockquote, li, ul, ol, pre, code, table, thead, tbody, th, tr, td, hr
-from markdown.entities import getEntities
+from markdown/entities import getEntities
 
 type
   MarkdownError* = object of Exception ## The error object for markdown parsing and rendering.

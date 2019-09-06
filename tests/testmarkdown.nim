@@ -138,7 +138,8 @@ test "inline break":
   check markdown("hello  \nworld") == "<p>hello<br />\nworld</p>\n"
 
 test "inline strikethrough":
-  check markdown("~~hello~~") == "<p><del>hello</del></p>\n"
+  check markdown("~~hello~~", config=gfmConfig) == "<p><del>hello</del></p>\n"
+  check markdown("~~hello~~") == "<p>~~hello~~</p>\n"
 
 test "escape \\":
   check markdown("1 < 2") == "<p>1 &lt; 2</p>\n"

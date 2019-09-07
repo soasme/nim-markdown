@@ -111,7 +111,8 @@ Features:
 
 Released:
 
-* v0.6.0, 6 Sep 2019, support parsing in commonmark [v0.29](https://spec.commonmark.org/0.29/) syntax.
+* v0.7.1, 7 Sep 2019, removed useless constants.
+* v0.7.0, 6 Sep 2019, support parsing in commonmark [v0.29](https://spec.commonmark.org/0.29/) syntax.
 * v0.5.4, 1 Aug 2019, bugfix: improved the ul & ol parsing.
 * v0.5.3, 3 Jun 2019, bugfix: Added import exceptions for strip and splitWhitespace from unicode [#20](https://github.com/soasme/nim-markdown/issues/20).
 * v0.5.2, 5 Nov 2018, bugfix: ambiguous call.

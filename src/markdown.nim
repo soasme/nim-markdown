@@ -1,8 +1,5 @@
 ## # nim-markdown
 ##
-## This document shows you how nim-markdown is implemented.
-## It also covers how a markdown extension can be added to nim-markdown.
-##
 ## Most markdown parsers parse markdown documents in two steps, so does nim-markdown.
 ## The two-step consists of blocking parsing and inline parsing.
 ##
@@ -216,35 +213,28 @@ type
     references*: Table[string, Reference]
     config*: MarkdownConfig
 
-proc initCommonmarkConfig*(escape = true, keepHtml = true): MarkdownConfig;
 proc parse(state: State, token: Token);
 proc render(token: Token): string;
+proc parseBlock(state: State, token: Token);
+proc parseLeafBlockInlines(state: State, token: Token);
+proc getLinkText*(doc: string, start: int, allowNested: bool = false): tuple[slice: Slice[int], size: int];
+proc getLinkLabel*(doc: string, start: int): tuple[label: string, size: int];
+proc getLinkDestination*(doc: string, start: int): tuple[slice: Slice[int], size: int];
+proc getLinkTitle*(doc: string, start: int): tuple[slice: Slice[int], size: int];
+proc isContinuationText*(doc: string): bool;
+proc parseHtmlComment*(s: string): tuple[html: string, size: int];
+proc parseProcessingInstruction*(s: string): tuple[html: string, size: int];
+proc parseHtmlCData*(s: string): tuple[html: string, size: int];
+proc parseHtmlDeclaration*(s: string): tuple[html: string, size: int];
+proc parseHtmlTag*(s: string): tuple[html: string, size: int];
+proc parseHtmlOpenCloseTag*(s: string): tuple[html: string, size: int];
 
-
-proc markdown*(doc: string, config: MarkdownConfig = initCommonmarkConfig(),
-  root: Token = Document()): string =
-  ## Convert a markdown document into a HTML document.
-  ##
-  ## config:
-  ## * You can set `config=initCommonmarkConfig()` to apply commonmark syntax (default).
-  ## * Or, set `config=initGfmConfig()` to apply GFM syntax.
-  ##
-  ## root:
-  ## * You can set `root=Document()` (default).
-  ## * Or, set root to any other token types, such as `root=Blockquote()`, or even your customized Token types, such as `root=Div()`.
-  let references = initTable[string, Reference]()
-  let state = State(references: references, config: config)
-  root.doc = doc.strip(chars={'\n'})
-  state.parse(root)
-  root.render()
 
 proc appendChild*(token: Token, child: Token) =
   token.children.append(child)
 
 
 const THEMATIC_BREAK_RE = r" {0,3}([-*_])(?:[ \t]*\1){2,}[ \t]*(?:\n+|$)"
-const SETEXT_HEADING_RE = r"((?:(?:[^\n]+)\n)+) {0,3}(=|-)+ *(?:\n+|$)"
-const INDENTED_CODE_RE = r"((?: {4}| {0,3}\t)[^\n]+\n*)+"
 
 const HTML_SCRIPT_START = r"^ {0,3}<(script|pre|style)(?=(\s|>|$))"
 const HTML_SCRIPT_END = r"</(script|pre|style)>"
@@ -288,20 +278,6 @@ const HTML_TAG = (
 const HTML_OPEN_CLOSE_TAG_START = "^ {0,3}(?:" & OPEN_TAG & "|" & CLOSE_TAG & r")\s*$"
 const HTML_OPEN_CLOSE_TAG_END = r"^\n?$"
 
-proc parseBlock(state: State, token: Token);
-proc parseLeafBlockInlines(state: State, token: Token);
-proc getLinkText*(doc: string, start: int, allowNested: bool = false): tuple[slice: Slice[int], size: int];
-proc getLinkLabel*(doc: string, start: int): tuple[label: string, size: int];
-proc getLinkDestination*(doc: string, start: int): tuple[slice: Slice[int], size: int];
-proc getLinkTitle*(doc: string, start: int): tuple[slice: Slice[int], size: int];
-proc isContinuationText*(doc: string): bool;
-proc parseHtmlScript(s: string): tuple[html: string, size: int];
-proc parseHtmlComment*(s: string): tuple[html: string, size: int];
-proc parseProcessingInstruction*(s: string): tuple[html: string, size: int];
-proc parseHtmlCData*(s: string): tuple[html: string, size: int];
-proc parseHtmlDeclaration*(s: string): tuple[html: string, size: int];
-proc parseHtmlTag*(s: string): tuple[html: string, size: int];
-proc parseHtmlOpenCloseTag*(s: string): tuple[html: string, size: int];
 
 proc skipParsing*(): ParseResult = ParseResult(token: nil, pos: -1)
 
@@ -423,14 +399,6 @@ proc escapeLinkUrl*(url: string): string =
 
 proc escapeBackslash*(doc: string): string =
   doc.replacef(re"\\([\\`*{}\[\]()#+\-.!_<>~|""$%&',/:;=?@^])", "$1")
-
-const rThematicBreakLeading = r" {0,3}"
-const rThematicBreakMarker = r"[-*_]"
-const rThematicBreakSpace = r"[ \t]"
-const rFencedCodeLeading = " {0,3}"
-const rFencedCodeMarker = r"(`{3,}|~{3,})"
-const rFencedCodePadding = r"(?: |\t)*"
-const rFencedCodeInfo = r"([^`\n]*)?"
 
 proc reFmt*(patterns: varargs[string]): Regex =
   var s: string
@@ -2418,7 +2386,56 @@ proc initCommonmarkConfig*(
   result.inlineParsers.add(parseSoftLineBreak)
   result.inlineParsers.add(parseText)
 
+proc initGfmConfig*(
+  escape = true,
+  keepHtml = true,
+): MarkdownConfig =
+  result = MarkdownConfig(
+    escape: escape,
+    keepHtml: keepHtml,
+  )
+  result.blockParsers.add(parseReference)
+  result.blockParsers.add(parseThematicBreak)
+  result.blockParsers.add(parseBlockquote)
+  result.blockParsers.add(parseUnorderedList)
+  result.blockParsers.add(parseOrderedList)
+  result.blockParsers.add(parseIndentedCode)
+  result.blockParsers.add(parseFencedCode)
+  result.blockParsers.add(parseHTMLBlock)
+  result.blockParsers.add(parseHTMLTable)
+  result.blockParsers.add(parseBlankLine)
+  result.blockParsers.add(parseATXHeading)
+  result.blockParsers.add(parseSetextHeading)
+  result.blockParsers.add(parseParagraph)
+  result.inlineParsers.add(parseDelimiter)
+  result.inlineParsers.add(parseImage)
+  result.inlineParsers.add(parseAutoLink)
+  result.inlineParsers.add(parseLink)
+  result.inlineParsers.add(parseHTMLEntity)
+  result.inlineParsers.add(parseInlineHTML)
+  result.inlineParsers.add(parseStrikethrough)
+  result.inlineParsers.add(parseEscape)
+  result.inlineParsers.add(parseCodeSpan)
+  result.inlineParsers.add(parseHardLineBreak)
+  result.inlineParsers.add(parseSoftLineBreak)
+  result.inlineParsers.add(parseText)
 
+proc markdown*(doc: string, config: MarkdownConfig = initCommonmarkConfig(),
+  root: Token = Document()): string =
+  ## Convert a markdown document into a HTML document.
+  ##
+  ## config:
+  ## * You can set `config=initCommonmarkConfig()` to apply commonmark syntax (default).
+  ## * Or, set `config=initGfmConfig()` to apply GFM syntax.
+  ##
+  ## root:
+  ## * You can set `root=Document()` (default).
+  ## * Or, set root to any other token types, such as `root=Blockquote()`, or even your customized Token types, such as `root=Div()`.
+  let references = initTable[string, Reference]()
+  let state = State(references: references, config: config)
+  root.doc = doc.strip(chars={'\n'})
+  state.parse(root)
+  root.render()
 
 
 proc readCLIOptions*(): MarkdownConfig =

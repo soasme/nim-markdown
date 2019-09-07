@@ -97,30 +97,30 @@ type
     pos*: int
 
   Token* = ref object of RootObj
-    doc: string
-    pos: int
-    children: DoublyLinkedList[Token]
-    chunks: seq[Chunk]
+    doc*: string
+    pos*: int
+    children*: DoublyLinkedList[Token]
+    chunks*: seq[Chunk]
 
   Document* = ref object of Token
   Block* = ref object of Token
 
   Paragraph* = ref object of Block
-    loose: bool
-    trailing: string
+    loose*: bool
+    trailing*: string
 
   Reference = ref object of Block
-    text: string
-    title: string
-    url: string
+    text*: string
+    title*: string
+    url*: string
 
   ThematicBreak* = ref object of Block
 
   Heading* = ref object of Block
-    level: int
+    level*: int
 
   CodeBlock* = ref object of Block
-    info: string
+    info*: string
 
   HtmlBlock* = ref object of Block
 
@@ -129,29 +129,29 @@ type
   Ul* = ref object of Block
 
   Ol* = ref object of Block
-    start: int
+    start*: int
 
   Li* = ref object of Block
-    loose: bool
-    marker: string
-    verbatim: string
+    loose*: bool
+    marker*: string
+    verbatim*: string
   HtmlTable* = ref object of Block
   THead* = ref object of Block
   TBody* = ref object of Block
-    size: int
+    size*: int
 
   TableRow* = ref object of Block
 
   THeadCell* = ref object of Block
-    align: string
+    align*: string
 
   TBodyCell* = ref object of Block
-    align: string
+    align*: string
 
   Inline* = ref object of Token
 
   Text* = ref object of Inline
-    delimiter: Delimiter
+    delimiter*: Delimiter
 
   CodeSpan* = ref object of Inline
 
@@ -168,53 +168,53 @@ type
   HtmlEntity* = ref object of Inline
 
   Link* = ref object of Inline
-    refId: string
-    text: string ## A link contains link text (the visible text).
-    url: string ## A link contains destination (the URI that is the link destination).
-    title: string ## A link contains a optional title.
+    refId*: string
+    text*: string ## A link contains link text (the visible text).
+    url*: string ## A link contains destination (the URI that is the link destination).
+    title*: string ## A link contains a optional title.
 
   AutoLink* = ref object of Inline
-    text: string
-    url: string
+    text*: string
+    url*: string
 
   Image* = ref object of Inline
-    refId: string
-    allowNested: bool
-    url: string
-    alt: string
-    title: string
+    refId*: string
+    allowNested*: bool
+    url*: string
+    alt*: string
+    title*: string
 
   Delimiter* = ref object of Inline
-    token: Text
-    kind: string
-    num: int
-    originalNum: int
-    isActive: bool
-    canOpen: bool
-    canClose: bool
+    token*: Text
+    kind*: string
+    num*: int
+    originalNum*: int
+    isActive*: bool
+    canOpen*: bool
+    canClose*: bool
 
   Em* = ref object of Inline
 
   Strong* = ref object of Inline
 
   ParseResult* = ref object
-    token: Token
-    pos: int
+    token*: Token
+    pos*: int
 
   BlockParser* = (string, int) -> ParseResult
 
   MarkdownConfig* = object ## Options for configuring parsing or rendering behavior.
-    escape: bool ## escape ``<``, ``>``, and ``&`` characters to be HTML-safe
-    keepHtml: bool ## deprecated: preserve HTML tags rather than escape it
-    blockParsers: seq[(string, int) -> ParseResult]
-    inlineParsers: seq[(string, int) -> ParseResult]
+    escape*: bool ## escape ``<``, ``>``, and ``&`` characters to be HTML-safe
+    keepHtml*: bool ## deprecated: preserve HTML tags rather than escape it
+    blockParsers*: seq[(string, int) -> ParseResult]
+    inlineParsers*: seq[(string, int) -> ParseResult]
 
   State* = ref object
     references*: Table[string, Reference]
     config*: MarkdownConfig
 
-proc parse(state: State, token: Token);
-proc render(token: Token): string;
+proc parse*(state: State, token: Token);
+proc render*(token: Token): string;
 proc parseBlock(state: State, token: Token);
 proc parseLeafBlockInlines(state: State, token: Token);
 proc getLinkText*(doc: string, start: int, allowNested: bool = false): tuple[slice: Slice[int], size: int];
@@ -406,12 +406,12 @@ proc reFmt*(patterns: varargs[string]): Regex =
     s &= p
   re(s)
 
-proc toSeq(tokens: DoublyLinkedList[Token]): seq[Token] =
+proc toSeq*(tokens: DoublyLinkedList[Token]): seq[Token] =
   result = newSeq[Token]()
   for token in tokens.items:
     result.add(token)
 
-method `$`(token: Token): string {.base.} = ""
+method `$`*(token: Token): string {.base.} = ""
 
 method `$`*(token: CodeSpan): string =
   code(token.doc.escapeAmpersandChar.escapeTag.escapeQuote)
@@ -562,7 +562,7 @@ proc renderListItemChildren(token: Li): string =
 method `$`*(token: Li): string =
   li(renderListItemChildren(token))
 
-proc render(token: Token): string =
+proc render*(token: Token): string =
   var htmls = token.children.toStringSeq
   htmls.keepIf((s: string) => s != "")
   result = htmls.join("\n")

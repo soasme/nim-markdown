@@ -13,7 +13,7 @@ Install via `nimble` in your project root.
 $ nimble install markdown
 
 # or with current stable version
-$ nimble install markdown@">= 0.7.0"
+$ nimble install markdown@">= 0.7.1"
 
 # or with the latest version
 $ nimble install markdown@#head

@@ -3,7 +3,7 @@
 
 import unittest
 
-import re, strutils, os, json, strformat, sequtils, locks
+import re, strutils, os, json, strformat, sequtils
 import markdown
 
 
@@ -241,3 +241,11 @@ test "parse table rows & aligns":
   check parseTableAligns("| --- | --- |") == (@["", ""], true)
   check parseTableAligns(":-: | -----------:") == (@["center", "right"], true)
   check parseTableAligns("| ------ |") == (@[""], true)
+
+proc commonmarkThreaded(s: string) =
+  discard markdown(s)
+
+test "multithread":
+  var thread: Thread[string]
+  createThread(thread, commonmarkThreaded, "# Hello World")
+  joinThread(thread)

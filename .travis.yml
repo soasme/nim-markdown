@@ -11,7 +11,7 @@ before_script:
   # Add the 'bin' folder to PATH
   - export PATH=$HOME/.nimble/bin:$PATH
 script:
-  - nim compile --verbosity:0 --run tests/testmarkdown
+    - nim compile --verbosity:0 --threads:on --run tests/testmarkdown
   - nim compile --verbosity:0 --run tests/testcommonmark
   - nim doc --docSeeSrcUrl:https://github.com/soasme/nim-makrdown/blob/master --project src/markdown.nim
 cache:

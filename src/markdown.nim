@@ -231,11 +231,11 @@ type
 
   Strong* = ref object of Inline
 
-  MarkdownConfig* = object ## Options for configuring parsing or rendering behavior.
+  MarkdownConfig* = ref object ## Options for configuring parsing or rendering behavior.
     escape*: bool ## escape ``<``, ``>``, and ``&`` characters to be HTML-safe
     keepHtml*: bool ## deprecated: preserve HTML tags rather than escape it
     blockParsers*: seq[Parser]
-    inlineParsers*: seq[(string, int) -> ParseResult]
+    inlineParsers*: seq[Parser]
 
   State* = ref object
     references*: Table[string, Reference]
@@ -727,7 +727,7 @@ proc parseUnorderedListItem*(doc: string, start=0, marker: var string, listItemD
 
   return pos - start
 
-method parse(this: UlParser, doc: string, start: int): ParseResult =
+method parse*(this: UlParser, doc: string, start: int): ParseResult =
   var pos = start
   var marker = ""
   var listItems: seq[Token]
@@ -856,7 +856,7 @@ proc parseTildeBlockCodeInfo*(doc: string): tuple[info: string, size: int] =
     return (item, size)
   return ("", size)
 
-method parse(this: FencedCodeParser, doc: string, start: int): ParseResult =
+method parse*(this: FencedCodeParser, doc: string, start: int): ParseResult =
   var pos = start
   var fenceRes = doc.since(start).getFence()
   if fenceRes.size == -1: return ParseResult(token: nil, pos: -1)
@@ -1217,7 +1217,7 @@ proc parseHtmlDeclaration*(s: string): tuple[html: string, size: int] =
 proc parseHtmlTag*(s: string): tuple[html: string, size: int] =
   return s.parseHTMLBlockContent(HTML_TAG_START, HTML_TAG_END)
 
-method parse(this: HtmlBlockParser, doc: string, start: int): ParseResult =
+method parse*(this: HtmlBlockParser, doc: string, start: int): ParseResult =
   var lit = doc.since(start)
 
   var res = lit.parseHtmlScript()
@@ -1425,9 +1425,6 @@ method parse*(this: ReferenceParser, doc: string, start: int): ParseResult =
   )
   return ParseResult(token: reference, pos: pos)
 
-proc parseReference*(doc: string, start: int): ParseResult =
-  ReferenceParser().parse(doc, start)
-
 proc isContinuationText*(doc: string): bool =
   let atxRes = doc.getAtxHeading()
   if atxRes.size != -1: return false
@@ -1585,17 +1582,17 @@ proc parseBlock(state: State, token: Token) =
     if res.pos == -1:
       raise newException(MarkdownError, fmt"unknown rule.")
 
-proc parseText(doc: string, start: int): ParseResult =
+method parse*(this: TextParser, doc: string, start: int): ParseResult =
   let token = Text(doc: doc[start ..< start+1])
   return ParseResult(token: token, pos: start+1)
 
-proc parseSoftLineBreak(doc: string, start: int): ParseResult =
+method parse*(this: SoftBreakParser, doc: string, start: int): ParseResult =
   let size = doc.since(start).matchLen(re"^ \n *")
   if size == -1: return skipParsing()
   let token = SoftBreak()
   return ParseResult(token: token, pos: start+size)
 
-proc parseAutoLink(doc: string, start: int): ParseResult =
+method parse*(this: AutoLinkParser, doc: string, start: int): ParseResult =
   if doc[start] != '<':
     return skipParsing()
 
@@ -1674,7 +1671,7 @@ proc scanInlineDelimiters*(doc: string, start: int, delimiter: var Delimiter) =
     delimiter.canOpen = isLeftFlanking
     delimiter.canClose = isRightFlanking
 
-proc parseDelimiter(doc: string, start: int): ParseResult =
+method parse*(this: DelimiterParser, doc: string, start: int): ParseResult =
   if not {'*', '_'}.contains(doc[start]):
     return ParseResult(token: nil, pos: -1)
 
@@ -1970,7 +1967,7 @@ proc parseShortcutReferenceLink(doc: string, start: int, labelSlice: Slice[int])
   )
   return ParseResult(token: link, pos: labelSlice.b + 1)
 
-proc parseLink*(doc: string, start: int): ParseResult =
+method parse*(this: LinkParser, doc: string, start: int): ParseResult =
   # Link should start with [
   if doc[start] != '[': return skipParsing()
 
@@ -2104,7 +2101,7 @@ method apply*(this: Image, state: State, res: ParseResult): ParseResult =
   state.parseLeafBlockInlines(this)
   res
 
-proc parseImage*(doc: string, start: int): ParseResult =
+method parse*(this: ImageParser, doc: string, start: int): ParseResult =
   # Image should start with ![
   if not doc.since(start).match(re"^!\["): return skipParsing()
 
@@ -2132,7 +2129,7 @@ proc parseImage*(doc: string, start: int): ParseResult =
   return doc.parseShortcutReferenceImage(start, labelSlice)
 
 const ENTITY = r"&(?:#x[a-f0-9]{1,6}|#[0-9]{1,7}|[a-z][a-z0-9]{1,31});"
-proc parseHTMLEntity*(doc: string, start: int): ParseResult =
+method parse*(this: HtmlEntityParser, doc: string, start: int): ParseResult =
   if doc[start] != '&': return skipParsing()
 
   let regex = re(r"^(" & ENTITY & ")", {RegexFlag.reIgnoreCase})
@@ -2152,7 +2149,7 @@ proc parseHTMLEntity*(doc: string, start: int): ParseResult =
   )
   return ParseResult(token: token, pos: start+size)
 
-proc parseEscape*(doc: string, start: int): ParseResult =
+method parse*(this: EscapeParser, doc: string, start: int): ParseResult =
   if doc[start] != '\\': return skipParsing()
 
   let regex = re"^\\([\\`*{}\[\]()#+\-.!_<>~|""$%&',/:;=?@^])"
@@ -2162,7 +2159,7 @@ proc parseEscape*(doc: string, start: int): ParseResult =
   let token = Escape(doc: fmt"{doc[start+1]}")
   return ParseResult(token: token, pos: start+size)
 
-proc parseInlineHTML*(doc: string, start: int): ParseResult =
+method parse*(this: InlineHtmlParser, doc: string, start: int): ParseResult =
   if doc[start] != '<': return skipParsing()
 
   let regex = re("^(" & HTML_TAG & ")", {RegexFlag.reIgnoreCase})
@@ -2174,13 +2171,13 @@ proc parseInlineHTML*(doc: string, start: int): ParseResult =
   let token = InlineHtml(doc: matches[0])
   return ParseResult(token: token, pos: start+size)
 
-proc parseHardLineBreak*(doc: string, start: int): ParseResult =
+method parse*(this: HardBreakParser, doc: string, start: int): ParseResult =
   if not {' ', '\\'}.contains(doc[start]): return skipParsing()
   let size = doc.since(start).matchLen(re"^((?: {2,}\n|\\\n)\s*)")
   if size == -1: return skipParsing()
   return ParseResult(token: HardBreak(), pos: start+size)
 
-proc parseCodeSpan*(doc: string, start: int): ParseResult =
+method parse*(this: CodeSpanParser, doc: string, start: int): ParseResult =
   if doc[start] != '`': return skipParsing()
 
   var matches: array[5, string]
@@ -2358,7 +2355,7 @@ proc applyInlineParsers(state: State, doc: string, start: int): ParseResult =
   result = new(ParseResult)
   result.pos = -1
   for inlineParser in state.config.inlineParsers:
-    result = inlineParser(doc, start)
+    result = inlineParser.parse(doc, start)
     if result.pos != -1:
       result = result.token.apply(state, result)
     if result.pos != -1:
@@ -2414,17 +2411,18 @@ proc initCommonmarkConfig*(
   result.blockParsers.add(AtxHeadingParser())
   result.blockParsers.add(SetextHeadingParser())
   result.blockParsers.add(ParagraphParser())
-  result.inlineParsers.add(parseDelimiter)
-  result.inlineParsers.add(parseImage)
-  result.inlineParsers.add(parseAutoLink)
-  result.inlineParsers.add(parseLink)
-  result.inlineParsers.add(parseHTMLEntity)
-  result.inlineParsers.add(parseInlineHTML)
-  result.inlineParsers.add(parseEscape)
-  result.inlineParsers.add(parseCodeSpan)
-  result.inlineParsers.add(parseHardLineBreak)
-  result.inlineParsers.add(parseSoftLineBreak)
-  result.inlineParsers.add(parseText)
+
+  result.inlineParsers.add(DelimiterParser())
+  result.inlineParsers.add(ImageParser())
+  result.inlineParsers.add(AutoLinkParser())
+  result.inlineParsers.add(LinkParser())
+  result.inlineParsers.add(HtmlEntityParser())
+  result.inlineParsers.add(InlineHtmlParser())
+  result.inlineParsers.add(EscapeParser())
+  result.inlineParsers.add(CodeSpanParser())
+  result.inlineParsers.add(HardBreakParser())
+  result.inlineParsers.add(SoftBreakParser())
+  result.inlineParsers.add(TextParser())
 
 proc initGfmConfig*(
   escape = true,
@@ -2447,20 +2445,20 @@ proc initGfmConfig*(
   result.blockParsers.add(AtxHeadingParser())
   result.blockParsers.add(SetextHeadingParser())
   result.blockParsers.add(ParagraphParser())
-  result.inlineParsers.add(parseDelimiter)
-  result.inlineParsers.add(parseImage)
-  result.inlineParsers.add(parseAutoLink)
-  result.inlineParsers.add(parseLink)
-  result.inlineParsers.add(parseHTMLEntity)
-  result.inlineParsers.add(parseInlineHTML)
-  result.inlineParsers.add(parseStrikethrough)
-  result.inlineParsers.add(parseEscape)
-  result.inlineParsers.add(parseCodeSpan)
-  result.inlineParsers.add(parseHardLineBreak)
-  result.inlineParsers.add(parseSoftLineBreak)
-  result.inlineParsers.add(parseText)
 
-proc markdown*(doc: string, config: MarkdownConfig = initCommonmarkConfig(),
+  result.inlineParsers.add(DelimiterParser())
+  result.inlineParsers.add(ImageParser())
+  result.inlineParsers.add(AutoLinkParser())
+  result.inlineParsers.add(LinkParser())
+  result.inlineParsers.add(HtmlEntityParser())
+  result.inlineParsers.add(InlineHtmlParser())
+  result.inlineParsers.add(EscapeParser())
+  result.inlineParsers.add(CodeSpanParser())
+  result.inlineParsers.add(HardBreakParser())
+  result.inlineParsers.add(SoftBreakParser())
+  result.inlineParsers.add(TextParser())
+
+proc markdown*(doc: string, config: MarkdownConfig = nil,
   root: Token = Document()): string =
   ## Convert a markdown document into a HTML document.
   ##
@@ -2471,8 +2469,9 @@ proc markdown*(doc: string, config: MarkdownConfig = initCommonmarkConfig(),
   ## root:
   ## * You can set `root=Document()` (default).
   ## * Or, set root to any other token types, such as `root=Blockquote()`, or even your customized Token types, such as `root=Div()`.
+  var conf = if config == nil: initCommonmarkConfig() else: config
   let references = initTable[string, Reference]()
-  let state = State(references: references, config: config)
+  let state = State(references: references, config: conf)
   root.doc = doc.strip(chars={'\n'})
   state.parse(root)
   root.render()

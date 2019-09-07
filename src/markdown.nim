@@ -185,8 +185,8 @@ type
   HardBreakParser* = ref object of Parser
   HardBreak* = ref object of Inline
 
-  StrickthroughParser* = ref object of Parser
-  Strickthrough* = ref object of Inline
+  StrikethroughParser* = ref object of Parser
+  Strikethrough* = ref object of Inline
 
   EscapeParser* = ref object of Parser
   Escape* = ref object of Inline
@@ -448,7 +448,7 @@ method `$`*(token: SoftBreak): string = "\n"
 
 method `$`*(token: HardBreak): string = br() & "\n"
 
-method `$`*(token: Strickthrough): string = del(token.doc)
+method `$`*(token: Strikethrough): string = del(token.doc)
 
 method `$`*(token: Escape): string =
   token.doc.escapeAmpersandSeq.escapeTag.escapeQuote
@@ -2197,7 +2197,7 @@ method parse*(this: CodeSpanParser, doc: string, start: int): ParseResult =
   let token = CodeSpan(doc: codeSpanVal)
   return ParseResult(token: token, pos: start+size)
 
-proc parseStrikethrough*(doc: string, start: int): ParseResult =
+method parse*(this: StrikethroughParser, doc: string, start: int): ParseResult =
   if doc[start] != '~': return skipParsing()
 
   var matches: array[5, string]
@@ -2205,7 +2205,7 @@ proc parseStrikethrough*(doc: string, start: int): ParseResult =
 
   if size == -1: return skipParsing()
 
-  let token = Strickthrough(doc: matches[1])
+  let token = Strikethrough(doc: matches[1])
   return ParseResult(token: token, pos: start+size)
 
 proc removeDelimiter*(delimiter: var DoublyLinkedNode[Delimiter]) =
@@ -2453,6 +2453,7 @@ proc initGfmConfig*(
   result.inlineParsers.add(HtmlEntityParser())
   result.inlineParsers.add(InlineHtmlParser())
   result.inlineParsers.add(EscapeParser())
+  result.inlineParsers.add(StrikethroughParser())
   result.inlineParsers.add(CodeSpanParser())
   result.inlineParsers.add(HardBreakParser())
   result.inlineParsers.add(SoftBreakParser())

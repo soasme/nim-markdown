@@ -1,8 +1,5 @@
 ## # nim-markdown
 ##
-## This document shows you how nim-markdown is implemented.
-## It also covers how a markdown extension can be added to nim-markdown.
-##
 ## Most markdown parsers parse markdown documents in two steps, so does nim-markdown.
 ## The two-step consists of blocking parsing and inline parsing.
 ##

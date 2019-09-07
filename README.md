@@ -13,7 +13,7 @@ Install via `nimble` in your project root.
 $ nimble install markdown
 
 # or with current stable version
-$ nimble install markdown@">= 0.7.1"
+$ nimble install markdown@">= 0.7.2"
 
 # or with the latest version
 $ nimble install markdown@#head
@@ -111,6 +111,7 @@ Features:
 
 Released:
 
+* v0.7.2, 8 Sep 2019, rename internal package to markdownpkg.
 * v0.7.1, 7 Sep 2019, removed useless constants.
 * v0.7.0, 6 Sep 2019, support parsing in commonmark [v0.29](https://spec.commonmark.org/0.29/) syntax.
 * v0.5.4, 1 Aug 2019, bugfix: improved the ul & ol parsing.

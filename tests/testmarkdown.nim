@@ -3,12 +3,9 @@
 
 import unittest
 
-import re, strutils, os, json, strformat, sequtils
+import re, strutils, os, json, strformat, sequtils, locks
 import markdown
 
-const
-  gfmConfig = initGfmConfig()
-  configNoEscape = initGfmConfig(escape = false)
 
 test "newline":
   check markdown("\n\n\n") == ""
@@ -138,7 +135,7 @@ test "inline break":
   check markdown("hello  \nworld") == "<p>hello<br />\nworld</p>\n"
 
 test "inline strikethrough":
-  check markdown("~~hello~~", config=gfmConfig) == "<p><del>hello</del></p>\n"
+  check markdown("~~hello~~", config=initGfmConfig()) == "<p><del>hello</del></p>\n"
   check markdown("~~hello~~") == "<p>~~hello~~</p>\n"
 
 test "escape \\":
@@ -151,7 +148,7 @@ test "table":
 | Cell 1   | Cell 2   | Cell 3   | Cell 4   |
 | Cell 5   | Cell 6   | Cell 7   | Cell 8   |
   """,
-    config=gfmConfig,
+    config=initGfmConfig(),
   ) == """<table>
 <thead>
 <tr>
@@ -181,7 +178,7 @@ test "table":
 | -------- | --------
 | Cell 1   | Cell 2
 | Cell 3   | Cell 4""",
-    config=gfmConfig,
+    config=initGfmConfig(),
   ) == """<table>
 <thead>
 <tr>

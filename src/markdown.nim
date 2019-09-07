@@ -79,7 +79,7 @@ from lists import DoublyLinkedList, DoublyLinkedNode,
 from htmlgen import nil, p, br, em, strong, a, img, code, del, blockquote,
   li, ul, ol, pre, code, table, thead, tbody, th, tr, td, hr
 
-from markdown/entities import htmlEntityToUtf8
+from markdownpkg/entities import htmlEntityToUtf8
 
 type
   MarkdownError* = object of Exception ## The error object for markdown parsing and rendering.

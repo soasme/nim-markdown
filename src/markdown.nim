@@ -79,6 +79,7 @@ from lists import DoublyLinkedList, DoublyLinkedNode,
 from htmlgen import nil, p, br, em, strong, a, img, code, del, blockquote,
   li, ul, ol, pre, code, table, thead, tbody, th, tr, td, hr
 
+from markdownpkg/config import Parser, MarkdownConfig
 from markdownpkg/entities import htmlEntityToUtf8
 
 type
@@ -101,8 +102,6 @@ type
     pos*: int
     children*: DoublyLinkedList[Token]
     chunks*: seq[Chunk]
-
-  Parser* = ref object of RootObj
 
   ParseResult* = ref object
     token*: Token
@@ -230,12 +229,6 @@ type
   Em* = ref object of Inline
 
   Strong* = ref object of Inline
-
-  MarkdownConfig* = ref object ## Options for configuring parsing or rendering behavior.
-    escape*: bool ## escape ``<``, ``>``, and ``&`` characters to be HTML-safe
-    keepHtml*: bool ## deprecated: preserve HTML tags rather than escape it
-    blockParsers*: seq[Parser]
-    inlineParsers*: seq[Parser]
 
   State* = ref object
     references*: Table[string, Reference]

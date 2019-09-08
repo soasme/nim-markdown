@@ -2387,70 +2387,80 @@ proc parse(state: State, token: Token) =
 proc initCommonmarkConfig*(
   escape = true,
   keepHtml = true,
+  blockParsers = @[
+    ReferenceParser(),
+    ThematicBreakParser(),
+    BlockquoteParser(),
+    UlParser(),
+    OlParser(),
+    IndentedCodeParser(),
+    FencedCodeParser(),
+    HtmlBlockParser(),
+    AtxHeadingParser(),
+    SetextHeadingParser(),
+    BlanklineParser(),
+    ParagraphParser(),
+  ],
+  inlineParsers = @[
+    DelimiterParser(),
+    ImageParser(),
+    AutoLinkParser(),
+    LinkParser(),
+    HtmlEntityParser(),
+    InlineHtmlParser(),
+    EscapeParser(),
+    CodeSpanParser(),
+    HardBreakParser(),
+    SoftBreakParser(),
+    TextParser(),
+  ]
 ): MarkdownConfig =
   result = MarkdownConfig(
     escape: escape,
     keepHtml: keepHtml,
+    blockParsers: blockParsers,
+    inlineParsers: inlineParsers,
   )
-  result.blockParsers.add(ReferenceParser())
-  result.blockParsers.add(ThematicBreakParser())
-  result.blockParsers.add(BlockquoteParser())
-  result.blockParsers.add(UlParser())
-  result.blockParsers.add(OlParser())
-  result.blockParsers.add(IndentedCodeParser())
-  result.blockParsers.add(FencedCodeParser())
-  result.blockParsers.add(HtmlBlockParser())
-  result.blockParsers.add(BlanklineParser())
-  result.blockParsers.add(AtxHeadingParser())
-  result.blockParsers.add(SetextHeadingParser())
-  result.blockParsers.add(ParagraphParser())
-
-  result.inlineParsers.add(DelimiterParser())
-  result.inlineParsers.add(ImageParser())
-  result.inlineParsers.add(AutoLinkParser())
-  result.inlineParsers.add(LinkParser())
-  result.inlineParsers.add(HtmlEntityParser())
-  result.inlineParsers.add(InlineHtmlParser())
-  result.inlineParsers.add(EscapeParser())
-  result.inlineParsers.add(CodeSpanParser())
-  result.inlineParsers.add(HardBreakParser())
-  result.inlineParsers.add(SoftBreakParser())
-  result.inlineParsers.add(TextParser())
 
 proc initGfmConfig*(
   escape = true,
   keepHtml = true,
+  blockParsers = @[
+    ReferenceParser(),
+    ThematicBreakParser(),
+    BlockquoteParser(),
+    UlParser(),
+    OlParser(),
+    IndentedCodeParser(),
+    FencedCodeParser(),
+    HtmlBlockParser(),
+    HtmlTableParser(),
+    AtxHeadingParser(),
+    SetextHeadingParser(),
+    BlanklineParser(),
+    ParagraphParser(),
+  ],
+  inlineParsers = @[
+    DelimiterParser(),
+    ImageParser(),
+    AutoLinkParser(),
+    LinkParser(),
+    HtmlEntityParser(),
+    InlineHtmlParser(),
+    EscapeParser(),
+    StrikethroughParser(),
+    CodeSpanParser(),
+    HardBreakParser(),
+    SoftBreakParser(),
+    TextParser(),
+  ]
 ): MarkdownConfig =
   result = MarkdownConfig(
     escape: escape,
     keepHtml: keepHtml,
+    blockParsers: blockParsers,
+    inlineParsers: inlineParsers,
   )
-  result.blockParsers.add(ReferenceParser())
-  result.blockParsers.add(ThematicBreakParser())
-  result.blockParsers.add(BlockquoteParser())
-  result.blockParsers.add(UlParser())
-  result.blockParsers.add(OlParser())
-  result.blockParsers.add(IndentedCodeParser())
-  result.blockParsers.add(FencedCodeParser())
-  result.blockParsers.add(HtmlTableParser())
-  result.blockParsers.add(HtmlBlockParser())
-  result.blockParsers.add(BlanklineParser())
-  result.blockParsers.add(AtxHeadingParser())
-  result.blockParsers.add(SetextHeadingParser())
-  result.blockParsers.add(ParagraphParser())
-
-  result.inlineParsers.add(DelimiterParser())
-  result.inlineParsers.add(ImageParser())
-  result.inlineParsers.add(AutoLinkParser())
-  result.inlineParsers.add(LinkParser())
-  result.inlineParsers.add(HtmlEntityParser())
-  result.inlineParsers.add(InlineHtmlParser())
-  result.inlineParsers.add(EscapeParser())
-  result.inlineParsers.add(StrikethroughParser())
-  result.inlineParsers.add(CodeSpanParser())
-  result.inlineParsers.add(HardBreakParser())
-  result.inlineParsers.add(SoftBreakParser())
-  result.inlineParsers.add(TextParser())
 
 proc markdown*(doc: string, config: MarkdownConfig = nil,
   root: Token = Document()): string =

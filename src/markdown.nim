@@ -472,22 +472,16 @@ method `$`*(token: Link): string =
   if title == "": a(href=href, $token.children)
   else: a(href=href, title=title, $token.children)
 
-method toAlt*(token: Token): string {.base.} = $token
-
-method toAlt*(token: Em): string = $token.children
-
-method toAlt*(token: Strong): string = $token.children
-
-method toAlt*(token: Link): string = token.text
-
-method toAlt*(token: Image): string = token.alt
+proc toAlt*(token: Token): string =
+  if (token of Em) or (token of Strong): $token.children
+  elif token of Link: Link(token).text
+  elif token of Image: Image(token).alt
+  else: $token
 
 method `$`*(token: Image): string =
   let src = token.url.escapeBackslash.escapeLinkUrl
   let title=token.title.escapeBackslash.escapeHTMLEntity.escapeAmpersandSeq.escapeQuote
-  let alt = token.children.toSeq.map(
-    (t: Token) => t.toAlt
-  ).join("")
+  let alt = token.children.toSeq.map(toAlt).join("")
   if title == "": img(src=src, alt=alt)
   else: img(src=src, alt=alt, title=title)
 

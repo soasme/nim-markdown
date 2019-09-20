@@ -458,9 +458,6 @@ method `$`*(token: Text): string =
 proc toStringSeq(tokens: DoublyLinkedList[Token]): seq[string] =
   tokens.toSeq.map((t: Token) => $t)
 
-method `$`*(tokens: DoublyLinkedList[Token]): string {.base.} =
-  tokens.toStringSeq.join("")
-
 method `$`*(token: AutoLink): string =
   let href = token.url.escapeLinkUrl.escapeAmpersandSeq
   let text = token.text.escapeAmpersandSeq
@@ -469,11 +466,11 @@ method `$`*(token: AutoLink): string =
 method `$`*(token: Link): string =
   let href = token.url.escapeBackslash.escapeLinkUrl
   let title = token.title.escapeBackslash.escapeHTMLEntity.escapeAmpersandSeq.escapeQuote
-  if title == "": a(href=href, $token.children)
-  else: a(href=href, title=title, $token.children)
+  if title == "": a(href=href, token.children.toStringSeq.join(""))
+  else: a(href=href, title=title, token.children.toStringSeq.join(""))
 
 proc toAlt*(token: Token): string =
-  if (token of Em) or (token of Strong): $token.children
+  if (token of Em) or (token of Strong): token.children.toStringSeq.join("")
   elif token of Link: Link(token).text
   elif token of Image: Image(token).alt
   else: $token
@@ -485,20 +482,20 @@ method `$`*(token: Image): string =
   if title == "": img(src=src, alt=alt)
   else: img(src=src, alt=alt, title=title)
 
-method `$`*(token: Em): string = em($token.children)
+method `$`*(token: Em): string = em(token.children.toStringSeq.join(""))
 
-method `$`*(token: Strong): string = strong($token.children)
+method `$`*(token: Strong): string = strong(token.children.toStringSeq.join(""))
 
 method `$`*(token: ThematicBreak): string = hr()
 
 method `$`*(token: Paragraph): string =
   if token.children.head == nil: ""
-  elif token.loose: p($token.children)
-  else: $token.children
+  elif token.loose: p(token.children.toStringSeq.join(""))
+  else: token.children.toStringSeq.join("")
 
 method `$`*(token: Heading): string =
   let num = fmt"{token.level}"
-  let child = $token.children
+  let child = token.children.toStringSeq.join("")
   fmt"<h{num}>{child}</h{num}>"
 
 method `$`*(token: CodeBlock): string =
@@ -516,13 +513,15 @@ method `$`*(token: HtmlBlock): string = token.doc.strip(chars={'\n'})
 
 method `$`*(token: THeadCell): string =
   let align = token.align
-  if align == "": th($token.children)
-  else: fmt("<th align=\"{align}\">{$token.children}</th>")
+  let child = token.children.toStringSeq.join("")
+  if align == "": th(child)
+  else: fmt("<th align=\"{align}\">{child}</th>")
 
 method `$`*(token: TBodyCell): string =
   let align = token.align
-  if align == "": td($token.children)
-  else: fmt("<td align=\"{align}\">{$token.children}</td>")
+  let child = token.children.toStringSeq.join("")
+  if align == "": td(child)
+  else: fmt("<td align=\"{align}\">{child}</td>")
 
 method `$`*(token: TableRow): string =
   let cells = token.children.toStringSeq.join("\n")

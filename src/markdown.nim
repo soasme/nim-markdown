@@ -253,7 +253,7 @@ proc toStringSeq(tokens: DoublyLinkedList[Token]): seq[string];
 
 proc skipParsing*(): ParseResult = ParseResult(token: nil, pos: -1)
 
-method parse*(this: Parser, doc: string, start: int): ParseResult {.base.} =
+method parse*(this: Parser, doc: string, start: int): ParseResult {.base, locks: "unknown".} =
   ParseResult(token: Token(), pos: doc.len)
 
 proc appendChild*(token: Token, child: Token) =
@@ -433,37 +433,39 @@ proc toSeq*(tokens: DoublyLinkedList[Token]): seq[Token] =
   for token in tokens.items:
     result.add(token)
 
-method `$`*(token: Token): string {.base.} = ""
+method `$`*(token: Token): string {.base, locks: "unknown".} = ""
 
-method `$`*(token: CodeSpan): string =
+method `$`*(token: CodeSpan): string {.locks: "unknown".} =
   code(token.doc.escapeAmpersandChar.escapeTag.escapeQuote)
 
-method `$`*(token: SoftBreak): string = "\n"
+method `$`*(token: SoftBreak): string {.locks: "unknown".}= "\n"
 
-method `$`*(token: HardBreak): string = br() & "\n"
+method `$`*(token: HardBreak): string {.locks: "unknown".} = br() & "\n"
 
-method `$`*(token: Strikethrough): string = del(token.doc)
+method `$`*(token: Strikethrough): string {.locks: "unknown".} =
+  del(token.doc)
 
-method `$`*(token: ThematicBreak): string = hr()
+method `$`*(token: ThematicBreak): string {.locks: "unknown".} =
+  hr()
 
-method `$`*(token: Escape): string =
+method `$`*(token: Escape): string {.locks: "unknown".} =
   token.doc.escapeAmpersandSeq.escapeTag.escapeQuote
 
-method `$`*(token: InlineHtml): string =
+method `$`*(token: InlineHtml): string {.locks: "unknown".} =
   token.doc.escapeInvalidHTMLTag
 
-method `$`*(token: HtmlEntity): string =
+method `$`*(token: HtmlEntity): string {.locks: "unknown".} =
   token.doc.escapeHTMLEntity.escapeQuote
 
-method `$`*(token: Text): string =
+method `$`*(token: Text): string {.locks: "unknown".} =
   token.doc.escapeAmpersandSeq.escapeTag.escapeQuote
 
-method `$`*(token: AutoLink): string =
+method `$`*(token: AutoLink): string {.locks: "unknown".} =
   let href = token.url.escapeLinkUrl.escapeAmpersandSeq
   let text = token.text.escapeAmpersandSeq
   a(href=href, text)
 
-method `$`*(token: CodeBlock): string =
+method `$`*(token: CodeBlock): string {.locks: "unknown".} =
   var codeHTML = token.doc.escapeCode.escapeQuote
   if codeHTML != "" and not codeHTML.endsWith("\n"):
     codeHTML &= "\n"
@@ -474,7 +476,8 @@ method `$`*(token: CodeBlock): string =
     let lang = fmt"language-{info}"
     pre(code(class=lang, codeHTML))
 
-method `$`*(token: HtmlBlock): string = token.doc.strip(chars={'\n'})
+method `$`*(token: HtmlBlock): string {.locks: "unknown".} =
+  token.doc.strip(chars={'\n'})
 
 method `$`*(token: Link): string =
   let href = token.url.escapeBackslash.escapeLinkUrl
@@ -745,7 +748,7 @@ method parse*(this: UlParser, doc: string, start: int): ParseResult =
 
   return ParseResult(token: ulToken, pos: pos)
 
-proc parseUnorderedList(doc: string, start: int): ParseResult =
+proc parseUnorderedList(doc: string, start: int): ParseResult {.locks: "unknown".} =
   UlParser().parse(doc, start)
 
 method parse*(this: OlParser, doc: string, start: int): ParseResult =
@@ -789,7 +792,7 @@ method parse*(this: OlParser, doc: string, start: int): ParseResult =
 proc getThematicBreak(s: string): tuple[size: int] =
   return (size: s.matchLen(re(r"^" & THEMATIC_BREAK_RE)))
 
-method parse*(this: ThematicBreakParser, doc: string, start: int): ParseResult =
+method parse*(this: ThematicBreakParser, doc: string, start: int): ParseResult {.locks: "unknown".} =
   let res = doc.since(start).getThematicBreak()
   if res.size == -1: return ParseResult(token: nil, pos: -1)
   return ParseResult(
@@ -843,7 +846,7 @@ proc parseTildeBlockCodeInfo*(doc: string): tuple[info: string, size: int] =
     return (item, size)
   return ("", size)
 
-method parse*(this: FencedCodeParser, doc: string, start: int): ParseResult =
+method parse*(this: FencedCodeParser, doc: string, start: int): ParseResult {.locks: "unknown".} =
   var pos = start
   var fenceRes = doc.since(start).getFence()
   if fenceRes.size == -1: return ParseResult(token: nil, pos: -1)
@@ -898,7 +901,7 @@ proc getIndentedCodeRestLines*(s: string): tuple[code: string, size: int] =
       break
   return (code: code, size: size)
 
-method parse*(this: IndentedCodeParser, doc: string, start: int): ParseResult =
+method parse*(this: IndentedCodeParser, doc: string, start: int): ParseResult {.locks: "unknown".} =
   var res = doc.since(start).getIndentedCodeFirstLine()
   if res.size == -1: return ParseResult(token: nil, pos: -1)
   var code = res.code
@@ -946,7 +949,7 @@ proc getSetextHeading*(s: string): tuple[level: int, doc: string, size: int] =
 
   return (level: level, doc: doc, size: size)
 
-method parse(this: SetextHeadingParser, doc: string, start: int): ParseResult =
+method parse(this: SetextHeadingParser, doc: string, start: int): ParseResult {.locks: "unknown".} =
   let res = doc.since(start).getSetextHeading()
   if res.size == -1: return ParseResult(token: nil, pos: -1)
   return ParseResult(
@@ -972,7 +975,7 @@ proc getAtxHeading*(s: string): tuple[level: int, doc: string, size: int] =
   let doc = if matches[2] =~ re"#+": "" else: matches[2]
   return (level: level, doc: doc, size: size)
 
-method parse(this: AtxHeadingParser, doc: string, start: int = 0): ParseResult =
+method parse(this: AtxHeadingParser, doc: string, start: int = 0): ParseResult {.locks: "unknown".} =
   let res = doc.since(start).getAtxHeading()
   if res.size == -1: return ParseResult(token: nil, pos: -1)
   return ParseResult(
@@ -983,7 +986,7 @@ method parse(this: AtxHeadingParser, doc: string, start: int = 0): ParseResult =
     pos: start+res.size
   )
 
-method parse*(this: BlanklineParser, doc: string, start: int): ParseResult =
+method parse*(this: BlanklineParser, doc: string, start: int): ParseResult {.locks: "unknown".} =
   let size = doc.since(start).matchLen(re(r"^((?:\s*\n)+)"))
   if size == -1: return ParseResult(token: nil, pos: -1)
   let token = Token(doc: doc.since(start, offset=size))
@@ -1059,7 +1062,7 @@ proc parseTableAligns*(doc: string): tuple[aligns: seq[string], matched: bool] =
       aligns.add("")
   return (aligns, true)
 
-method parse*(this: HtmlTableParser, doc: string, start: int): ParseResult =
+method parse*(this: HtmlTableParser, doc: string, start: int): ParseResult {.locks: "unknown".} =
   # Algorithm:
   # fail fast if less than 2 lines.
   # second line: /^[-:|][-:|\s]*$/
@@ -1204,7 +1207,7 @@ proc parseHtmlDeclaration*(s: string): tuple[html: string, size: int] =
 proc parseHtmlTag*(s: string): tuple[html: string, size: int] =
   return s.parseHTMLBlockContent(HTML_TAG_START, HTML_TAG_END)
 
-method parse*(this: HtmlBlockParser, doc: string, start: int): ParseResult =
+method parse*(this: HtmlBlockParser, doc: string, start: int): ParseResult {.locks: "unknown".} =
   var lit = doc.since(start)
 
   var res = lit.parseHtmlScript()
@@ -1536,10 +1539,10 @@ proc finalizeList*(state: State, token: Token) =
       if child of Paragraph:
         Paragraph(child).loose = loose
 
-method apply*(this: Token, state: State, res: ParseResult): ParseResult {.base.} =
+method apply*(this: Token, state: State, res: ParseResult): ParseResult {.base, locks: "unknown".} =
   res
 
-method apply*(this: Ul, state: State, res: ParseResult): ParseResult =
+method apply*(this: Ul, state: State, res: ParseResult): ParseResult {.locks: "unknown".} =
   state.finalizeList(res.token)
   res
 
@@ -1550,7 +1553,7 @@ method apply*(this: Ol, state: State, res: ParseResult): ParseResult =
 method apply*(this: Blockquote, state: State, res: ParseResult): ParseResult =
   state.parseContainerBlock(res.token)
 
-method apply*(this: Reference, state: State, res: ParseResult): ParseResult =
+method apply*(this: Reference, state: State, res: ParseResult): ParseResult {.locks: "unknown".} =
   if not state.references.contains(this.text):
     state.references[this.text] = this
   res
@@ -1569,17 +1572,17 @@ proc parseBlock(state: State, token: Token) =
     if res.pos == -1:
       raise newException(MarkdownError, fmt"unknown rule.")
 
-method parse*(this: TextParser, doc: string, start: int): ParseResult =
+method parse*(this: TextParser, doc: string, start: int): ParseResult {.locks: "unknown".} =
   let token = Text(doc: doc[start ..< start+1])
   return ParseResult(token: token, pos: start+1)
 
-method parse*(this: SoftBreakParser, doc: string, start: int): ParseResult =
+method parse*(this: SoftBreakParser, doc: string, start: int): ParseResult {.locks: "unknown".} =
   let size = doc.since(start).matchLen(re"^ \n *")
   if size == -1: return skipParsing()
   let token = SoftBreak()
   return ParseResult(token: token, pos: start+size)
 
-method parse*(this: AutoLinkParser, doc: string, start: int): ParseResult =
+method parse*(this: AutoLinkParser, doc: string, start: int): ParseResult {.locks: "unknown".} =
   if doc[start] != '<':
     return skipParsing()
 
@@ -1658,7 +1661,7 @@ proc scanInlineDelimiters*(doc: string, start: int, delimiter: var Delimiter) =
     delimiter.canOpen = isLeftFlanking
     delimiter.canClose = isRightFlanking
 
-method parse*(this: DelimiterParser, doc: string, start: int): ParseResult =
+method parse*(this: DelimiterParser, doc: string, start: int): ParseResult {.locks: "unknown".} =
   if not {'*', '_'}.contains(doc[start]):
     return ParseResult(token: nil, pos: -1)
 
@@ -1954,7 +1957,7 @@ proc parseShortcutReferenceLink(doc: string, start: int, labelSlice: Slice[int])
   )
   return ParseResult(token: link, pos: labelSlice.b + 1)
 
-method parse*(this: LinkParser, doc: string, start: int): ParseResult =
+method parse*(this: LinkParser, doc: string, start: int): ParseResult {.locks: "unknown".} =
   # Link should start with [
   if doc[start] != '[': return skipParsing()
 
@@ -2088,7 +2091,7 @@ method apply*(this: Image, state: State, res: ParseResult): ParseResult =
   state.parseLeafBlockInlines(this)
   res
 
-method parse*(this: ImageParser, doc: string, start: int): ParseResult =
+method parse*(this: ImageParser, doc: string, start: int): ParseResult {.locks: "unknown".} =
   # Image should start with ![
   if not doc.since(start).match(re"^!\["): return skipParsing()
 
@@ -2116,7 +2119,7 @@ method parse*(this: ImageParser, doc: string, start: int): ParseResult =
   return doc.parseShortcutReferenceImage(start, labelSlice)
 
 const ENTITY = r"&(?:#x[a-f0-9]{1,6}|#[0-9]{1,7}|[a-z][a-z0-9]{1,31});"
-method parse*(this: HtmlEntityParser, doc: string, start: int): ParseResult =
+method parse*(this: HtmlEntityParser, doc: string, start: int): ParseResult {.locks: "unknown".} =
   if doc[start] != '&': return skipParsing()
 
   let regex = re(r"^(" & ENTITY & ")", {RegexFlag.reIgnoreCase})
@@ -2136,7 +2139,7 @@ method parse*(this: HtmlEntityParser, doc: string, start: int): ParseResult =
   )
   return ParseResult(token: token, pos: start+size)
 
-method parse*(this: EscapeParser, doc: string, start: int): ParseResult =
+method parse*(this: EscapeParser, doc: string, start: int): ParseResult {.locks: "unknown".} =
   if doc[start] != '\\': return skipParsing()
 
   let regex = re"^\\([\\`*{}\[\]()#+\-.!_<>~|""$%&',/:;=?@^])"
@@ -2146,7 +2149,7 @@ method parse*(this: EscapeParser, doc: string, start: int): ParseResult =
   let token = Escape(doc: fmt"{doc[start+1]}")
   return ParseResult(token: token, pos: start+size)
 
-method parse*(this: InlineHtmlParser, doc: string, start: int): ParseResult =
+method parse*(this: InlineHtmlParser, doc: string, start: int): ParseResult {.locks: "unknown".} =
   if doc[start] != '<': return skipParsing()
 
   let regex = re("^(" & HTML_TAG & ")", {RegexFlag.reIgnoreCase})
@@ -2158,13 +2161,13 @@ method parse*(this: InlineHtmlParser, doc: string, start: int): ParseResult =
   let token = InlineHtml(doc: matches[0])
   return ParseResult(token: token, pos: start+size)
 
-method parse*(this: HardBreakParser, doc: string, start: int): ParseResult =
+method parse*(this: HardBreakParser, doc: string, start: int): ParseResult {.locks: "unknown".} =
   if not {' ', '\\'}.contains(doc[start]): return skipParsing()
   let size = doc.since(start).matchLen(re"^((?: {2,}\n|\\\n)\s*)")
   if size == -1: return skipParsing()
   return ParseResult(token: HardBreak(), pos: start+size)
 
-method parse*(this: CodeSpanParser, doc: string, start: int): ParseResult =
+method parse*(this: CodeSpanParser, doc: string, start: int): ParseResult {.locks: "unknown".} =
   if doc[start] != '`': return skipParsing()
 
   var matches: array[5, string]
@@ -2184,7 +2187,7 @@ method parse*(this: CodeSpanParser, doc: string, start: int): ParseResult =
   let token = CodeSpan(doc: codeSpanVal)
   return ParseResult(token: token, pos: start+size)
 
-method parse*(this: StrikethroughParser, doc: string, start: int): ParseResult =
+method parse*(this: StrikethroughParser, doc: string, start: int): ParseResult {.locks: "unknown".} =
   if doc[start] != '~': return skipParsing()
 
   var matches: array[5, string]

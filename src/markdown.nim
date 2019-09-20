@@ -249,6 +249,7 @@ proc parseHtmlCData*(s: string): tuple[html: string, size: int];
 proc parseHtmlDeclaration*(s: string): tuple[html: string, size: int];
 proc parseHtmlTag*(s: string): tuple[html: string, size: int];
 proc parseHtmlOpenCloseTag*(s: string): tuple[html: string, size: int];
+proc toStringSeq(tokens: DoublyLinkedList[Token]): seq[string];
 
 proc skipParsing*(): ParseResult = ParseResult(token: nil, pos: -1)
 
@@ -443,6 +444,8 @@ method `$`*(token: HardBreak): string = br() & "\n"
 
 method `$`*(token: Strikethrough): string = del(token.doc)
 
+method `$`*(token: ThematicBreak): string = hr()
+
 method `$`*(token: Escape): string =
   token.doc.escapeAmpersandSeq.escapeTag.escapeQuote
 
@@ -455,13 +458,23 @@ method `$`*(token: HtmlEntity): string =
 method `$`*(token: Text): string =
   token.doc.escapeAmpersandSeq.escapeTag.escapeQuote
 
-proc toStringSeq(tokens: DoublyLinkedList[Token]): seq[string] =
-  tokens.toSeq.map((t: Token) => $t)
-
 method `$`*(token: AutoLink): string =
   let href = token.url.escapeLinkUrl.escapeAmpersandSeq
   let text = token.text.escapeAmpersandSeq
   a(href=href, text)
+
+method `$`*(token: CodeBlock): string =
+  var codeHTML = token.doc.escapeCode.escapeQuote
+  if codeHTML != "" and not codeHTML.endsWith("\n"):
+    codeHTML &= "\n"
+  if token.info == "":
+    pre(code(codeHTML))
+  else:
+    let info = token.info.escapeBackslash.escapeHTMLEntity
+    let lang = fmt"language-{info}"
+    pre(code(class=lang, codeHTML))
+
+method `$`*(token: HtmlBlock): string = token.doc.strip(chars={'\n'})
 
 method `$`*(token: Link): string =
   let href = token.url.escapeBackslash.escapeLinkUrl
@@ -486,8 +499,6 @@ method `$`*(token: Em): string = em(token.children.toStringSeq.join(""))
 
 method `$`*(token: Strong): string = strong(token.children.toStringSeq.join(""))
 
-method `$`*(token: ThematicBreak): string = hr()
-
 method `$`*(token: Paragraph): string =
   if token.children.head == nil: ""
   elif token.loose: p(token.children.toStringSeq.join(""))
@@ -497,19 +508,6 @@ method `$`*(token: Heading): string =
   let num = fmt"{token.level}"
   let child = token.children.toStringSeq.join("")
   fmt"<h{num}>{child}</h{num}>"
-
-method `$`*(token: CodeBlock): string =
-  var codeHTML = token.doc.escapeCode.escapeQuote
-  if codeHTML != "" and not codeHTML.endsWith("\n"):
-    codeHTML &= "\n"
-  if token.info == "":
-    pre(code(codeHTML))
-  else:
-    let info = token.info.escapeBackslash.escapeHTMLEntity
-    let lang = fmt"language-{info}"
-    pre(code(class=lang, codeHTML))
-
-method `$`*(token: HtmlBlock): string = token.doc.strip(chars={'\n'})
 
 method `$`*(token: THeadCell): string =
   let align = token.align
@@ -541,18 +539,6 @@ method `$`*(token: HtmlTable): string =
   if tbody != "": tbody = "\n" & tbody.strip
   table("\n", thead, tbody)
 
-method `$`*(token: Ul): string =
-  ul("\n", render(token))
-
-method `$`*(token: Ol): string =
-  if token.start != 1:
-    ol(start=fmt"{token.start}", "\n", render(token))
-  else:
-    ol("\n", render(token))
-
-method `$`*(token: Blockquote): string =
-  blockquote("\n", render(token))
-
 proc renderListItemChildren(token: Li): string =
   var html: string
   if token.children.head == nil: return ""
@@ -575,6 +561,21 @@ proc renderListItemChildren(token: Li): string =
 
 method `$`*(token: Li): string =
   li(renderListItemChildren(token))
+
+method `$`*(token: Ol): string =
+  if token.start != 1:
+    ol(start=fmt"{token.start}", "\n", render(token))
+  else:
+    ol("\n", render(token))
+
+method `$`*(token: Ul): string =
+  ul("\n", render(token))
+
+method `$`*(token: Blockquote): string =
+  blockquote("\n", render(token))
+
+proc toStringSeq(tokens: DoublyLinkedList[Token]): seq[string] =
+  tokens.toSeq.map((t: Token) => $t)
 
 proc render*(token: Token): string =
   var htmls = token.children.toStringSeq

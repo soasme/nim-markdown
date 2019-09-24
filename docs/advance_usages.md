@@ -62,7 +62,7 @@ method parse(parser: IncludeParser, doc: string, start: int): ParseResult  {.loc
   ):
     ParseResult(token: IncludeToken(path: path), pos: idx)
   else:
-    ParseResult(token: nil, pos: -1)
+    ParseResult(token: nil, pos: -1) # -1 means not advancing the doc.
 
 method `$`(token: IncludeToken): string =
   markdown(token.path.readFile, c)

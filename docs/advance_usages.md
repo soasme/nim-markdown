@@ -2,9 +2,7 @@
 
 ## Customize Parsing
 
-Object `MarkdownConfig` is allowed to add new parsing rules.
-
-In this example, we'll implement a new block parser called `IncludeParser` that can dynamically include markdown document in another file.
+Sometimes, you want to add new parsing rules.  In this example, we'll implement a new block parser called `IncludeParser` that can dynamically include markdown document in another file. The rule applies to customized inline parsers.
 
 For example,
 
@@ -33,7 +31,7 @@ type IncludeToken = ref object of Block
     path: string
 ```
 
-The most tricky part is how to register the new parser. The answer is to insert it into `MarkdownConfig.blockParsers` or `MarkdownConfig.inlineParsers`, depending on what kind of parser you want to add. For example, we expect `IncludeParser()` to be a block parser, and perform the parsing before any other parsers.
+The trickiest part is to register the new parser. We achieve this by inserting it into `MarkdownConfig.blockParsers` or `MarkdownConfig.inlineParsers`, depending on what kind of parser you want to add. For example, we expect `IncludeParser()` to be a block parser, and perform the parsing before any other parsers.
 
 ```nim
 var c = initCommonmarkConfig()

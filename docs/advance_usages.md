@@ -1,5 +1,8 @@
 # Advance Usages
 
+Note that Nim-markdown APIs are subject to change before v1.0.0.
+Examples on this document might not fully work til then.
+
 ## Customize Parsing
 
 Sometimes, you want to add new parsing rules.  In this example, we'll implement a new block parser called `IncludeParser` that can dynamically include markdown document in another file. The rule applies to customized inline parsers.

@@ -19,7 +19,7 @@ In `another-file.md`, it has content:
 # Not include, but a header.
 ```
 
-First, let's define a parser. All parsers are inherited from `Parser`.
+First, let's define a parser. It inherits from `Parser`.
 
 ```nim
 import markdown

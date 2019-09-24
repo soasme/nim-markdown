@@ -79,13 +79,20 @@ from lists import DoublyLinkedList, DoublyLinkedNode,
 from htmlgen import nil, p, br, em, strong, a, img, code, del, blockquote,
   li, ul, ol, pre, code, table, thead, tbody, th, tr, td, hr
 
-from markdownpkg/config import Parser, MarkdownConfig
 from markdownpkg/entities import htmlEntityToUtf8
 
 type
   MarkdownError* = object of Exception ## The error object for markdown parsing and rendering.
                                        ## Usually, you should not see MarkdownError raising in your application
                                        ## unless it's documented. Otherwise, please report it as an issue.
+                                       ##
+  Parser* = ref object of RootObj
+
+  MarkdownConfig* = ref object ## Options for configuring parsing or rendering behavior.
+    escape*: bool ## escape ``<``, ``>``, and ``&`` characters to be HTML-safe
+    keepHtml*: bool ## deprecated: preserve HTML tags rather than escape it
+    blockParsers*: seq[Parser]
+    inlineParsers*: seq[Parser]
 
   ChunkKind* = enum
     BlockChunk,

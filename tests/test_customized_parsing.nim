@@ -2,6 +2,8 @@ import unittest
 import strutils, sequtils, strscans, system, os
 import markdown
 
+## Customize Parsing
+
 type
   IncludeParser = ref object of Parser
 
@@ -46,3 +48,20 @@ test "customize parsing":
 
 """
   removeFile("hello.md")
+
+
+## Operate AST
+
+test "operate ast":
+  let root = Document()
+  discard markdown("# Hello World\nTest.", root=root)
+  let p = Paragraph(loose: true)
+  let em = Em()
+  let text = Text(doc: "emphasis text.")
+  em.appendChild(text)
+  p.appendChild(em)
+  root.appendChild(p)
+  check root.render == """<h1>Hello World</h1>
+<p>Test.</p>
+<p><em>emphasis text.</em></p>
+"""

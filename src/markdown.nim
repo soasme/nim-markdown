@@ -64,7 +64,7 @@
 ##
 
 import re
-from sequtils import map, keepIf
+from sequtils import map, keepIf, anyIt
 from sugar import `->`, `=>`
 from strformat import fmt, `&`
 from uri import encodeUrl
@@ -735,12 +735,11 @@ method parse*(this: UlParser, doc: string, start: int): ParseResult =
     if itemSize == -1:
       break
 
-    var listItem = Li(
+    listItems.add Li(
       doc: listItemDoc.strip(chars={'\n'}),
       verbatim: listItemDoc,
       marker: marker
     )
-    listItems.add(listItem)
 
     pos += itemSize
 
@@ -775,12 +774,11 @@ method parse*(this: OlParser, doc: string, start: int): ParseResult =
       startIndex = index
       found = true
 
-    var listItem = Li(
+    listItems.add Li(
       doc: listItemDoc.strip(chars={'\n'}),
       verbatim: listItemDoc,
       marker: marker
     )
-    listItems.add(listItem)
 
     pos += itemSize
 
@@ -1491,11 +1489,12 @@ method parse*(this: ParagraphParser, doc: string, start: int): ParseResult =
     p &= line
 
   size = p.len
+  let trailing = doc[start ..< start+size].findAll(re"\n*$")
   return ParseResult(
     token: Paragraph(
       doc: doc[start ..< start+size].replace(re"\n\s*", "\n").strip,
       loose: true,
-      trailing: doc[start ..< start+size].findAll(re"\n*$").join(""),
+      trailing: if trailing.anyIt(it.len > 0): trailing.join() else: trailing[0]
     ),
     pos: start+size
   )

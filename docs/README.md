@@ -1,6 +1,9 @@
 # Nim-markdown
 
-Nim-markdown is a Markdown Parser in the Nim world.
+`nim-markdown` is a Markdown Parser in the Nim world.
+
+[![Documentation](https://img.shields.io/badge/documentation-passed-brightgreen.svg?style=for-the-badge&longCache=true)](https://www.soasme.com/nim-markdown/)
+[![Build Status](https://travis-ci.org/soasme/nim-markdown.svg?branch=master)](https://travis-ci.org/soasme/nim-markdown)
 
 ## Install
 
@@ -8,6 +11,9 @@ Install via `nimble` in your project root.
 
 ```bash
 $ nimble install markdown
+
+# or with current stable version
+$ nimble install markdown@">= 0.8.0"
 
 # or with the latest version
 $ nimble install markdown@#head
@@ -30,7 +36,8 @@ echo(html)
 
 Below are some useful links:
 
-* The API documentation: <https://www.soasme.com/nim-markdown/markdown.html>
+* The API documentation: <https://www.soasme.com/nim-markdown/>
+* The dev guide: <https://enqueuezero.com/markdown-parser.html>
 * The cheat sheet: <https://github.com/adam-p/markdown-here/wiki/Markdown-Cheatsheet>
 
 ## Binary Usage
@@ -104,6 +111,8 @@ Features:
 
 Released:
 
+* v0.8.2, 3 Mar 2021, performance: use pre-compiled regex.
+* v0.8.1, 30 Dec 2019, bugfix: fixed compatibility with `--gc:arc`.
 * v0.8.0, 8 Sep 2019, bugfix: gcsafe with nim `--threads:on`.
 * v0.7.2, 8 Sep 2019, rename internal package to markdownpkg.
 * v0.7.1, 7 Sep 2019, removed useless constants.

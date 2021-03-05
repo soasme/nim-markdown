@@ -2,7 +2,7 @@
 
 `nim-markdown` is a Markdown Parser in the Nim world.
 
-[![Documentation](https://img.shields.io/badge/documentation-passed-brightgreen.svg?style=for-the-badge&longCache=true)](https://www.soasme.com/nim-markdown/markdown.html)
+[![Documentation](https://img.shields.io/badge/documentation-passed-brightgreen.svg?style=for-the-badge&longCache=true)](https://www.soasme.com/nim-markdown/)
 [![Build Status](https://travis-ci.org/soasme/nim-markdown.svg?branch=master)](https://travis-ci.org/soasme/nim-markdown)
 
 ## Install
@@ -36,7 +36,7 @@ echo(html)
 
 Below are some useful links:
 
-* The API documentation: <https://www.soasme.com/nim-markdown/markdown.html>
+* The API documentation: <https://www.soasme.com/nim-markdown/>
 * The dev guide: <https://enqueuezero.com/markdown-parser.html>
 * The cheat sheet: <https://github.com/adam-p/markdown-here/wiki/Markdown-Cheatsheet>
 

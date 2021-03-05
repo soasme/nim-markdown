@@ -71,7 +71,7 @@ from uri import encodeUrl
 from strutils import join, splitLines, repeat, replace,
   strip, split, multiReplace, startsWith, endsWith,
   parseInt, intToStr, splitWhitespace, contains
-from tables import Table, initTable, contains, `[]=`, `[]`
+from tables import Table, initTable, mgetOrPut, contains, `[]=`, `[]`
 import unicode except `strip`, `splitWhitespace`
 from lists import DoublyLinkedList, DoublyLinkedNode,
   initDoublyLinkedList, newDoublyLinkedNode, prepend, append,
@@ -80,6 +80,27 @@ from htmlgen import nil, p, br, em, strong, a, img, code, del, blockquote,
   li, ul, ol, pre, code, table, thead, tbody, th, tr, td, hr
 
 from markdownpkg/entities import htmlEntityToUtf8
+
+var precompiledExp {.threadvar.}: Table[string, re.Regex]
+
+template re(data: string): Regex = 
+  let tmpName = data
+  # We won't use mgetOrPut directly because otherwise Nim will lazily evaluate
+  # the argument for mgetOrPut so that we'll have no benefit
+  if tmpName in precompiledExp: 
+    precompiledExp[tmpName] 
+  else: 
+    precompiledExp.mgetOrPut(tmpName, re.re(tmpName))
+
+
+template re(data: string, flags: set[RegexFlag]): Regex = 
+  let tmpName = data
+  # We won't use mgetOrPut directly because otherwise Nim will lazily evaluate
+  # the argument for mgetOrPut so that we'll have no benefit
+  if tmpName in precompiledExp: 
+    precompiledExp[tmpName]  
+  else: 
+    precompiledExp.mgetOrPut(tmpName, re.re(tmpName, flags))
 
 type
   MarkdownError* = object of Exception ## The error object for markdown parsing and rendering.

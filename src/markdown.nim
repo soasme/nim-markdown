@@ -83,23 +83,20 @@ from markdownpkg/entities import htmlEntityToUtf8
 
 var precompiledExp {.threadvar.}: Table[string, re.Regex]
 
-template re(data: string): Regex = 
+template re(data: string): Regex =
   let tmpName = data
   # We won't use mgetOrPut directly because otherwise Nim will lazily evaluate
   # the argument for mgetOrPut so that we'll have no benefit
-  if tmpName in precompiledExp: 
-    precompiledExp[tmpName] 
-  else: 
+  if tmpName in precompiledExp:
+    precompiledExp[tmpName]
+  else:
     precompiledExp.mgetOrPut(tmpName, re.re(tmpName))
 
-
-template re(data: string, flags: set[RegexFlag]): Regex = 
+template re(data: string, flags: set[RegexFlag]): Regex =
   let tmpName = data
-  # We won't use mgetOrPut directly because otherwise Nim will lazily evaluate
-  # the argument for mgetOrPut so that we'll have no benefit
-  if tmpName in precompiledExp: 
-    precompiledExp[tmpName]  
-  else: 
+  if tmpName in precompiledExp:
+    precompiledExp[tmpName]
+  else:
     precompiledExp.mgetOrPut(tmpName, re.re(tmpName, flags))
 
 type

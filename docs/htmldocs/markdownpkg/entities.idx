@@ -1,0 +1,1 @@
+htmlEntityToUtf8	markdownpkg/entities.html#htmlEntityToUtf8,string	entities: htmlEntityToUtf8(s: string): string	

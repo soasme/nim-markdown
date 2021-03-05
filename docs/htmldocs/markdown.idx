@@ -1,0 +1,191 @@
+nim-markdown	markdown.html#nimminusmarkdown	 nim-markdown	
+MarkdownError	markdown.html#MarkdownError	markdown: MarkdownError	
+Parser	markdown.html#Parser	markdown: Parser	
+MarkdownConfig	markdown.html#MarkdownConfig	markdown: MarkdownConfig	
+BlockChunk	markdown.html#BlockChunk	ChunkKind.BlockChunk	
+LazyChunk	markdown.html#LazyChunk	ChunkKind.LazyChunk	
+InlineChunk	markdown.html#InlineChunk	ChunkKind.InlineChunk	
+ChunkKind	markdown.html#ChunkKind	markdown: ChunkKind	
+Chunk	markdown.html#Chunk	markdown: Chunk	
+Token	markdown.html#Token	markdown: Token	
+ParseResult	markdown.html#ParseResult	markdown: ParseResult	
+Document	markdown.html#Document	markdown: Document	
+Block	markdown.html#Block	markdown: Block	
+BlanklineParser	markdown.html#BlanklineParser	markdown: BlanklineParser	
+ParagraphParser	markdown.html#ParagraphParser	markdown: ParagraphParser	
+Paragraph	markdown.html#Paragraph	markdown: Paragraph	
+ReferenceParser	markdown.html#ReferenceParser	markdown: ReferenceParser	
+ThematicBreakParser	markdown.html#ThematicBreakParser	markdown: ThematicBreakParser	
+ThematicBreak	markdown.html#ThematicBreak	markdown: ThematicBreak	
+SetextHeadingParser	markdown.html#SetextHeadingParser	markdown: SetextHeadingParser	
+AtxHeadingParser	markdown.html#AtxHeadingParser	markdown: AtxHeadingParser	
+Heading	markdown.html#Heading	markdown: Heading	
+FencedCodeParser	markdown.html#FencedCodeParser	markdown: FencedCodeParser	
+IndentedCodeParser	markdown.html#IndentedCodeParser	markdown: IndentedCodeParser	
+CodeBlock	markdown.html#CodeBlock	markdown: CodeBlock	
+HtmlBlockParser	markdown.html#HtmlBlockParser	markdown: HtmlBlockParser	
+HtmlBlock	markdown.html#HtmlBlock	markdown: HtmlBlock	
+BlockquoteParser	markdown.html#BlockquoteParser	markdown: BlockquoteParser	
+Blockquote	markdown.html#Blockquote	markdown: Blockquote	
+UlParser	markdown.html#UlParser	markdown: UlParser	
+Ul	markdown.html#Ul	markdown: Ul	
+OlParser	markdown.html#OlParser	markdown: OlParser	
+Ol	markdown.html#Ol	markdown: Ol	
+Li	markdown.html#Li	markdown: Li	
+HtmlTableParser	markdown.html#HtmlTableParser	markdown: HtmlTableParser	
+HtmlTable	markdown.html#HtmlTable	markdown: HtmlTable	
+THead	markdown.html#THead	markdown: THead	
+TBody	markdown.html#TBody	markdown: TBody	
+TableRow	markdown.html#TableRow	markdown: TableRow	
+THeadCell	markdown.html#THeadCell	markdown: THeadCell	
+TBodyCell	markdown.html#TBodyCell	markdown: TBodyCell	
+Inline	markdown.html#Inline	markdown: Inline	
+TextParser	markdown.html#TextParser	markdown: TextParser	
+Text	markdown.html#Text	markdown: Text	
+CodeSpanParser	markdown.html#CodeSpanParser	markdown: CodeSpanParser	
+CodeSpan	markdown.html#CodeSpan	markdown: CodeSpan	
+SoftBreakParser	markdown.html#SoftBreakParser	markdown: SoftBreakParser	
+SoftBreak	markdown.html#SoftBreak	markdown: SoftBreak	
+HardBreakParser	markdown.html#HardBreakParser	markdown: HardBreakParser	
+HardBreak	markdown.html#HardBreak	markdown: HardBreak	
+StrikethroughParser	markdown.html#StrikethroughParser	markdown: StrikethroughParser	
+Strikethrough	markdown.html#Strikethrough	markdown: Strikethrough	
+EscapeParser	markdown.html#EscapeParser	markdown: EscapeParser	
+Escape	markdown.html#Escape	markdown: Escape	
+InlineHtmlParser	markdown.html#InlineHtmlParser	markdown: InlineHtmlParser	
+InlineHtml	markdown.html#InlineHtml	markdown: InlineHtml	
+HtmlEntityParser	markdown.html#HtmlEntityParser	markdown: HtmlEntityParser	
+HtmlEntity	markdown.html#HtmlEntity	markdown: HtmlEntity	
+LinkParser	markdown.html#LinkParser	markdown: LinkParser	
+Link	markdown.html#Link	markdown: Link	
+AutoLinkParser	markdown.html#AutoLinkParser	markdown: AutoLinkParser	
+AutoLink	markdown.html#AutoLink	markdown: AutoLink	
+ImageParser	markdown.html#ImageParser	markdown: ImageParser	
+Image	markdown.html#Image	markdown: Image	
+DelimiterParser	markdown.html#DelimiterParser	markdown: DelimiterParser	
+Delimiter	markdown.html#Delimiter	markdown: Delimiter	
+Em	markdown.html#Em	markdown: Em	
+Strong	markdown.html#Strong	markdown: Strong	
+State	markdown.html#State	markdown: State	
+skipParsing	markdown.html#skipParsing	markdown: skipParsing(): ParseResult	
+parse	markdown.html#parse.e,Parser,string,int	markdown: parse(this: Parser; doc: string; start: int): ParseResult	
+appendChild	markdown.html#appendChild,Token,Token	markdown: appendChild(token: Token; child: Token)	
+`$`	markdown.html#$,Chunk	markdown: `$`(chunk: Chunk): string	
+since	markdown.html#since,string,int,int	markdown: since(s: string; i: int; offset: int = -1): string	
+replaceInitialTabs	markdown.html#replaceInitialTabs,string	markdown: replaceInitialTabs(doc: string): string	
+isBlank	markdown.html#isBlank,string	markdown: isBlank(doc: string): bool	
+firstLine	markdown.html#firstLine,string	markdown: firstLine(doc: string): string	
+restLines	markdown.html#restLines.i,string	markdown: restLines(doc: string): string	
+escapeTag	markdown.html#escapeTag,string	markdown: escapeTag(doc: string): string	
+escapeQuote	markdown.html#escapeQuote,string	markdown: escapeQuote(doc: string): string	
+escapeAmpersandChar	markdown.html#escapeAmpersandChar,string	markdown: escapeAmpersandChar(doc: string): string	
+escapeAmpersandSeq	markdown.html#escapeAmpersandSeq,string	markdown: escapeAmpersandSeq(doc: string): string	
+escapeCode	markdown.html#escapeCode,string	markdown: escapeCode(doc: string): string	
+removeBlankLines	markdown.html#removeBlankLines,string	markdown: removeBlankLines(doc: string): string	
+escapeHTMLEntity	markdown.html#escapeHTMLEntity,string	markdown: escapeHTMLEntity(doc: string): string	
+escapeLinkUrl	markdown.html#escapeLinkUrl,string	markdown: escapeLinkUrl(url: string): string	
+escapeBackslash	markdown.html#escapeBackslash,string	markdown: escapeBackslash(doc: string): string	
+reFmt	markdown.html#reFmt,varargs[string]	markdown: reFmt(patterns: varargs[string]): Regex	
+toSeq	markdown.html#toSeq,DoublyLinkedList[Token]	markdown: toSeq(tokens: DoublyLinkedList[Token]): seq[Token]	
+`$`	markdown.html#$.e,Token	markdown: `$`(token: Token): string	
+`$`	markdown.html#$.e,CodeSpan	markdown: `$`(token: CodeSpan): string	
+`$`	markdown.html#$.e,SoftBreak	markdown: `$`(token: SoftBreak): string	
+`$`	markdown.html#$.e,HardBreak	markdown: `$`(token: HardBreak): string	
+`$`	markdown.html#$.e,Strikethrough	markdown: `$`(token: Strikethrough): string	
+`$`	markdown.html#$.e,ThematicBreak	markdown: `$`(token: ThematicBreak): string	
+`$`	markdown.html#$.e,Escape	markdown: `$`(token: Escape): string	
+`$`	markdown.html#$.e,InlineHtml	markdown: `$`(token: InlineHtml): string	
+`$`	markdown.html#$.e,HtmlEntity	markdown: `$`(token: HtmlEntity): string	
+`$`	markdown.html#$.e,Text	markdown: `$`(token: Text): string	
+`$`	markdown.html#$.e,AutoLink	markdown: `$`(token: AutoLink): string	
+`$`	markdown.html#$.e,CodeBlock	markdown: `$`(token: CodeBlock): string	
+`$`	markdown.html#$.e,HtmlBlock	markdown: `$`(token: HtmlBlock): string	
+`$`	markdown.html#$.e,Link	markdown: `$`(token: Link): string	
+toAlt	markdown.html#toAlt,Token	markdown: toAlt(token: Token): string	
+`$`	markdown.html#$.e,Image	markdown: `$`(token: Image): string	
+`$`	markdown.html#$.e,Em	markdown: `$`(token: Em): string	
+`$`	markdown.html#$.e,Strong	markdown: `$`(token: Strong): string	
+`$`	markdown.html#$.e,Paragraph	markdown: `$`(token: Paragraph): string	
+`$`	markdown.html#$.e,Heading	markdown: `$`(token: Heading): string	
+`$`	markdown.html#$.e,THeadCell	markdown: `$`(token: THeadCell): string	
+`$`	markdown.html#$.e,TBodyCell	markdown: `$`(token: TBodyCell): string	
+`$`	markdown.html#$.e,TableRow	markdown: `$`(token: TableRow): string	
+`$`	markdown.html#$.e,TBody	markdown: `$`(token: TBody): string	
+`$`	markdown.html#$.e,THead	markdown: `$`(token: THead): string	
+`$`	markdown.html#$.e,HtmlTable	markdown: `$`(token: HtmlTable): string	
+`$`	markdown.html#$.e,Li	markdown: `$`(token: Li): string	
+`$`	markdown.html#$.e,Ol	markdown: `$`(token: Ol): string	
+`$`	markdown.html#$.e,Ul	markdown: `$`(token: Ul): string	
+`$`	markdown.html#$.e,Blockquote	markdown: `$`(token: Blockquote): string	
+render	markdown.html#render,Token	markdown: render(token: Token): string	
+parseOrderedListItem	markdown.html#parseOrderedListItem,string,int,string,string,int	markdown: parseOrderedListItem(doc: string; start = 0; marker: var string;\n                     listItemDoc: var string; index: var int = 1): int	
+parseUnorderedListItem	markdown.html#parseUnorderedListItem,string,int,string,string	markdown: parseUnorderedListItem(doc: string; start = 0; marker: var string;\n                       listItemDoc: var string): int	
+parse	markdown.html#parse.e,UlParser,string,int	markdown: parse(this: UlParser; doc: string; start: int): ParseResult	
+parse	markdown.html#parse.e,OlParser,string,int	markdown: parse(this: OlParser; doc: string; start: int): ParseResult	
+parse	markdown.html#parse.e,ThematicBreakParser,string,int	markdown: parse(this: ThematicBreakParser; doc: string; start: int): ParseResult	
+getFence	markdown.html#getFence,string	markdown: getFence(doc: string): tuple[indent: int, fence: string, size: int]	
+parseCodeContent	markdown.html#parseCodeContent,string,int,string	markdown: parseCodeContent(doc: string; indent: int; fence: string): tuple[code: string,\n    size: int]	
+parseCodeInfo	markdown.html#parseCodeInfo,string	markdown: parseCodeInfo(doc: string): tuple[info: string, size: int]	
+parseTildeBlockCodeInfo	markdown.html#parseTildeBlockCodeInfo,string	markdown: parseTildeBlockCodeInfo(doc: string): tuple[info: string, size: int]	
+parse	markdown.html#parse.e,FencedCodeParser,string,int	markdown: parse(this: FencedCodeParser; doc: string; start: int): ParseResult	
+getIndentedCodeFirstLine	markdown.html#getIndentedCodeFirstLine,string	markdown: getIndentedCodeFirstLine(s: string): tuple[code: string, size: int]	
+getIndentedCodeRestLines	markdown.html#getIndentedCodeRestLines,string	markdown: getIndentedCodeRestLines(s: string): tuple[code: string, size: int]	
+parse	markdown.html#parse.e,IndentedCodeParser,string,int	markdown: parse(this: IndentedCodeParser; doc: string; start: int): ParseResult	
+parseIndentedCode	markdown.html#parseIndentedCode,string,int	markdown: parseIndentedCode(doc: string; start: int): ParseResult	
+getSetextHeading	markdown.html#getSetextHeading,string	markdown: getSetextHeading(s: string): tuple[level: int, doc: string, size: int]	
+getAtxHeading	markdown.html#getAtxHeading,string	markdown: getAtxHeading(s: string): tuple[level: int, doc: string, size: int]	
+parse	markdown.html#parse.e,BlanklineParser,string,int	markdown: parse(this: BlanklineParser; doc: string; start: int): ParseResult	
+parseBlankLine	markdown.html#parseBlankLine,string,int	markdown: parseBlankLine(doc: string; start: int): ParseResult	
+parseTableRow	markdown.html#parseTableRow,string	markdown: parseTableRow(doc: string): seq[string]	
+parseTableAligns	markdown.html#parseTableAligns,string	markdown: parseTableAligns(doc: string): tuple[aligns: seq[string], matched: bool]	
+parse	markdown.html#parse.e,HtmlTableParser,string,int	markdown: parse(this: HtmlTableParser; doc: string; start: int): ParseResult	
+parseHTMLBlockContent	markdown.html#parseHTMLBlockContent,string,string,string	markdown: parseHTMLBlockContent(doc: string; startPattern: string; endPattern: string;\n                      ignoreCase = false): tuple[html: string, size: int]	
+parseHtmlComment	markdown.html#parseHtmlComment,string	markdown: parseHtmlComment(s: string): tuple[html: string, size: int]	
+parseProcessingInstruction	markdown.html#parseProcessingInstruction,string	markdown: parseProcessingInstruction(s: string): tuple[html: string, size: int]	
+parseHtmlCData	markdown.html#parseHtmlCData,string	markdown: parseHtmlCData(s: string): tuple[html: string, size: int]	
+parseHtmlOpenCloseTag	markdown.html#parseHtmlOpenCloseTag,string	markdown: parseHtmlOpenCloseTag(s: string): tuple[html: string, size: int]	
+parseHtmlDeclaration	markdown.html#parseHtmlDeclaration,string	markdown: parseHtmlDeclaration(s: string): tuple[html: string, size: int]	
+parseHtmlTag	markdown.html#parseHtmlTag,string	markdown: parseHtmlTag(s: string): tuple[html: string, size: int]	
+parse	markdown.html#parse.e,HtmlBlockParser,string,int	markdown: parse(this: HtmlBlockParser; doc: string; start: int): ParseResult	
+isBlockquote	markdown.html#isBlockquote,string	markdown: isBlockquote(s: string): bool	
+parse	markdown.html#parse.e,BlockquoteParser,string,int	markdown: parse(this: BlockquoteParser; doc: string; start: int): ParseResult	
+parse	markdown.html#parse.e,ReferenceParser,string,int	markdown: parse(this: ReferenceParser; doc: string; start: int): ParseResult	
+isContinuationText	markdown.html#isContinuationText,string	markdown: isContinuationText(doc: string): bool	
+isUlEmptyListItem	markdown.html#isUlEmptyListItem,string	markdown: isUlEmptyListItem(doc: string): bool	
+isOlNo1ListItem	markdown.html#isOlNo1ListItem,string	markdown: isOlNo1ListItem(doc: string): bool	
+parse	markdown.html#parse.e,ParagraphParser,string,int	markdown: parse(this: ParagraphParser; doc: string; start: int): ParseResult	
+tipToken	markdown.html#tipToken,Token	markdown: tipToken(token: Token): Token	
+finalizeList	markdown.html#finalizeList,State,Token	markdown: finalizeList(state: State; token: Token)	
+apply	markdown.html#apply.e,Token,State,ParseResult	markdown: apply(this: Token; state: State; res: ParseResult): ParseResult	
+apply	markdown.html#apply.e,Ul,State,ParseResult	markdown: apply(this: Ul; state: State; res: ParseResult): ParseResult	
+apply	markdown.html#apply.e,Ol,State,ParseResult	markdown: apply(this: Ol; state: State; res: ParseResult): ParseResult	
+apply	markdown.html#apply.e,Blockquote,State,ParseResult	markdown: apply(this: Blockquote; state: State; res: ParseResult): ParseResult	
+apply	markdown.html#apply.e,Reference,State,ParseResult	markdown: apply(this: Reference; state: State; res: ParseResult): ParseResult	
+parse	markdown.html#parse.e,TextParser,string,int	markdown: parse(this: TextParser; doc: string; start: int): ParseResult	
+parse	markdown.html#parse.e,SoftBreakParser,string,int	markdown: parse(this: SoftBreakParser; doc: string; start: int): ParseResult	
+parse	markdown.html#parse.e,AutoLinkParser,string,int	markdown: parse(this: AutoLinkParser; doc: string; start: int): ParseResult	
+scanInlineDelimiters	markdown.html#scanInlineDelimiters,string,int,Delimiter	markdown: scanInlineDelimiters(doc: string; start: int; delimiter: var Delimiter)	
+parse	markdown.html#parse.e,DelimiterParser,string,int	markdown: parse(this: DelimiterParser; doc: string; start: int): ParseResult	
+getLinkDestination	markdown.html#getLinkDestination,string,int	markdown: getLinkDestination(doc: string; start: int): tuple[slice: Slice[int], size: int]	
+getLinkTitle	markdown.html#getLinkTitle,string,int	markdown: getLinkTitle(doc: string; start: int): tuple[slice: Slice[int], size: int]	
+normalizeLabel	markdown.html#normalizeLabel,string	markdown: normalizeLabel(label: string): string	
+getLinkLabel	markdown.html#getLinkLabel,string,int	markdown: getLinkLabel(doc: string; start: int): tuple[label: string, size: int]	
+getLinkText	markdown.html#getLinkText,string,int,bool	markdown: getLinkText(doc: string; start: int; allowNested: bool = false): tuple[\n    slice: Slice[int], size: int]	
+apply	markdown.html#apply.e,Link,State,ParseResult	markdown: apply(this: Link; state: State; res: ParseResult): ParseResult	
+parse	markdown.html#parse.e,LinkParser,string,int	markdown: parse(this: LinkParser; doc: string; start: int): ParseResult	
+apply	markdown.html#apply.e,Image,State,ParseResult	markdown: apply(this: Image; state: State; res: ParseResult): ParseResult	
+parse	markdown.html#parse.e,ImageParser,string,int	markdown: parse(this: ImageParser; doc: string; start: int): ParseResult	
+parse	markdown.html#parse.e,HtmlEntityParser,string,int	markdown: parse(this: HtmlEntityParser; doc: string; start: int): ParseResult	
+parse	markdown.html#parse.e,EscapeParser,string,int	markdown: parse(this: EscapeParser; doc: string; start: int): ParseResult	
+parse	markdown.html#parse.e,InlineHtmlParser,string,int	markdown: parse(this: InlineHtmlParser; doc: string; start: int): ParseResult	
+parse	markdown.html#parse.e,HardBreakParser,string,int	markdown: parse(this: HardBreakParser; doc: string; start: int): ParseResult	
+parse	markdown.html#parse.e,CodeSpanParser,string,int	markdown: parse(this: CodeSpanParser; doc: string; start: int): ParseResult	
+parse	markdown.html#parse.e,StrikethroughParser,string,int	markdown: parse(this: StrikethroughParser; doc: string; start: int): ParseResult	
+removeDelimiter	markdown.html#removeDelimiter,DoublyLinkedNode[Delimiter]	markdown: removeDelimiter(delimiter: var DoublyLinkedNode[Delimiter])	
+getDelimiterStack	markdown.html#getDelimiterStack,Token	markdown: getDelimiterStack(token: Token): DoublyLinkedList[Delimiter]	
+processEmphasis	markdown.html#processEmphasis,State,Token	markdown: processEmphasis(state: State; token: Token)	
+parse	markdown.html#parse,State,Token	markdown: parse(state: State; token: Token)	
+initCommonmarkConfig	markdown.html#initCommonmarkConfig	markdown: initCommonmarkConfig(escape = true; keepHtml = true; blockParsers = @[\n    ReferenceParser(), ThematicBreakParser(), BlockquoteParser(), UlParser(),\n    OlParser(), IndentedCodeParser(), FencedCodeParser(), HtmlBlockParser(),\n    AtxHeadingParser(), SetextHeadingParser(), BlanklineParser(),\n    ParagraphParser()]; inlineParsers = @[DelimiterParser(), ImageParser(),\n    AutoLinkParser(), LinkParser(), HtmlEntityParser(), InlineHtmlParser(),\n    EscapeParser(), CodeSpanParser(), HardBreakParser(), SoftBreakParser(),\n    TextParser()]): MarkdownConfig	
+initGfmConfig	markdown.html#initGfmConfig	markdown: initGfmConfig(escape = true; keepHtml = true; blockParsers = @[\n    ReferenceParser(), ThematicBreakParser(), BlockquoteParser(), UlParser(),\n    OlParser(), IndentedCodeParser(), FencedCodeParser(), HtmlBlockParser(),\n    HtmlTableParser(), AtxHeadingParser(), SetextHeadingParser(),\n    BlanklineParser(), ParagraphParser()]; inlineParsers = @[DelimiterParser(),\n    ImageParser(), AutoLinkParser(), LinkParser(), HtmlEntityParser(),\n    InlineHtmlParser(), EscapeParser(), StrikethroughParser(), CodeSpanParser(),\n    HardBreakParser(), SoftBreakParser(), TextParser()]): MarkdownConfig	
+markdown	markdown.html#markdown,string,MarkdownConfig,Token	markdown: markdown(doc: string; config: MarkdownConfig = nil; root: Token = Document()): string	
+readCLIOptions	markdown.html#readCLIOptions	markdown: readCLIOptions(): MarkdownConfig	

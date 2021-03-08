@@ -64,7 +64,7 @@
 ##
 
 import re
-from sequtils import map, keepIf, anyIt
+from sequtils import map, keepIf, anyIt, concat
 from sugar import `->`, `=>`
 from strformat import fmt, `&`
 from uri import encodeUrl
@@ -125,7 +125,7 @@ type
   Token* = ref object of RootObj
     doc*: string
     pos*: int
-    children*: DoublyLinkedList[Token]
+    children*: seq[Token]
     chunks*: seq[Chunk]
 
   ParseResult* = ref object
@@ -274,7 +274,7 @@ proc parseHtmlCData*(s: string): tuple[html: string, size: int];
 proc parseHtmlDeclaration*(s: string): tuple[html: string, size: int];
 proc parseHtmlTag*(s: string): tuple[html: string, size: int];
 proc parseHtmlOpenCloseTag*(s: string): tuple[html: string, size: int];
-proc toStringSeq(tokens: DoublyLinkedList[Token]): seq[string];
+proc toStringSeq(tokens: seq[Token]): seq[string];
 
 proc skipParsing*(): ParseResult = ParseResult(token: nil, pos: -1)
 
@@ -282,7 +282,7 @@ method parse*(this: Parser, doc: string, start: int): ParseResult {.base, locks:
   ParseResult(token: Token(), pos: doc.len)
 
 proc appendChild*(token: Token, child: Token) =
-  token.children.append(child)
+  token.children.add(child)
 
 const THEMATIC_BREAK_RE = r" {0,3}([-*_])(?:[ \t]*\1){2,}[ \t]*(?:\n+|$)"
 
@@ -453,7 +453,7 @@ proc reFmt*(patterns: varargs[string]): Regex =
     s &= p
   re(s)
 
-proc toSeq*(tokens: DoublyLinkedList[Token]): seq[Token] =
+proc toSeq*(tokens: seq[Token]): seq[Token] =
   result = newSeq[Token]()
   for token in tokens.items:
     result.add(token)
@@ -528,7 +528,7 @@ method `$`*(token: Em): string = em(token.children.toStringSeq.join(""))
 method `$`*(token: Strong): string = strong(token.children.toStringSeq.join(""))
 
 method `$`*(token: Paragraph): string =
-  if token.children.head == nil: ""
+  if token.children.len() == 0: ""
   elif token.loose: p(token.children.toStringSeq.join(""))
   else: token.children.toStringSeq.join("")
 
@@ -558,33 +558,26 @@ method `$`*(token: TBody): string =
   tbody("\n", rows)
 
 method `$`*(token: THead): string =
-  let tr = $token.children.head.value # table>thead>tr
+  let tr = $token.children[0] # table>thead>tr
   thead("\n", tr, "\n")
 
 method `$`*(token: HtmlTable): string =
-  let thead = $token.children.head.value # table>thead
-  var tbody = $token.children.tail.value
+  let thead = $token.children[0] # table>thead
+  var tbody = $token.children[1..^1]
   if tbody != "": tbody = "\n" & tbody.strip
   table("\n", thead, tbody)
 
 proc renderListItemChildren(token: Li): string =
-  var html: string
-  if token.children.head == nil: return ""
-
-  for child_node in token.children.nodes:
-    var child_token = child_node.value
+  result = token.children.map(proc (child_token: Token): string =
     if child_token of Paragraph and not Paragraph(child_token).loose:
-      if child_node.prev != nil:
-        result &= "\n"
-      result &= $child_token
-      if child_node.next == nil:
-        return result
+      result = $child_token
     else:
-      html = $child_token
+      let html = $child_token
       if html != "":
         result &= "\n"
         result &= html
-  if token.loose or token.children.tail != nil:
+  ).join("")
+  if token.loose or token.children.len() > 1:
     result &= "\n"
 
 method `$`*(token: Li): string =
@@ -602,7 +595,7 @@ method `$`*(token: Ul): string =
 method `$`*(token: Blockquote): string =
   blockquote("\n", render(token))
 
-proc toStringSeq(tokens: DoublyLinkedList[Token]): seq[string] =
+proc toStringSeq(tokens: seq[Token]): seq[string] =
   tokens.toSeq.map((t: Token) => $t)
 
 proc render*(token: Token): string =
@@ -620,11 +613,11 @@ proc endsWithBlankLine(token: Token): bool =
     token.doc.find(re"\n\n$") != -1
 
 proc parseLoose(token: Token): bool =
-  for node in token.children.nodes:
-    if node.next != nil and node.value.endsWithBlankLine:
+  for tix, tok in token.children:
+    if tix != token.children.len() - 1 and tok.endsWithBlankLine:
       return true
-    for itemNode in node.value.children.nodes:
-      if itemNode.next != nil and itemNode.value.endsWithBlankLine:
+    for iix, itemNode in tok.children:
+      if iix != tok.children.len() - 1 and itemNode.endsWithBlankLine:
         return true
   return false
 
@@ -1519,10 +1512,8 @@ method parse*(this: ParagraphParser, doc: string, start: int): ParseResult =
 
 
 proc tipToken*(token: Token): Token =
-  var tip: Token = token
-  while tip.children.tail != nil:
-    tip = tip.children.tail.value
-  return tip
+  if token.children.len() == 0: return nil
+  return token.children[^1]
 
 proc parseContainerBlock(state: State, token: Token): ParseResult =
   #var doc: string
@@ -1538,10 +1529,10 @@ proc parseContainerBlock(state: State, token: Token): ParseResult =
       token.doc = chunk.doc
       var t = Token(doc: chunk.doc)
       parseBlock(state, t)
-      var p = t.children.head
-      if p != nil and p.value of Paragraph and token.tipToken of Paragraph:
-        token.tipToken.doc &= p.value.doc
-        t.children.remove(p)
+      var p = t.children[0]
+      if p != nil and p of Paragraph and token.tipToken of Paragraph:
+        token.tipToken.doc &= p.doc
+        t.children.delete(0)
       for child in t.children:
         token.appendChild(child)
       if not (token.tipToken of Paragraph):
@@ -2315,32 +2306,30 @@ proc processEmphasis*(state: State, token: Token) =
       else:
         emToken = Em()
 
-      var emNode = newDoublyLinkedNode(emToken)
-      for childNode in token.children.nodes:
-        if childNode.value == opener.value.token:
-          emToken.children.head = childNode.next
-          if childNode.next != nil:
-            childNode.next.prev = nil
-          childNode.next = emNode
-          emNode.prev = childNode
-        if childNode.value == closer.value.token:
-          emToken.children.tail = childNode.prev
-          if childNode.prev != nil:
-            childNode.prev.next = nil
-          childNode.prev = emNode
-          emNode.next = childNode
+      var sectionStart = -1
+      var sectionEnd = -1
+      for ix, current in token.children:
+        if current == opener.value.token:
+          sectionStart = ix
+        elif current == closer.value.token:
+          sectionEnd = ix
+          break
+
+      if sectionStart != -1 and sectionEnd != -1:
+        emToken.children = toSeq token.children[sectionStart + 1..sectionEnd - 1]
+        token.children = concat(token.children[0..sectionStart], @[emToken], token.children[sectionEnd..^1])
 
       # remove elts between opener and closer in delimiters stack
       if opener != nil and opener.next != closer:
         opener.next = closer
         closer.prev = opener
 
-      for childNode in token.children.nodes:
-        if opener != nil and childNode.value == opener.value.token:
+      for childNode in token.children:
+        if opener != nil and childNode == opener.value.token:
           # remove opener if no text left
           if opener.value.num == 0:
             removeDelimiter(opener)
-        if closer != nil and childNode.value == closer.value.token:
+        if closer != nil and childNode == closer.value.token:
           # remove closer if no text left
           if closer.value.num == 0:
             var tmp = closer.next
@@ -2391,7 +2380,7 @@ proc parseLeafBlockInlines(state: State, token: Token) =
 proc isContainerToken(token: Token): bool =
   if token of Inline: return false
   if token of Document: return true
-  if token of Block: return token.children.head != nil
+  if token of Block: return token.children.len() != 0
 
 proc parseInline(state: State, token: Token) =
   if isContainerToken(token):

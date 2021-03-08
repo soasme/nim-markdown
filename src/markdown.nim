@@ -676,15 +676,15 @@ proc parseOrderedListItem*(doc: string, start=0, marker: var string, listItemDoc
 
 proc parseUnorderedListItem*(doc: string, start=0, marker: var string, listItemDoc: var string): int =
   #  thematic break takes precedence over list item.
-  if doc[start ..< doc.len].matchLen(re(r"^" & THEMATIC_BREAK_RE)) != -1:
+  if matchLen(doc, re(THEMATIC_BREAK_RE), start) != -1:
     return -1
 
   # OL needs to include <empty> as well.
-  let markerRegex = re"^(?P<leading> {0,3})(?P<marker>[*\-+])(?:(?P<empty> *(?:\n|$))|(?<indent>(?: +|\t+))([^\n]+(?:\n|$)))"
+  let markerRegex = re"(?P<leading> {0,3})(?P<marker>[*\-+])(?:(?P<empty> *(?:\n|$))|(?<indent>(?: +|\t+))([^\n]+(?:\n|$)))"
   var matches: array[5, string]
   var pos = start
 
-  var firstLineSize = doc[pos ..< doc.len].matchLen(markerRegex, matches=matches)
+  var firstLineSize = matchLen(doc, markerRegex, matches=matches, pos)
   if firstLineSize == -1:
     return -1
 
@@ -714,7 +714,7 @@ proc parseUnorderedListItem*(doc: string, start=0, marker: var string, listItemD
 
   var size = 0
   while pos < doc.len:
-    size = doc[pos ..< doc.len].matchLen(re(r"^(?:[ \t]*| {" & fmt"{padding}" & r"}([^\n]*))(\n|$)"), matches=matches)
+    size = matchLen(doc, re(r"(?:[ \t]*| {" & fmt"{padding}" & r"}([^\n]*))(\n|$)"), matches=matches, start=pos)
     if size != -1:
       listItemDoc &= matches[0]
       listItemDoc &= matches[1]

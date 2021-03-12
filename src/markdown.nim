@@ -327,6 +327,15 @@ const HTML_TAG = (
 
 const HTML_OPEN_CLOSE_TAG_START = "^ {0,3}(?:" & OPEN_TAG & "|" & CLOSE_TAG & r")\s*$"
 const HTML_OPEN_CLOSE_TAG_END = r"^\n?$"
+let HTML_SEQUENCES = @[
+  (HTML_SCRIPT_START, HTML_SCRIPT_END),
+  (HTML_COMMENT_START, HTML_COMMENT_END),
+  (HTML_PROCESSING_INSTRUCTION_START, HTML_PROCESSING_INSTRUCTION_END),
+  (HTML_DECLARATION_START, HTML_DECLARATION_END),
+  (HTML_CDATA_START, HTML_CDATA_END),
+  (HTML_TAG_START, HTML_TAG_END),
+  (HTML_OPEN_CLOSE_TAG_START, HTML_OPEN_CLOSE_TAG_END),
+]
 
 proc `$`*(chunk: Chunk): string =
   fmt"{chunk.kind}{[chunk.doc]}"
@@ -1231,59 +1240,46 @@ proc parseHtmlTag*(s: string): tuple[html: string, size: int] =
   return s.parseHTMLBlockContent(HTML_TAG_START, HTML_TAG_END)
 
 method parse*(this: HtmlBlockParser, doc: string, start: int): ParseResult {.locks: "unknown".} =
-  var lit = doc.since(start)
+  var html = ""
+  var pos = 0
+  var size = -1
+  let docLines = doc.since(start).splitLines(keepEol=true)
+  if docLines.len == 0:
+    return ParseResult(token: nil, pos: -1)
+  let firstLine = docLines[0]
 
-  var res = lit.parseHtmlScript()
-  if res.size != -1:
+  var startRe: Regex = nil
+  var endRe: Regex = nil
+
+  for patterns in HTML_SEQUENCES:
+    startRe = re(patterns[0], {RegexFlag.reIgnoreCase})
+    let size = firstLine.matchLen(startRe)
+    if size != -1:
+      endRe = re(patterns[1], {RegexFlag.reIgnoreCase})
+      break
+
+  if endRe == nil:
+    return ParseResult(token: nil, pos: -1)
+
+  html = firstLine
+  size = firstLine.find(endRe)
+  if size != -1:
     return ParseResult(
-      token: HtmlBlock(doc: res.html),
-      pos: start+res.size
+      token: HtmlBlock(doc: html),
+      pos: start+html.len
     )
+  else:
+    pos = firstLine.len
+  for line in docLines[1 ..< docLines.len]:
+    pos += line.len
+    html &= line
+    if line.find(endRe) != -1:
+      break
 
-  res = lit.parseHtmlComment()
-  if res.size != -1:
-    return ParseResult(
-      token: HtmlBlock(doc: res.html),
-      pos: start+res.size
-    )
-
-  res = lit.parseProcessingInstruction()
-  if res.size != -1:
-    return ParseResult(
-      token: HtmlBlock(doc: res.html),
-      pos: start+res.size
-    )
-
-  res = lit.parseHtmlDeclaration()
-  if res.size != -1:
-    return ParseResult(
-      token: HtmlBlock(doc: res.html),
-      pos: start+res.size
-    )
-
-  res = lit.parseHtmlCData()
-  if res.size != -1:
-    return ParseResult(
-      token: HtmlBlock(doc: res.html),
-      pos: start+res.size
-    )
-
-  res = lit.parseHtmlTag()
-  if res.size != -1:
-    return ParseResult(
-      token: HtmlBlock(doc: res.html),
-      pos: start+res.size
-    )
-
-  res = lit.parseHtmlOpenCloseTag()
-  if res.size != -1:
-    return ParseResult(
-      token: HtmlBlock(doc: res.html),
-      pos: start+res.size
-    )
-
-
-  return ParseResult(token: nil, pos: -1)
+  return ParseResult(
+    token: HtmlBlock(doc: html),
+    pos: start+pos
+  )
 
 const rBlockquoteMarker = r"^( {0,3}>)"
 

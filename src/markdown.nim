@@ -83,6 +83,8 @@ from markdownpkg/entities import htmlEntityToUtf8
 
 var precompiledExp {.threadvar.}: Table[string, re.Regex]
 
+
+
 template re(data: string): Regex =
   let tmpName = data
   # We won't use mgetOrPut directly because otherwise Nim will lazily evaluate
@@ -340,11 +342,7 @@ let HTML_SEQUENCES = @[
 proc `$`*(chunk: Chunk): string =
   fmt"{chunk.kind}{[chunk.doc]}"
 
-proc since*(s: string, i: int, offset: int = -1): string =
-  if offset == -1: s[i..<s.len] else: s[i..<i+offset]
-
 proc replaceInitialTabs*(doc: string): string =
-  var res: seq[string]
   var n: int
   for line in doc.splitLines(keepEol=true):
     n = 0
@@ -353,8 +351,11 @@ proc replaceInitialTabs*(doc: string): string =
         n += 1
       else:
         break
-    res.add(" ".repeat(n*4) & line[n..<line.len])
-  return res.join("")
+    if n == 0:
+      add result, line
+    else:
+      add result, " ".repeat(n*4)
+      add result, substr(line, n, line.len)
 
 proc preProcessing(state: State, token: Token) =
   token.doc = token.doc.replace(re"\r\n|\r", "\n")
@@ -638,11 +639,11 @@ proc parseLoose(token: Token): bool =
   return false
 
 proc parseOrderedListItem*(doc: string, start=0, marker: var string, listItemDoc: var string, index: var int = 1): int =
-  let markerRegex = re"^(?P<leading> {0,3})(?<index>\d{1,9})(?P<marker>\.|\))(?: *$| *\n|(?P<indent> +)([^\n]+(?:\n|$)))"
+  let markerRegex = re"(?P<leading> {0,3})(?<index>\d{1,9})(?P<marker>\.|\))(?: *$| *\n|(?P<indent> +)([^\n]+(?:\n|$)))"
   var matches: array[5, string]
   var pos = start
 
-  var firstLineSize = doc[pos ..< doc.len].matchLen(markerRegex, matches=matches)
+  var firstLineSize = doc.matchLen(markerRegex, matches, pos)
   if firstLineSize == -1:
     return -1
 
@@ -669,7 +670,7 @@ proc parseOrderedListItem*(doc: string, start=0, marker: var string, listItemDoc
 
   var size = 0
   while pos < doc.len:
-    size = doc[pos ..< doc.len].matchLen(re(r"^(?:\s*| {" & fmt"{padding}" & r"}([^\n]*))(\n|$)"), matches=matches)
+    size = doc.matchLen(re(r"(?:\s*| {" & fmt"{padding}" & r"}([^\n]*))(\n|$)"), matches, pos)
     if size != -1:
       listItemDoc &= matches[0]
       listItemDoc &= matches[1]
@@ -677,7 +678,7 @@ proc parseOrderedListItem*(doc: string, start=0, marker: var string, listItemDoc
         pos += size
         break
     elif listItemDoc.find(re"\n{2,}$") == -1:
-      var line = doc.since(pos).firstLine
+      var line = substr(doc, pos, doc.len-1).firstLine
       if line.isContinuationText:
         listItemDoc &= line
         size = line.len
@@ -692,15 +693,15 @@ proc parseOrderedListItem*(doc: string, start=0, marker: var string, listItemDoc
 
 proc parseUnorderedListItem*(doc: string, start=0, marker: var string, listItemDoc: var string): int =
   #  thematic break takes precedence over list item.
-  if doc[start ..< doc.len].matchLen(re(r"^" & THEMATIC_BREAK_RE)) != -1:
+  if doc.matchLen(re(THEMATIC_BREAK_RE), start) != -1:
     return -1
 
   # OL needs to include <empty> as well.
-  let markerRegex = re"^(?P<leading> {0,3})(?P<marker>[*\-+])(?:(?P<empty> *(?:\n|$))|(?<indent>(?: +|\t+))([^\n]+(?:\n|$)))"
+  let markerRegex = re"(?P<leading> {0,3})(?P<marker>[*\-+])(?:(?P<empty> *(?:\n|$))|(?<indent>(?: +|\t+))([^\n]+(?:\n|$)))"
   var matches: array[5, string]
   var pos = start
 
-  var firstLineSize = doc[pos ..< doc.len].matchLen(markerRegex, matches=matches)
+  var firstLineSize = doc.matchLen(markerRegex, matches, pos)
   if firstLineSize == -1:
     return -1
 
@@ -730,7 +731,7 @@ proc parseUnorderedListItem*(doc: string, start=0, marker: var string, listItemD
 
   var size = 0
   while pos < doc.len:
-    size = doc[pos ..< doc.len].matchLen(re(r"^(?:[ \t]*| {" & fmt"{padding}" & r"}([^\n]*))(\n|$)"), matches=matches)
+    size = doc.matchLen(re(r"(?:[ \t]*| {" & fmt"{padding}" & r"}([^\n]*))(\n|$)"), matches, pos)
     if size != -1:
       listItemDoc &= matches[0]
       listItemDoc &= matches[1]
@@ -738,7 +739,7 @@ proc parseUnorderedListItem*(doc: string, start=0, marker: var string, listItemD
         pos += size
         break
     elif listItemDoc.find(re"\n{2,}$") == -1:
-      var line = doc.since(pos).firstLine
+      var line = substr(doc, pos, doc.len-1).firstLine
       if line.isContinuationText:
         listItemDoc &= line
         size = line.len
@@ -821,24 +822,24 @@ method parse*(this: OlParser, doc: string, start: int): ParseResult =
 
   return ParseResult(token: olToken, pos: pos)
 
-proc getThematicBreak(s: string): tuple[size: int] =
-  return (size: s.matchLen(re(r"^" & THEMATIC_BREAK_RE)))
+proc getThematicBreak(doc: string, start: int = 0): tuple[size: int] =
+  return (size: doc.matchLen(re(THEMATIC_BREAK_RE), start))
 
 method parse*(this: ThematicBreakParser, doc: string, start: int): ParseResult {.locks: "unknown".} =
-  let res = doc.since(start).getThematicBreak()
+  let res = doc.getThematicBreak(start)
   if res.size == -1: return ParseResult(token: nil, pos: -1)
   return ParseResult(
     token: ThematicBreak(),
     pos: start+res.size
   )
 
-proc getFence*(doc: string): tuple[indent: int, fence: string, size: int] =
+proc getFence*(doc: string, start: int = 0): tuple[indent: int, fence: string, size: int] =
   var matches: array[2, string]
-  let size = doc.matchLen(re"((?: {0,3})?)(`{3,}|~{3,})", matches=matches)
+  let size = doc.matchLen(re"((?: {0,3})?)(`{3,}|~{3,})", matches, start)
   if size == -1: return (-1, "", -1)
   return (
     indent: matches[0].len,
-    fence: doc[0 ..< size].strip,
+    fence: doc[start ..< start+size].strip,
     size: size
   )
 
@@ -860,18 +861,18 @@ proc parseCodeContent*(doc: string, indent: int, fence: string): tuple[code: str
     pos += line.len
   return (codeContent, pos)
 
-proc parseCodeInfo*(doc: string): tuple[info: string, size: int] =
+proc parseCodeInfo*(doc: string, start: int = 0): tuple[info: string, size: int] =
   var matches: array[1, string]
-  let size = doc.matchLen(re"(?: |\t)*([^`\n]*)?(?:\n|$)", matches=matches)
+  let size = doc.matchLen(re"(?: |\t)*([^`\n]*)?(?:\n|$)", matches, start)
   if size == -1:
     return ("", -1)
   for item in matches[0].splitWhitespace:
     return (item, size)
   return ("", size)
 
-proc parseTildeBlockCodeInfo*(doc: string): tuple[info: string, size: int] =
+proc parseTildeBlockCodeInfo*(doc: string, start: int = 0): tuple[info: string, size: int] =
   var matches: array[1, string]
-  let size = doc.matchLen(re"(?: |\t)*(.*)?(?:\n|$)", matches=matches)
+  let size = doc.matchLen(re"(?: |\t)*(.*)?(?:\n|$)", matches, start)
   if size == -1:
     return ("", -1)
   for item in matches[0].splitWhitespace:
@@ -880,7 +881,7 @@ proc parseTildeBlockCodeInfo*(doc: string): tuple[info: string, size: int] =
 
 method parse*(this: FencedCodeParser, doc: string, start: int): ParseResult {.locks: "unknown".} =
   var pos = start
-  var fenceRes = doc.since(start).getFence()
+  var fenceRes = doc.getFence(start)
   if fenceRes.size == -1: return ParseResult(token: nil, pos: -1)
   var indent = fenceRes.indent
   var fence = fenceRes.fence
@@ -889,18 +890,18 @@ method parse*(this: FencedCodeParser, doc: string, start: int): ParseResult {.lo
   var infoSize = -1
   var info: string
   if fence.startsWith("`"):
-    (info, infoSize) = doc.since(pos).parseCodeInfo()
+    (info, infoSize) = doc.parseCodeInfo(pos)
   else:
-    (info, infosize) = doc.since(pos).parseTildeBlockCodeInfo()
+    (info, infosize) = doc.parseTildeBlockCodeInfo(pos)
   if infoSize == -1: return ParseResult(token: nil, pos: -1)
 
   pos += infoSize
 
-  var res = doc.since(pos).parseCodeContent(indent, fence)
+  var res = substr(doc, pos, doc.len-1).parseCodeContent(indent, fence)
   var codeContent = res.code
   pos += res.size
 
-  if doc.since(pos).matchLen(re"\n$") != -1:
+  if doc.matchLen(re"\n$", pos) != -1:
     pos += 1
 
   let codeToken = CodeBlock(
@@ -934,11 +935,12 @@ proc getIndentedCodeRestLines*(s: string): tuple[code: string, size: int] =
   return (code: code, size: size)
 
 method parse*(this: IndentedCodeParser, doc: string, start: int): ParseResult {.locks: "unknown".} =
-  var res = doc.since(start).getIndentedCodeFirstLine()
+  var rest = substr(doc, start, doc.len-1)
+  var res = rest.getIndentedCodeFirstLine()
   if res.size == -1: return ParseResult(token: nil, pos: -1)
   var code = res.code
   var pos = start + res.size
-  res = doc.since(start).getIndentedCodeRestLines()
+  res = rest.getIndentedCodeRestLines()
   code &= res.code
   code = code.removeBlankLines
   pos += res.size
@@ -982,7 +984,7 @@ proc getSetextHeading*(s: string): tuple[level: int, doc: string, size: int] =
   return (level: level, doc: doc, size: size)
 
 method parse(this: SetextHeadingParser, doc: string, start: int): ParseResult {.locks: "unknown".} =
-  let res = doc.since(start).getSetextHeading()
+  let res = substr(doc, start, doc.len-1).getSetextHeading()
   if res.size == -1: return ParseResult(token: nil, pos: -1)
   return ParseResult(
     token: Heading(
@@ -994,12 +996,9 @@ method parse(this: SetextHeadingParser, doc: string, start: int): ParseResult {.
 
 const ATX_HEADING_RE = r" {0,3}(#{1,6})([ \t]+)?(?(2)([^\n]*?))([ \t]+)?(?(4)#*) *(?:\n+|$)"
 
-proc getAtxHeading*(s: string): tuple[level: int, doc: string, size: int] =
+proc getAtxHeading*(s: string, start: int = 0): tuple[level: int, doc: string, size: int] =
   var matches: array[4, string]
-  let size = s.matchLen(
-    re(r"^" & ATX_HEADING_RE),
-    matches=matches
-  )
+  let size = s.matchLen(re(ATX_HEADING_RE), matches, start)
   if size == -1:
     return (level: 0, doc: "", size: -1)
 
@@ -1008,7 +1007,7 @@ proc getAtxHeading*(s: string): tuple[level: int, doc: string, size: int] =
   return (level: level, doc: doc, size: size)
 
 method parse(this: AtxHeadingParser, doc: string, start: int = 0): ParseResult {.locks: "unknown".} =
-  let res = doc.since(start).getAtxHeading()
+  let res = doc.getAtxHeading(start)
   if res.size == -1: return ParseResult(token: nil, pos: -1)
   return ParseResult(
     token: Heading(
@@ -1019,9 +1018,9 @@ method parse(this: AtxHeadingParser, doc: string, start: int = 0): ParseResult {
   )
 
 method parse*(this: BlanklineParser, doc: string, start: int): ParseResult {.locks: "unknown".} =
-  let size = doc.since(start).matchLen(re(r"^((?:\s*\n)+)"))
+  let size = doc.matchLen(re(r"((?:\s*\n)+)"), start)
   if size == -1: return ParseResult(token: nil, pos: -1)
-  let token = Token(doc: doc.since(start, offset=size))
+  let token = Token(doc: doc[start ..< start+size])
   return ParseResult(token: token, pos: start+size)
 
 proc parseBlankLine*(doc: string, start: int): ParseResult =
@@ -1106,7 +1105,7 @@ method parse*(this: HtmlTableParser, doc: string, start: int): ParseResult {.loc
   #   extract tbody
   # construct token.
   var pos = start
-  let lines = doc.since(start).splitLines(keepEol=true)
+  let lines = substr(doc, start, doc.len-1).splitLines(keepEol=true)
   if lines.len < 2:
     return ParseResult(token: nil, pos: -1)
 
@@ -1243,7 +1242,7 @@ method parse*(this: HtmlBlockParser, doc: string, start: int): ParseResult {.loc
   var html = ""
   var pos = 0
   var size = -1
-  let docLines = doc.since(start).splitLines(keepEol=true)
+  let docLines = substr(doc, start, doc.len-1).splitLines(keepEol=true)
   if docLines.len == 0:
     return ParseResult(token: nil, pos: -1)
   let firstLine = docLines[0]
@@ -1286,17 +1285,22 @@ const rBlockquoteMarker = r"^( {0,3}>)"
 proc isBlockquote*(s: string): bool = s.contains(re(rBlockquoteMarker))
 
 proc consumeBlockquoteMarker(doc: string): string =
-  var s: string
+  var r: string
   for line in doc.splitLines(keepEol=true):
-    s = line.replacef(re"^ {0,3}>(.*)", "$1")
-    if s.startsWith(" "):
-      s = s.since(1)
-    elif s.startsWith("\t"):
-      s = s.replaceInitialTabs.since(2)
-    result &= s
+    r = line.replacef(re"^ {0,3}>(.*)", "$1")
+    if r.len == 0:
+      continue
+    case r[0]:
+      of ' ':
+        add result, substr(r, 1, r.len-1)
+      of '\t':
+        r = r.replaceInitialTabs
+        add result, substr(r, 2, r.len-1)
+      else:
+        add result, r
 
 method parse*(this: BlockquoteParser, doc: string, start: int): ParseResult =
-  let markerContent = re(r"^(( {0,3}>([^\n]*(?:\n|$)))+)")
+  let markerContent = re(r"(( {0,3}>([^\n]*(?:\n|$)))+)")
   var matches: array[3, string]
   var pos = start
   var size = -1
@@ -1305,7 +1309,7 @@ method parse*(this: BlockquoteParser, doc: string, start: int): ParseResult =
   var chunks: seq[Chunk]
 
   while pos < doc.len:
-    size = doc.since(pos).matchLen(markerContent, matches=matches)
+    size = doc.matchLen(markerContent, matches, pos)
 
     if size == -1:
       break
@@ -1323,13 +1327,13 @@ method parse*(this: BlockquoteParser, doc: string, start: int): ParseResult =
       break
 
     # find the empty line in lazy content
-    if doc[start ..< pos].find(re" {4,}[^\n]+\n") != -1 and doc.since(pos).matchLen(re"^\n|^ {4,}|$") > -1:
+    if doc.find(re" {4,}[^\n]+\n", start, pos) != -1 and doc.matchLen(re"\n| {4,}|$", pos) > -1:
       break
 
     # TODO laziness only applies to when the tip token is a paragraph.
     # find the laziness text
     var lazyChunk: string
-    for line in doc.since(pos).splitLines(keepEol=true):
+    for line in substr(doc, pos, doc.len-1).splitLines(keepEol=true):
       if line.isBlank: break
       if not line.isContinuationText: break
       lazyChunk &= line
@@ -1349,7 +1353,7 @@ method parse*(this: BlockquoteParser, doc: string, start: int): ParseResult =
 method parse*(this: ReferenceParser, doc: string, start: int): ParseResult =
   var pos = start
 
-  var markStart = doc.since(pos).matchLen(re"^ {0,3}\[")
+  var markStart = doc.matchLen(re" {0,3}\[", pos)
   if markStart == -1:
     return ParseResult(token: nil, pos: -1)
 
@@ -1373,7 +1377,7 @@ method parse*(this: ReferenceParser, doc: string, start: int): ParseResult =
   pos += 1
 
   # parse whitespace
-  var whitespaceLen = doc.since(pos).matchLen(re"^[ \t]*\n?[ \t]*")
+  var whitespaceLen = doc.matchLen(re"[ \t]*\n?[ \t]*", pos)
   if whitespaceLen != -1:
     pos += whitespaceLen
 
@@ -1387,7 +1391,7 @@ method parse*(this: ReferenceParser, doc: string, start: int): ParseResult =
 
   # parse whitespace
   var whitespaces: array[1, string]
-  whitespaceLen = doc.since(pos).matchLen(re"^([ \t]*\n?[ \t]*)", matches=whitespaces)
+  whitespaceLen = doc.matchLen(re"([ \t]*\n?[ \t]*)", whitespaces, pos)
   if whitespaceLen != -1:
     pos += whitespaceLen
 
@@ -1482,33 +1486,37 @@ proc isOlNo1ListItem*(doc: string): bool =
   )
 
 method parse*(this: ParagraphParser, doc: string, start: int): ParseResult =
-  var size: int
-  let firstLine = doc.since(start).firstLine
-  var p = firstLine
-  for line in doc.since(start).restLines:
+  let rest = substr(doc, start, doc.len-1)
+  let firstLine = rest.firstLine
+  var size: int = firstLine.len
+
+  for line in rest.restLines:
     # Special cases.
     # empty list item is continuation text
     # ol should start with 1.
     if line.isUlEmptyListItem or line.isOlNo1ListItem:
-      p &= line
+      size += line.len
       continue
 
     # Continuation text ends at a blank line.
     if line.isBlank:
-      p &= line
+      size += line.len
       break
 
     if not line.isContinuationText:
       break
-    p &= line
 
-  size = p.len
-  let trailing = doc[start ..< start+size].findAll(re"\n*$")
+    size += line.len
+
+  var paragraphDoc = doc[start ..< start+size]
+  let trailing = paragraphDoc.findAll(re"\n*$").join()
+  paragraphDoc = paragraphDoc.replace(re"\n\s*", "\n").strip
+
   return ParseResult(
     token: Paragraph(
-      doc: doc[start ..< start+size].replace(re"\n\s*", "\n").strip,
+      doc: paragraphDoc,
       loose: true,
-      trailing: if trailing.anyIt(it.len > 0): trailing.join() else: trailing[0]
+      trailing: trailing,
     ),
     pos: start+size
   )
@@ -1597,7 +1605,7 @@ method parse*(this: TextParser, doc: string, start: int): ParseResult {.locks: "
   return ParseResult(token: token, pos: start+1)
 
 method parse*(this: SoftBreakParser, doc: string, start: int): ParseResult {.locks: "unknown".} =
-  let size = doc.since(start).matchLen(re"^ \n *")
+  let size = doc.matchLen(re" \n *", start)
   if size == -1: return skipParsing()
   let token = SoftBreak()
   return ParseResult(token: token, pos: start+size)
@@ -1606,9 +1614,9 @@ method parse*(this: AutoLinkParser, doc: string, start: int): ParseResult {.lock
   if doc[start] != '<':
     return skipParsing()
 
-  let EMAIL_RE = r"^<([a-zA-Z0-9.!#$%&'*+\/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*)>"
+  let EMAIL_RE = r"<([a-zA-Z0-9.!#$%&'*+\/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*)>"
   var emailMatches: array[1, string]
-  var size = doc.since(start).matchLen(re(EMAIL_RE, {RegexFlag.reIgnoreCase}), matches=emailMatches)
+  var size = doc.matchLen(re(EMAIL_RE, {RegexFlag.reIgnoreCase}), emailMatches, start)
 
   if size != -1:
     var url = emailMatches[0]
@@ -1618,9 +1626,9 @@ method parse*(this: AutoLinkParser, doc: string, start: int): ParseResult {.lock
     )
     return ParseResult(token: token, pos: start+size)
 
-  let LINK_RE = r"^<([a-zA-Z][a-zA-Z0-9+.\-]{1,31}):([^<>\x00-\x20]*)>"
+  let LINK_RE = r"<([a-zA-Z][a-zA-Z0-9+.\-]{1,31}):([^<>\x00-\x20]*)>"
   var linkMatches: array[2, string]
-  size = doc.since(start).matchLen(re(LINK_RE, {RegexFlag.reIgnoreCase}), matches=linkMatches)
+  size = doc.matchLen(re(LINK_RE, {RegexFlag.reIgnoreCase}), linkMatches, start)
 
   if size != -1:
     var schema = linkMatches[0]
@@ -1892,7 +1900,7 @@ proc parseInlineLink(doc: string, start: int, labelSlice: Slice[int]): ParseResu
   var pos = labelSlice.b + 2 # [link](
 
   # parse whitespace
-  var whitespaceLen = doc.since(pos).matchLen(re"^[ \t\n]*")
+  var whitespaceLen = doc.matchLen(re"[ \t\n]*", pos)
   if whitespaceLen != -1:
     pos += whitespaceLen
 
@@ -1905,7 +1913,7 @@ proc parseInlineLink(doc: string, start: int, labelSlice: Slice[int]): ParseResu
   pos += destinationLen
 
   # parse whitespace
-  whitespaceLen = doc.since(pos).matchLen(re"^[\x{0020}\x{0009}\x{000A}\x{000B}\x{000C}\x{000D}]*")
+  whitespaceLen = doc.matchLen(re"[\x{0020}\x{0009}\x{000A}\x{000B}\x{000C}\x{000D}]*", pos)
   if whitespaceLen != -1:
     pos += whitespaceLen
 
@@ -1919,7 +1927,7 @@ proc parseInlineLink(doc: string, start: int, labelSlice: Slice[int]): ParseResu
     pos += titleLen
 
   # parse whitespace
-  whitespaceLen = doc.since(pos).matchLen(re"^[ \t\n]*")
+  whitespaceLen = doc.matchLen(re"[ \t\n]*", pos)
   pos += whitespaceLen
 
   # require )
@@ -2009,7 +2017,7 @@ proc parseInlineImage(doc: string, start: int, labelSlice: Slice[int]): ParseRes
   var pos = labelSlice.b + 2 # ![link](
 
   # parse whitespace
-  var whitespaceLen = doc.since(pos).matchLen(re"^[ \t\n]*")
+  var whitespaceLen = doc.matchLen(re"[ \t\n]*", pos)
   pos += whitespaceLen
 
   # parse destination
@@ -2019,7 +2027,7 @@ proc parseInlineImage(doc: string, start: int, labelSlice: Slice[int]): ParseRes
   pos += destinationLen
 
   # parse whitespace
-  whitespaceLen = doc.since(pos).matchLen(re"^[ \t\n]*")
+  whitespaceLen = doc.matchLen(re"[ \t\n]*", pos)
   pos += whitespaceLen
 
   # parse title (optional)
@@ -2032,7 +2040,7 @@ proc parseInlineImage(doc: string, start: int, labelSlice: Slice[int]): ParseRes
     pos += titleLen
 
   # parse whitespace
-  whitespaceLen = doc.since(pos).matchLen(re"^[ \t\n]*")
+  whitespaceLen = doc.matchLen(re"[ \t\n]*", pos)
   pos += whitespaceLen
 
   # require )
@@ -2113,7 +2121,7 @@ method apply*(this: Image, state: State, res: ParseResult): ParseResult =
 
 method parse*(this: ImageParser, doc: string, start: int): ParseResult {.locks: "unknown".} =
   # Image should start with ![
-  if not doc.since(start).match(re"^!\["): return skipParsing()
+  if not doc.match(re"!\[", start): return skipParsing()
 
   var (labelSlice, labelSize) = getLinkText(doc, start+1, allowNested=true)
 
@@ -2142,10 +2150,10 @@ const ENTITY = r"&(?:#x[a-f0-9]{1,6}|#[0-9]{1,7}|[a-z][a-z0-9]{1,31});"
 method parse*(this: HtmlEntityParser, doc: string, start: int): ParseResult {.locks: "unknown".} =
   if doc[start] != '&': return skipParsing()
 
-  let regex = re(r"^(" & ENTITY & ")", {RegexFlag.reIgnoreCase})
+  let regex = re(r"(" & ENTITY & ")", {RegexFlag.reIgnoreCase})
   var matches: array[1, string]
 
-  var size = doc.since(start).matchLen(regex, matches)
+  var size = doc.matchLen(regex, matches, start)
   if size == -1: return skipParsing()
 
   var entity: string
@@ -2162,8 +2170,8 @@ method parse*(this: HtmlEntityParser, doc: string, start: int): ParseResult {.lo
 method parse*(this: EscapeParser, doc: string, start: int): ParseResult {.locks: "unknown".} =
   if doc[start] != '\\': return skipParsing()
 
-  let regex = re"^\\([\\`*{}\[\]()#+\-.!_<>~|""$%&',/:;=?@^])"
-  let size = doc.since(start).matchLen(regex)
+  let regex = re"\\([\\`*{}\[\]()#+\-.!_<>~|""$%&',/:;=?@^])"
+  let size = doc.matchLen(regex, start)
   if size == -1: return skipParsing()
 
   let token = Escape(doc: fmt"{doc[start+1]}")
@@ -2172,9 +2180,9 @@ method parse*(this: EscapeParser, doc: string, start: int): ParseResult {.locks:
 method parse*(this: InlineHtmlParser, doc: string, start: int): ParseResult {.locks: "unknown".} =
   if doc[start] != '<': return skipParsing()
 
-  let regex = re("^(" & HTML_TAG & ")", {RegexFlag.reIgnoreCase})
+  let regex = re("(" & HTML_TAG & ")", {RegexFlag.reIgnoreCase})
   var matches: array[5, string]
-  var size = doc.since(start).matchLen(regex, matches=matches)
+  var size = doc.matchLen(regex, matches, start)
 
   if size == -1: return skipParsing()
 
@@ -2183,7 +2191,7 @@ method parse*(this: InlineHtmlParser, doc: string, start: int): ParseResult {.lo
 
 method parse*(this: HardBreakParser, doc: string, start: int): ParseResult {.locks: "unknown".} =
   if not {' ', '\\'}.contains(doc[start]): return skipParsing()
-  let size = doc.since(start).matchLen(re"^((?: {2,}\n|\\\n)\s*)")
+  let size = doc.matchLen(re"((?: {2,}\n|\\\n)\s*)", start)
   if size == -1: return skipParsing()
   return ParseResult(token: HardBreak(), pos: start+size)
 
@@ -2191,10 +2199,10 @@ method parse*(this: CodeSpanParser, doc: string, start: int): ParseResult {.lock
   if doc[start] != '`': return skipParsing()
 
   var matches: array[5, string]
-  var size = doc.since(start).matchLen(re"^((`+)([^`]|[^`][\s\S]*?[^`])\2(?!`))", matches=matches)
+  var size = doc.matchLen(re"((`+)([^`]|[^`][\s\S]*?[^`])\2(?!`))", matches, start)
 
   if size == -1:
-    size = doc.since(start).matchLen(re"^`+(?!`)")
+    size = doc.matchLen(re"`+(?!`)", start)
     if size == -1:
       return skipParsing()
     let token = Text(doc : doc[start ..< start+size])
@@ -2211,7 +2219,7 @@ method parse*(this: StrikethroughParser, doc: string, start: int): ParseResult {
   if doc[start] != '~': return skipParsing()
 
   var matches: array[5, string]
-  var size = doc.since(start).matchLen(re"^(~~(?=\S)([\s\S]*?\S)~~)", matches=matches)
+  var size = doc.matchLen(re"(~~(?=\S)([\s\S]*?\S)~~)", matches, start)
 
   if size == -1: return skipParsing()
 

@@ -278,7 +278,7 @@ proc parseHtmlTag*(s: string): tuple[html: string, size: int];
 proc parseHtmlOpenCloseTag*(s: string): tuple[html: string, size: int];
 proc toStringSeq(tokens: DoublyLinkedList[Token]): seq[string];
 
-proc skipParsing*(): ParseResult = ParseResult(token: nil, pos: -1)
+let skipParsing = ParseResult(token: nil, pos: -1)
 
 method parse*(this: Parser, doc: string, start: int): ParseResult {.base, locks: "unknown".} =
   ParseResult(token: Token(), pos: doc.len)
@@ -1606,13 +1606,13 @@ method parse*(this: TextParser, doc: string, start: int): ParseResult {.locks: "
 
 method parse*(this: SoftBreakParser, doc: string, start: int): ParseResult {.locks: "unknown".} =
   let size = doc.matchLen(re" \n *", start)
-  if size == -1: return skipParsing()
+  if size == -1: return skipParsing
   let token = SoftBreak()
   return ParseResult(token: token, pos: start+size)
 
 method parse*(this: AutoLinkParser, doc: string, start: int): ParseResult {.locks: "unknown".} =
   if doc[start] != '<':
-    return skipParsing()
+    return skipParsing
 
   let EMAIL_RE = r"<([a-zA-Z0-9.!#$%&'*+\/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*)>"
   var emailMatches: array[1, string]
@@ -1639,7 +1639,7 @@ method parse*(this: AutoLinkParser, doc: string, start: int): ParseResult {.lock
     )
     return ParseResult(token: token, pos: start+size)
 
-  return skipParsing()
+  return skipParsing
 
 proc scanInlineDelimiters*(doc: string, start: int, delimiter: var Delimiter) =
   var charBefore = '\n'
@@ -1880,10 +1880,10 @@ proc getLinkText*(doc: string, start: int, allowNested: bool = false): tuple[sli
 
 method apply*(this: Link, state: State, res: ParseResult): ParseResult =
   if this.text == "":
-    return skipParsing()
+    return skipParsing
   if this.refId != "":
     if not state.references.contains(this.refId):
-      return skipParsing()
+      return skipParsing
     else:
       let reference = state.references[this.refId]
       this.url = reference.url
@@ -1895,7 +1895,7 @@ method apply*(this: Link, state: State, res: ParseResult): ParseResult =
 
 proc parseInlineLink(doc: string, start: int, labelSlice: Slice[int]): ParseResult =
   if doc[start] != '[':
-    return skipParsing()
+    return skipParsing
 
   var pos = labelSlice.b + 2 # [link](
 
@@ -1908,7 +1908,7 @@ proc parseInlineLink(doc: string, start: int, labelSlice: Slice[int]): ParseResu
   var (destinationSlice, destinationLen) = getLinkDestination(doc, pos)
 
   if destinationLen == -1:
-    return skipParsing()
+    return skipParsing
 
   pos += destinationLen
 
@@ -1919,7 +1919,7 @@ proc parseInlineLink(doc: string, start: int, labelSlice: Slice[int]): ParseResu
 
   # parse title (optional)
   if not {'(', '\'', '"', ')'}.contains(doc[pos]):
-    return skipParsing()
+    return skipParsing
 
   var (titleSlice, titleLen) = getLinkTitle(doc, pos)
 
@@ -1932,9 +1932,9 @@ proc parseInlineLink(doc: string, start: int, labelSlice: Slice[int]): ParseResu
 
   # require )
   if pos >= doc.len:
-    return skipParsing()
+    return skipParsing
   if doc[pos] != ')':
-    return skipParsing()
+    return skipParsing
 
   # construct token
   var title = ""
@@ -1954,7 +1954,7 @@ proc parseFullReferenceLink(doc: string, start: int, labelSlice: Slice[int]): Pa
   var pos = labelSlice.b + 1
   var (label, labelSize) = getLinkLabel(doc, pos)
 
-  if labelSize == -1: return skipParsing()
+  if labelSize == -1: return skipParsing
 
   pos += labelSize
 
@@ -1987,11 +1987,11 @@ proc parseShortcutReferenceLink(doc: string, start: int, labelSlice: Slice[int])
 
 method parse*(this: LinkParser, doc: string, start: int): ParseResult {.locks: "unknown".} =
   # Link should start with [
-  if doc[start] != '[': return skipParsing()
+  if doc[start] != '[': return skipParsing
 
   var (labelSlice, labelSize) = getLinkText(doc, start)
   # Link should have matching ] for [.
-  if labelSize == -1: return skipParsing()
+  if labelSize == -1: return skipParsing
 
   # An inline link consists of a link text followed immediately by a left parenthesis (
   if labelSlice.b + 1 < doc.len and doc[labelSlice.b + 1] == '(':
@@ -2022,7 +2022,7 @@ proc parseInlineImage(doc: string, start: int, labelSlice: Slice[int]): ParseRes
 
   # parse destination
   var (destinationslice, destinationLen) = getLinkDestination(doc, pos)
-  if destinationLen == -1: return skipParsing()
+  if destinationLen == -1: return skipParsing
 
   pos += destinationLen
 
@@ -2032,7 +2032,7 @@ proc parseInlineImage(doc: string, start: int, labelSlice: Slice[int]): ParseRes
 
   # parse title (optional)
   if not {'(', '\'', '"', ')'}.contains(doc[pos]):
-    return skipParsing()
+    return skipParsing
 
   var (titleSlice, titleLen) = getLinkTitle(doc, pos)
 
@@ -2045,9 +2045,9 @@ proc parseInlineImage(doc: string, start: int, labelSlice: Slice[int]): ParseRes
 
   # require )
   if pos >= doc.len:
-    return skipParsing()
+    return skipParsing
   if doc[pos] != ')':
-    return skipParsing()
+    return skipParsing
 
   # construct token
   var title = ""
@@ -2070,7 +2070,7 @@ proc parseFullReferenceImage(doc: string, start: int, altSlice: Slice[int]): Par
   var pos = altSlice.b + 1
   let (label, labelSize) = getLinkLabel(doc, pos)
 
-  if labelSize == -1: return skipParsing()
+  if labelSize == -1: return skipParsing
 
   pos += labelSize
 
@@ -2109,7 +2109,7 @@ proc parseShortcutReferenceImage(doc: string, start: int, labelSlice: Slice[int]
 method apply*(this: Image, state: State, res: ParseResult): ParseResult =
   if this.refId != "":
     if not state.references.contains(this.refId):
-      return skipParsing()
+      return skipParsing
     else:
       let reference = state.references[this.refId]
       this.url = reference.url
@@ -2121,12 +2121,12 @@ method apply*(this: Image, state: State, res: ParseResult): ParseResult =
 
 method parse*(this: ImageParser, doc: string, start: int): ParseResult {.locks: "unknown".} =
   # Image should start with ![
-  if not doc.match(re"!\[", start): return skipParsing()
+  if not doc.match(re"!\[", start): return skipParsing
 
   var (labelSlice, labelSize) = getLinkText(doc, start+1, allowNested=true)
 
   # Image should have matching ] for [.
-  if labelSize == -1: return skipParsing()
+  if labelSize == -1: return skipParsing
 
   # An inline image consists of a link text followed immediately by a left parenthesis (
   if labelSlice.b + 1 < doc.len and doc[labelSlice.b + 1] == '(':
@@ -2148,13 +2148,13 @@ method parse*(this: ImageParser, doc: string, start: int): ParseResult {.locks: 
 
 const ENTITY = r"&(?:#x[a-f0-9]{1,6}|#[0-9]{1,7}|[a-z][a-z0-9]{1,31});"
 method parse*(this: HtmlEntityParser, doc: string, start: int): ParseResult {.locks: "unknown".} =
-  if doc[start] != '&': return skipParsing()
+  if doc[start] != '&': return skipParsing
 
   let regex = re(r"(" & ENTITY & ")", {RegexFlag.reIgnoreCase})
   var matches: array[1, string]
 
   var size = doc.matchLen(regex, matches, start)
-  if size == -1: return skipParsing()
+  if size == -1: return skipParsing
 
   var entity: string
   if matches[0] == "&#0;":
@@ -2168,35 +2168,35 @@ method parse*(this: HtmlEntityParser, doc: string, start: int): ParseResult {.lo
   return ParseResult(token: token, pos: start+size)
 
 method parse*(this: EscapeParser, doc: string, start: int): ParseResult {.locks: "unknown".} =
-  if doc[start] != '\\': return skipParsing()
+  if doc[start] != '\\': return skipParsing
 
   let regex = re"\\([\\`*{}\[\]()#+\-.!_<>~|""$%&',/:;=?@^])"
   let size = doc.matchLen(regex, start)
-  if size == -1: return skipParsing()
+  if size == -1: return skipParsing
 
   let token = Escape(doc: fmt"{doc[start+1]}")
   return ParseResult(token: token, pos: start+size)
 
 method parse*(this: InlineHtmlParser, doc: string, start: int): ParseResult {.locks: "unknown".} =
-  if doc[start] != '<': return skipParsing()
+  if doc[start] != '<': return skipParsing
 
   let regex = re("(" & HTML_TAG & ")", {RegexFlag.reIgnoreCase})
   var matches: array[5, string]
   var size = doc.matchLen(regex, matches, start)
 
-  if size == -1: return skipParsing()
+  if size == -1: return skipParsing
 
   let token = InlineHtml(doc: matches[0])
   return ParseResult(token: token, pos: start+size)
 
 method parse*(this: HardBreakParser, doc: string, start: int): ParseResult {.locks: "unknown".} =
-  if not {' ', '\\'}.contains(doc[start]): return skipParsing()
+  if not {' ', '\\'}.contains(doc[start]): return skipParsing
   let size = doc.matchLen(re"((?: {2,}\n|\\\n)\s*)", start)
-  if size == -1: return skipParsing()
+  if size == -1: return skipParsing
   return ParseResult(token: HardBreak(), pos: start+size)
 
 method parse*(this: CodeSpanParser, doc: string, start: int): ParseResult {.locks: "unknown".} =
-  if doc[start] != '`': return skipParsing()
+  if doc[start] != '`': return skipParsing
 
   var matches: array[5, string]
   var size = doc.matchLen(re"((`+)([^`]|[^`][\s\S]*?[^`])\2(?!`))", matches, start)
@@ -2204,7 +2204,7 @@ method parse*(this: CodeSpanParser, doc: string, start: int): ParseResult {.lock
   if size == -1:
     size = doc.matchLen(re"`+(?!`)", start)
     if size == -1:
-      return skipParsing()
+      return skipParsing
     let token = Text(doc : doc[start ..< start+size])
     return ParseResult(token: token, pos: start+size)
 
@@ -2216,12 +2216,12 @@ method parse*(this: CodeSpanParser, doc: string, start: int): ParseResult {.lock
   return ParseResult(token: token, pos: start+size)
 
 method parse*(this: StrikethroughParser, doc: string, start: int): ParseResult {.locks: "unknown".} =
-  if doc[start] != '~': return skipParsing()
+  if doc[start] != '~': return skipParsing
 
   var matches: array[5, string]
   var size = doc.matchLen(re"(~~(?=\S)([\s\S]*?\S)~~)", matches, start)
 
-  if size == -1: return skipParsing()
+  if size == -1: return skipParsing
 
   let token = Strikethrough(doc: matches[1])
   return ParseResult(token: token, pos: start+size)

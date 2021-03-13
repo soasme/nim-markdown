@@ -342,11 +342,7 @@ let HTML_SEQUENCES = @[
 proc `$`*(chunk: Chunk): string =
   fmt"{chunk.kind}{[chunk.doc]}"
 
-proc since*(s: string, i: int, offset: int = -1): string =
-  if offset == -1: s[i..<s.len] else: s[i..<i+offset]
-
 proc replaceInitialTabs*(doc: string): string =
-  var res: seq[string]
   var n: int
   for line in doc.splitLines(keepEol=true):
     n = 0
@@ -355,8 +351,11 @@ proc replaceInitialTabs*(doc: string): string =
         n += 1
       else:
         break
-    res.add(" ".repeat(n*4) & line[n..<line.len])
-  return res.join("")
+    if n == 0:
+      add result, line
+    else:
+      add result, " ".repeat(n*4)
+      add result, substr(line, n, line.len)
 
 proc preProcessing(state: State, token: Token) =
   token.doc = token.doc.replace(re"\r\n|\r", "\n")
@@ -1286,16 +1285,19 @@ const rBlockquoteMarker = r"^( {0,3}>)"
 proc isBlockquote*(s: string): bool = s.contains(re(rBlockquoteMarker))
 
 proc consumeBlockquoteMarker(doc: string): string =
-  var rs: seq[string]
   var r: string
   for line in doc.splitLines(keepEol=true):
     r = line.replacef(re"^ {0,3}>(.*)", "$1")
-    if r.startsWith(" "):
-      r = r.since(1)
-    elif r.startsWith("\t"):
-      r = r.replaceInitialTabs.since(2)
-    rs.add(r)
-  result = rs.join("")
+    if r.len == 0:
+      continue
+    case r[0]:
+      of ' ':
+        add result, substr(r, 1, r.len-1)
+      of '\t':
+        r = r.replaceInitialTabs
+        add result, substr(r, 2, r.len-1)
+      else:
+        add result, r
 
 method parse*(this: BlockquoteParser, doc: string, start: int): ParseResult =
   let markerContent = re(r"(( {0,3}>([^\n]*(?:\n|$)))+)")

@@ -832,13 +832,13 @@ method parse*(this: ThematicBreakParser, doc: string, start: int): ParseResult {
     pos: start+res.size
   )
 
-proc getFence*(doc: string): tuple[indent: int, fence: string, size: int] =
+proc getFence*(doc: string, start: int = 0): tuple[indent: int, fence: string, size: int] =
   var matches: array[2, string]
-  let size = doc.matchLen(re"((?: {0,3})?)(`{3,}|~{3,})", matches=matches)
+  let size = doc.matchLen(re"((?: {0,3})?)(`{3,}|~{3,})", matches, start)
   if size == -1: return (-1, "", -1)
   return (
     indent: matches[0].len,
-    fence: doc[0 ..< size].strip,
+    fence: doc[start ..< start+size].strip,
     size: size
   )
 
@@ -860,18 +860,18 @@ proc parseCodeContent*(doc: string, indent: int, fence: string): tuple[code: str
     pos += line.len
   return (codeContent, pos)
 
-proc parseCodeInfo*(doc: string): tuple[info: string, size: int] =
+proc parseCodeInfo*(doc: string, start: int = 0): tuple[info: string, size: int] =
   var matches: array[1, string]
-  let size = doc.matchLen(re"(?: |\t)*([^`\n]*)?(?:\n|$)", matches=matches)
+  let size = doc.matchLen(re"(?: |\t)*([^`\n]*)?(?:\n|$)", matches, start)
   if size == -1:
     return ("", -1)
   for item in matches[0].splitWhitespace:
     return (item, size)
   return ("", size)
 
-proc parseTildeBlockCodeInfo*(doc: string): tuple[info: string, size: int] =
+proc parseTildeBlockCodeInfo*(doc: string, start: int = 0): tuple[info: string, size: int] =
   var matches: array[1, string]
-  let size = doc.matchLen(re"(?: |\t)*(.*)?(?:\n|$)", matches=matches)
+  let size = doc.matchLen(re"(?: |\t)*(.*)?(?:\n|$)", matches, start)
   if size == -1:
     return ("", -1)
   for item in matches[0].splitWhitespace:
@@ -880,7 +880,7 @@ proc parseTildeBlockCodeInfo*(doc: string): tuple[info: string, size: int] =
 
 method parse*(this: FencedCodeParser, doc: string, start: int): ParseResult {.locks: "unknown".} =
   var pos = start
-  var fenceRes = doc.since(start).getFence()
+  var fenceRes = doc.getFence(start)
   if fenceRes.size == -1: return ParseResult(token: nil, pos: -1)
   var indent = fenceRes.indent
   var fence = fenceRes.fence
@@ -889,9 +889,9 @@ method parse*(this: FencedCodeParser, doc: string, start: int): ParseResult {.lo
   var infoSize = -1
   var info: string
   if fence.startsWith("`"):
-    (info, infoSize) = doc.since(pos).parseCodeInfo()
+    (info, infoSize) = doc.parseCodeInfo(pos)
   else:
-    (info, infosize) = doc.since(pos).parseTildeBlockCodeInfo()
+    (info, infosize) = doc.parseTildeBlockCodeInfo(pos)
   if infoSize == -1: return ParseResult(token: nil, pos: -1)
 
   pos += infoSize
@@ -994,12 +994,9 @@ method parse(this: SetextHeadingParser, doc: string, start: int): ParseResult {.
 
 const ATX_HEADING_RE = r" {0,3}(#{1,6})([ \t]+)?(?(2)([^\n]*?))([ \t]+)?(?(4)#*) *(?:\n+|$)"
 
-proc getAtxHeading*(s: string): tuple[level: int, doc: string, size: int] =
+proc getAtxHeading*(s: string, start: int = 0): tuple[level: int, doc: string, size: int] =
   var matches: array[4, string]
-  let size = s.matchLen(
-    re(r"^" & ATX_HEADING_RE),
-    matches=matches
-  )
+  let size = s.matchLen(re(ATX_HEADING_RE), matches, start)
   if size == -1:
     return (level: 0, doc: "", size: -1)
 
@@ -1008,7 +1005,7 @@ proc getAtxHeading*(s: string): tuple[level: int, doc: string, size: int] =
   return (level: level, doc: doc, size: size)
 
 method parse(this: AtxHeadingParser, doc: string, start: int = 0): ParseResult {.locks: "unknown".} =
-  let res = doc.since(start).getAtxHeading()
+  let res = doc.getAtxHeading(start)
   if res.size == -1: return ParseResult(token: nil, pos: -1)
   return ParseResult(
     token: Heading(
@@ -1021,7 +1018,7 @@ method parse(this: AtxHeadingParser, doc: string, start: int = 0): ParseResult {
 method parse*(this: BlanklineParser, doc: string, start: int): ParseResult {.locks: "unknown".} =
   let size = doc.matchLen(re(r"((?:\s*\n)+)"), start)
   if size == -1: return ParseResult(token: nil, pos: -1)
-  let token = Token(doc: doc.since(start, offset=size))
+  let token = Token(doc: doc[start ..< start+size])
   return ParseResult(token: token, pos: start+size)
 
 proc parseBlankLine*(doc: string, start: int): ParseResult =

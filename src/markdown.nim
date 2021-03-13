@@ -83,6 +83,8 @@ from markdownpkg/entities import htmlEntityToUtf8
 
 var precompiledExp {.threadvar.}: Table[string, re.Regex]
 
+
+
 template re(data: string): Regex =
   let tmpName = data
   # We won't use mgetOrPut directly because otherwise Nim will lazily evaluate
@@ -1479,33 +1481,36 @@ proc isOlNo1ListItem*(doc: string): bool =
   )
 
 method parse*(this: ParagraphParser, doc: string, start: int): ParseResult =
-  var size: int
   let firstLine = doc.since(start).firstLine
-  var p = firstLine
+  var size: int = firstLine.len
+
   for line in doc.since(start).restLines:
     # Special cases.
     # empty list item is continuation text
     # ol should start with 1.
     if line.isUlEmptyListItem or line.isOlNo1ListItem:
-      p &= line
+      size += line.len
       continue
 
     # Continuation text ends at a blank line.
     if line.isBlank:
-      p &= line
+      size += line.len
       break
 
     if not line.isContinuationText:
       break
-    p &= line
 
-  size = p.len
-  let trailing = doc[start ..< start+size].findAll(re"\n*$")
+    size += line.len
+
+  var paragraphDoc = doc[start ..< start+size]
+  let trailing = paragraphDoc.findAll(re"\n*$").join()
+  paragraphDoc = paragraphDoc.replace(re"\n\s*", "\n").strip
+
   return ParseResult(
     token: Paragraph(
-      doc: doc[start ..< start+size].replace(re"\n\s*", "\n").strip,
+      doc: paragraphDoc,
       loose: true,
-      trailing: if trailing.anyIt(it.len > 0): trailing.join() else: trailing[0]
+      trailing: trailing,
     ),
     pos: start+size
   )

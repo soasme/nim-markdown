@@ -1508,13 +1508,13 @@ method parse*(this: ParagraphParser, doc: string, start: int): ParseResult =
 
     size += line.len
 
-  var paragraphDoc = doc[start ..< start+size]
-  let trailing = paragraphDoc.findAll(re"\n*$").join()
-  paragraphDoc = paragraphDoc.replace(re"\n\s*", "\n").strip
+  var p = substr(doc, start, start+size-1)
+  let trailing = p.findAll(re"\n*$").join()
+  p = p.replace(re"\n\s*", "\n").strip
 
   return ParseResult(
     token: Paragraph(
-      doc: paragraphDoc,
+      doc: p,
       loose: true,
       trailing: trailing,
     ),

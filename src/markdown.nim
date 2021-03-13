@@ -679,7 +679,7 @@ proc parseOrderedListItem*(doc: string, start=0, marker: var string, listItemDoc
         pos += size
         break
     elif listItemDoc.find(re"\n{2,}$") == -1:
-      var line = doc.since(pos).firstLine
+      var line = substr(doc, pos, doc.len-1).firstLine
       if line.isContinuationText:
         listItemDoc &= line
         size = line.len
@@ -740,7 +740,7 @@ proc parseUnorderedListItem*(doc: string, start=0, marker: var string, listItemD
         pos += size
         break
     elif listItemDoc.find(re"\n{2,}$") == -1:
-      var line = doc.since(pos).firstLine
+      var line = substr(doc, pos, doc.len-1).firstLine
       if line.isContinuationText:
         listItemDoc &= line
         size = line.len
@@ -898,7 +898,7 @@ method parse*(this: FencedCodeParser, doc: string, start: int): ParseResult {.lo
 
   pos += infoSize
 
-  var res = doc.since(pos).parseCodeContent(indent, fence)
+  var res = substr(doc, pos, doc.len-1).parseCodeContent(indent, fence)
   var codeContent = res.code
   pos += res.size
 
@@ -936,11 +936,12 @@ proc getIndentedCodeRestLines*(s: string): tuple[code: string, size: int] =
   return (code: code, size: size)
 
 method parse*(this: IndentedCodeParser, doc: string, start: int): ParseResult {.locks: "unknown".} =
-  var res = doc.since(start).getIndentedCodeFirstLine()
+  var rest = substr(doc, start, doc.len-1)
+  var res = rest.getIndentedCodeFirstLine()
   if res.size == -1: return ParseResult(token: nil, pos: -1)
   var code = res.code
   var pos = start + res.size
-  res = doc.since(start).getIndentedCodeRestLines()
+  res = rest.getIndentedCodeRestLines()
   code &= res.code
   code = code.removeBlankLines
   pos += res.size
@@ -984,7 +985,7 @@ proc getSetextHeading*(s: string): tuple[level: int, doc: string, size: int] =
   return (level: level, doc: doc, size: size)
 
 method parse(this: SetextHeadingParser, doc: string, start: int): ParseResult {.locks: "unknown".} =
-  let res = doc.since(start).getSetextHeading()
+  let res = substr(doc, start, doc.len-1).getSetextHeading()
   if res.size == -1: return ParseResult(token: nil, pos: -1)
   return ParseResult(
     token: Heading(
@@ -1105,7 +1106,7 @@ method parse*(this: HtmlTableParser, doc: string, start: int): ParseResult {.loc
   #   extract tbody
   # construct token.
   var pos = start
-  let lines = doc.since(start).splitLines(keepEol=true)
+  let lines = substr(doc, start, doc.len-1).splitLines(keepEol=true)
   if lines.len < 2:
     return ParseResult(token: nil, pos: -1)
 
@@ -1242,7 +1243,7 @@ method parse*(this: HtmlBlockParser, doc: string, start: int): ParseResult {.loc
   var html = ""
   var pos = 0
   var size = -1
-  let docLines = doc.since(start).splitLines(keepEol=true)
+  let docLines = substr(doc, start, doc.len-1).splitLines(keepEol=true)
   if docLines.len == 0:
     return ParseResult(token: nil, pos: -1)
   let firstLine = docLines[0]
@@ -1285,14 +1286,16 @@ const rBlockquoteMarker = r"^( {0,3}>)"
 proc isBlockquote*(s: string): bool = s.contains(re(rBlockquoteMarker))
 
 proc consumeBlockquoteMarker(doc: string): string =
-  var s: string
+  var rs: seq[string]
+  var r: string
   for line in doc.splitLines(keepEol=true):
-    s = line.replacef(re"^ {0,3}>(.*)", "$1")
-    if s.startsWith(" "):
-      s = s.since(1)
-    elif s.startsWith("\t"):
-      s = s.replaceInitialTabs.since(2)
-    result &= s
+    r = line.replacef(re"^ {0,3}>(.*)", "$1")
+    if r.startsWith(" "):
+      r = r.since(1)
+    elif r.startsWith("\t"):
+      r = r.replaceInitialTabs.since(2)
+    rs.add(r)
+  result = rs.join("")
 
 method parse*(this: BlockquoteParser, doc: string, start: int): ParseResult =
   let markerContent = re(r"(( {0,3}>([^\n]*(?:\n|$)))+)")
@@ -1328,7 +1331,7 @@ method parse*(this: BlockquoteParser, doc: string, start: int): ParseResult =
     # TODO laziness only applies to when the tip token is a paragraph.
     # find the laziness text
     var lazyChunk: string
-    for line in doc.since(pos).splitLines(keepEol=true):
+    for line in substr(doc, pos, doc.len-1).splitLines(keepEol=true):
       if line.isBlank: break
       if not line.isContinuationText: break
       lazyChunk &= line
@@ -1481,10 +1484,11 @@ proc isOlNo1ListItem*(doc: string): bool =
   )
 
 method parse*(this: ParagraphParser, doc: string, start: int): ParseResult =
-  let firstLine = doc.since(start).firstLine
+  let rest = substr(doc, start, doc.len-1)
+  let firstLine = rest.firstLine
   var size: int = firstLine.len
 
-  for line in doc.since(start).restLines:
+  for line in rest.restLines:
     # Special cases.
     # empty list item is continuation text
     # ol should start with 1.

@@ -1296,7 +1296,7 @@ proc consumeBlockquoteMarker(doc: string): string =
     result &= s
 
 method parse*(this: BlockquoteParser, doc: string, start: int): ParseResult =
-  let markerContent = re(r"^(( {0,3}>([^\n]*(?:\n|$)))+)")
+  let markerContent = re(r"(( {0,3}>([^\n]*(?:\n|$)))+)")
   var matches: array[3, string]
   var pos = start
   var size = -1
@@ -1305,7 +1305,7 @@ method parse*(this: BlockquoteParser, doc: string, start: int): ParseResult =
   var chunks: seq[Chunk]
 
   while pos < doc.len:
-    size = doc.since(pos).matchLen(markerContent, matches=matches)
+    size = doc.matchLen(markerContent, matches, pos)
 
     if size == -1:
       break

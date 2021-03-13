@@ -775,7 +775,7 @@ method parse*(this: UlParser, doc: string, start: int): ParseResult =
     return ParseResult(token: nil, pos: -1)
 
   var ulToken = Ul(
-    doc: doc[start ..< pos],
+    doc: substr(doc, start, pos-1),
   )
   for listItem in listItems:
     ulToken.appendChild(listItem)
@@ -814,7 +814,7 @@ method parse*(this: OlParser, doc: string, start: int): ParseResult =
     return ParseResult(token: nil, pos: -1)
 
   var olToken = Ol(
-    doc: doc[start ..< pos],
+    doc: substr(doc, start, pos-1),
     start: startIndex,
   )
   for listItem in listItems:
@@ -839,7 +839,7 @@ proc getFence*(doc: string, start: int = 0): tuple[indent: int, fence: string, s
   if size == -1: return (-1, "", -1)
   return (
     indent: matches[0].len,
-    fence: doc[start ..< start+size].strip,
+    fence: substr(doc, start, start+size-1).strip,
     size: size
   )
 
@@ -1020,7 +1020,7 @@ method parse(this: AtxHeadingParser, doc: string, start: int = 0): ParseResult {
 method parse*(this: BlanklineParser, doc: string, start: int): ParseResult {.locks: "unknown".} =
   let size = doc.matchLen(re(r"((?:\s*\n)+)"), start)
   if size == -1: return ParseResult(token: nil, pos: -1)
-  let token = Token(doc: doc[start ..< start+size])
+  let token = Token(doc: substr(doc, start, start+size-1))
   return ParseResult(token: token, pos: start+size)
 
 proc parseBlankLine*(doc: string, start: int): ParseResult =
@@ -1049,7 +1049,7 @@ proc parseTableRow*(doc: string): seq[string] =
         backTicked = true
         lastBackTick = pos
     elif ch == '|' and escapes mod 2 == 0 and not backTicked:
-      result.add(doc[lastPos ..< pos])
+      add result, substr(doc, lastPos, pos-1)
       lastPos = pos + 1
 
     if ch == '\\':
@@ -1066,7 +1066,7 @@ proc parseTableRow*(doc: string): seq[string] =
     if pos < max:
       ch = doc[pos]
 
-  result.add(doc[lastPos ..< max])
+  add result, substr(doc, lastPos, max-1)
 
 proc parseTableAligns*(doc: string): tuple[aligns: seq[string], matched: bool] =
   if not doc.match(re"^ {0,3}[-:|][-:|\s]*(?:\n|$)"):
@@ -1166,12 +1166,13 @@ method parse*(this: HtmlTableParser, doc: string, start: int): ParseResult {.loc
     pos += line.len
 
   var tableToken = HtmlTable(
-    doc: doc[start ..< pos],
+    doc: substr(doc, start, pos-1),
   )
   tableToken.appendChild(theadToken)
   if tbodyRows.len > 0:
+    var tbodyStart = start+lines[0].len+lines[1].len
     var tbodyToken = TBody(
-      doc: doc[start+lines[0].len+lines[1].len ..< pos],
+      doc: substr(doc, tbodyStart, pos-1),
       size: tbodyRows.len,
     )
     for tbodyRowToken in tbodyRows:
@@ -1407,11 +1408,11 @@ method parse*(this: ReferenceParser, doc: string, start: int): ParseResult =
     if titleLen >= 0:
       pos += titleLen
       # link title may not contain a blank line
-      if doc[titleSlice].find(re"\n{2,}") != -1:
+      if doc.find(re"\n{2,}", titleSlice.a, titleSlice.b) != -1:
         return ParseResult(token: nil, pos: -1)
 
     # parse whitespace, no more non-whitespace is allowed from now.
-    whitespaceLen = doc[pos ..< doc.len].matchLen(re"^\s*(?:\n|$)")
+    whitespaceLen = doc.matchLen(re"\s*(?:\n|$)", pos)
     if whitespaceLen != -1:
       pos += whitespaceLen
     # title might have trailing characters, but the label and dest is already enough.
@@ -1424,17 +1425,14 @@ method parse*(this: ReferenceParser, doc: string, start: int): ParseResult =
       return ParseResult(token: nil, pos: -1)
 
   # construct token
-  var title = ""
-  if titleLen > 0:
-    title = doc[titleSlice]
-
-  var url = doc[destinationSlice]
-
   var reference = Reference(
-    doc: doc[start ..< pos],
+    doc: substr(doc, start, pos-1),
     text: label,
-    url: url,
-    title: title,
+    url: substr(doc, destinationSlice.a, destinationSlice.b),
+    title: if titleLen <= 0:
+      ""
+    else:
+      substr(doc, titleSlice.a, titleSlice.b),
   )
   return ParseResult(token: reference, pos: pos)
 
@@ -1601,7 +1599,7 @@ proc parseBlock(state: State, token: Token) =
       raise newException(MarkdownError, fmt"unknown rule.")
 
 method parse*(this: TextParser, doc: string, start: int): ParseResult {.locks: "unknown".} =
-  let token = Text(doc: doc[start ..< start+1])
+  let token = Text(doc: substr(doc, start, start))
   return ParseResult(token: token, pos: start+1)
 
 method parse*(this: SoftBreakParser, doc: string, start: int): ParseResult {.locks: "unknown".} =
@@ -1649,7 +1647,7 @@ proc scanInlineDelimiters*(doc: string, start: int, delimiter: var Delimiter) =
   var isCharBeforeWhitespace = true
 
   # get the number of delimiters.
-  for ch in doc[start .. doc.len - 1]:
+  for ch in substr(doc, start, doc.len-1):
     if ch == charCurrent:
       delimiter.num += 1
       delimiter.originalNum += 1
@@ -1708,7 +1706,7 @@ method parse*(this: DelimiterParser, doc: string, start: int): ParseResult {.loc
 
   let size = delimiter.num
   let token = Text(
-    doc: doc[start ..< start+size],
+    doc: substr(doc, start, start+size-1),
     delimiter: delimiter
   )
   return ParseResult(token: token, pos: start+size)
@@ -1724,7 +1722,7 @@ proc getLinkDestination*(doc: string, start: int): tuple[slice: Slice[int], size
   var slice: Slice[int]
 
   if doc[start] == '<':
-    size = doc[start ..< doc.len].matchLen(re"^<([^\n<>\\]*)>")
+    size = doc.matchLen(re"<([^\n<>\\]*)>", start)
     if size != -1:
       slice.a = start + 1
       slice.b = start + size - 2
@@ -1740,7 +1738,7 @@ proc getLinkDestination*(doc: string, start: int): tuple[slice: Slice[int], size
   var level = 1 # assume the parenthesis has opened.
   var urlLen = 0
   var isEscaping = false
-  for i, ch in doc[start ..< doc.len]:
+  for i, ch in substr(doc, start, doc.len-1):
     urlLen += 1
     if isEscaping:
       isEscaping = false
@@ -1773,7 +1771,7 @@ proc getLinkTitle*(doc: string, start: int): tuple[slice: Slice[int], size: int]
   if marker == '(':
     marker = ')'
   var isEscaping = false
-  for i, ch in doc[start+1 ..< doc.len]:
+  for i, ch in substr(doc, start+1, doc.len-1):
     if isEscaping:
       isEscaping = false
       continue
@@ -1802,7 +1800,7 @@ proc getLinkLabel*(doc: string, start: int): tuple[label: string, size: int] =
   if start+1 >= doc.len:
     return ("", -1)
 
-  for i, ch in doc[start+1 ..< doc.len]:
+  for i, ch in substr(doc, start+1, doc.len-1):
     size += 1
 
     # A link label begins with a left bracket ([) and ends with the first right bracket (]) that is not backslash-escaped.
@@ -1822,8 +1820,10 @@ proc getLinkLabel*(doc: string, start: int): tuple[label: string, size: int] =
     if size > 999:
       return ("", -1)
 
-  let label = doc[start+1 ..< start+size].normalizeLabel
-  return (label, size+1)
+  return (
+    normalizeLabel(substr(doc, start+1, start+size-1)),
+    size+1
+  )
 
 
 proc getLinkText*(doc: string, start: int, allowNested: bool = false): tuple[slice: Slice[int], size: int] =
@@ -1835,7 +1835,7 @@ proc getLinkText*(doc: string, start: int, allowNested: bool = false): tuple[sli
   var level = 0
   var isEscaping = false
   var skip = 0
-  for i, ch in doc[start ..< doc.len]:
+  for i, ch in substr(doc, start, doc.len-1):
     # Skip ahead for higher precedent matches like code spans, autolinks, and raw HTML tags.
     if skip > 0:
       skip -= 1
@@ -1859,17 +1859,17 @@ proc getLinkText*(doc: string, start: int, allowNested: bool = false): tuple[sli
     # Skip the tokens in code.
     elif ch == '`':
       # FIXME: it's better to extract to a code span helper function
-      skip = doc[start+i ..< doc.len].matchLen(re"^((`+)\s*([\s\S]*?[^`])\s*\2(?!`))") - 1
+      skip = doc.matchLen(re"((`+)\s*([\s\S]*?[^`])\s*\2(?!`))", start+i) - 1
 
     # autolinks, and raw HTML tags bind more tightly than the brackets in link text.
     elif ch == '<':
-      skip = doc[start+i ..< doc.len].matchLen(re"^<[^>]*>") - 1
+      skip = doc.matchLen(re"<[^>]*>", start+i) - 1
 
     # Links may not contain other links, at any level of nesting.
     # Image description may contain links.
-    if level == 0 and not allowNested and doc[start .. start+i].find(re"[^!]\[[^]]*\]\([^)]*\)") > -1:
+    if level == 0 and not allowNested and doc.find(re"[^!]\[[^]]*\]\([^)]*\)", start, start+i) > -1:
       return ((0..<0), -1)
-    if level == 0 and not allowNested and doc[start .. start+i].find(re"[^!]\[[^]]*\]\[[^]]*\]") > -1:
+    if level == 0 and not allowNested and doc.find(re"[^!]\[[^]]*\]\[[^]]*\]", start, start+i) > -1:
       return ((0..<0), -1)
 
     if level == 0:
@@ -1937,16 +1937,14 @@ proc parseInlineLink(doc: string, start: int, labelSlice: Slice[int]): ParseResu
     return skipParsing
 
   # construct token
-  var title = ""
-  if titleLen >= 0:
-    title = doc[titleSlice]
-  var url = doc[destinationSlice]
-  var text = doc[labelSlice.a+1 ..< labelSlice.b]
   var link = Link(
-    doc: doc[start .. pos],
-    text: text,
-    url: url,
-    title: title,
+    doc: substr(doc, start, pos),
+    text: substr(doc, labelSlice.a+1, labelSlice.b-1),
+    url: substr(doc, destinationSlice.a, destinationSlice.b),
+    title: if titleLen == -1:
+      ""
+    else:
+      substr(doc, titleSlice.a, titleSlice.b)
   )
   return ParseResult(token: link, pos: pos+1)
 
@@ -1958,28 +1956,27 @@ proc parseFullReferenceLink(doc: string, start: int, labelSlice: Slice[int]): Pa
 
   pos += labelSize
 
-  var text = doc[labelSlice.a+1 ..< labelSlice.b]
   var link = Link(
-    doc: doc[start ..< pos],
+    doc: substr(doc, start, pos-1),
     refId: label,
-    text: text,
+    text: substr(doc, labelSlice.a+1, labelSlice.b-1),
   )
   return ParseResult(token: link, pos: pos)
 
 proc parseCollapsedReferenceLink(doc: string, start: int, label: Slice[int]): ParseResult =
-  var text = doc[label.a+1 ..< label.b]
+  var text = substr(doc, label.a+1, label.b-1)
   var link = Link(
-    doc: doc[start ..< label.b+1],
+    doc: substr(doc, start, label.b),
     text: text,
     refId: text.toLower.replace(re"\s+", " ")
   )
   return ParseResult(token: link, pos: label.b + 3)
 
 proc parseShortcutReferenceLink(doc: string, start: int, labelSlice: Slice[int]): ParseResult =
-  var id = doc[labelSlice.a+1 ..< labelSlice.b].toLower.replace(re"\s+", " ")
-  var text = doc[labelSlice.a+1 ..< labelSlice.b]
+  let text = substr(doc, labelSlice.a+1, labelSlice.b-1)
+  let id = text.toLower.replace(re"\s+", " ")
   var link = Link(
-    doc: doc[start ..< labelSlice.b+1],
+    doc: substr(doc, start, labelSlice.b),
     text: text,
     refId: id,
   )
@@ -2000,7 +1997,7 @@ method parse*(this: LinkParser, doc: string, start: int): ParseResult {.locks: "
 
   # A collapsed reference link consists of a link label that matches a link reference 
   # definition elsewhere in the document, followed by the string []. 
-  if labelSlice.b + 2 < doc.len and doc[labelSlice.b+1 .. labelSlice.b+2] == "[]":
+  if labelSlice.b + 2 < doc.len and substr(doc, labelSlice.b+1, labelSlice.b+2) == "[]":
     var res = doc.parseCollapsedReferenceLink(start, labelSlice)
     if res.pos != -1: return res
 
@@ -2050,18 +2047,15 @@ proc parseInlineImage(doc: string, start: int, labelSlice: Slice[int]): ParseRes
     return skipParsing
 
   # construct token
-  var title = ""
-  if titleLen >= 0:
-    title = doc[titleSlice]
-  var url = doc[destinationSlice]
-  var text = doc[labelSlice.a+1 ..< labelSlice.b]
-
   var image = Image(
-    doc: doc[start-1 ..< pos+1],
+    doc: substr(doc, start-1, pos),
     allowNested: true,
-    alt: text,
-    url: url,
-    title: title,
+    alt: substr(doc, labelSlice.a+1, labelSlice.b-1),
+    url: substr(doc, destinationSlice.a, destinationSlice.b),
+    title: if titleLen == -1:
+      ""
+    else:
+      substr(doc, titleSlice.a, titleSlice.b),
   )
 
   return ParseResult(token: image, pos: pos+2)
@@ -2074,10 +2068,10 @@ proc parseFullReferenceImage(doc: string, start: int, altSlice: Slice[int]): Par
 
   pos += labelSize
 
-  var alt = doc[altSlice.a+1 ..< altSlice.b]
+  var alt = substr(doc, altSlice.a+1, altSlice.b-1)
 
   var image = Image(
-    doc: doc[start ..< pos-1],
+    doc: substr(doc, start, pos-2),
     alt: alt,
     refId: label,
     allowNested: true
@@ -2085,21 +2079,21 @@ proc parseFullReferenceImage(doc: string, start: int, altSlice: Slice[int]): Par
   return ParseResult(token: image, pos: pos+1)
 
 proc parseCollapsedReferenceImage(doc: string, start: int, labelSlice: Slice[int]): ParseResult =
-  let alt = doc[labelSlice.a+1 ..< labelSlice.b]
+  let alt = substr(doc, labelSlice.a+1, labelSlice.b-1)
   let id = alt.toLower.replace(re"\s+", " ")
   let pos = labelSlice.b + 3
   var image = Image(
-    doc: doc[start ..< labelSlice.b+2],
+    doc: substr(doc, start, labelSlice.b+1),
     alt: alt,
     refId: id,
   )
   return ParseResult(token: image, pos: pos)
 
 proc parseShortcutReferenceImage(doc: string, start: int, labelSlice: Slice[int]): ParseResult =
-  let alt = doc[labelSlice.a+1 ..< labelSlice.b]
+  let alt = substr(doc, labelSlice.a+1, labelSlice.b-1)
   let id = alt.toLower.replace(re"\s+", " ")
   let image = Image(
-    doc: doc[start ..< labelSlice.b+1],
+    doc: substr(doc, start, labelSlice.b),
     alt: alt,
     refId: id,
     allowNested: false,
@@ -2134,7 +2128,7 @@ method parse*(this: ImageParser, doc: string, start: int): ParseResult {.locks: 
 
   # A collapsed reference link consists of a link label that matches a link reference 
   # definition elsewhere in the document, followed by the string []. 
-  elif labelSlice.b + 2 < doc.len and doc[labelSlice.b+1 .. labelSlice.b+2] == "[]":
+  elif labelSlice.b + 2 < doc.len and substr(doc, labelSlice.b+1, labelSlice.b+2) == "[]":
     return doc.parseCollapsedReferenceImage(start, labelSlice)
 
   # A full reference link consists of a link text immediately followed by a link label 
@@ -2205,7 +2199,7 @@ method parse*(this: CodeSpanParser, doc: string, start: int): ParseResult {.lock
     size = doc.matchLen(re"`+(?!`)", start)
     if size == -1:
       return skipParsing
-    let token = Text(doc : doc[start ..< start+size])
+    let token = Text(doc: substr(doc, start, start+size-1))
     return ParseResult(token: token, pos: start+size)
 
   var codeSpanVal = matches[2].strip(chars={'\n'}).replace(re"[\n]+", " ")
@@ -2308,8 +2302,8 @@ proc processEmphasis*(state: State, token: Token) =
       # remove used delimiters from stack elts and inlines
       opener.value.num -= useDelims
       closer.value.num -= useDelims
-      openerInlineText.doc = openerInlineText.doc[0 .. ^(useDelims+1)]
-      closerInlineText.doc = closerInlineText.doc[0 .. ^(useDelims+1)]
+      openerInlineText.doc = substr(openerInlineText.doc, 0, openerInlineText.doc.len-useDelims-1)
+      closerInlineText.doc = substr(closerInlineText.doc, 0, closerInlineText.doc.len-useDelims-1)
 
       # build contents for new emph element
       # add emph element to tokens
@@ -2384,7 +2378,7 @@ proc applyInlineParsers(state: State, doc: string, start: int): ParseResult =
 proc parseLeafBlockInlines(state: State, token: Token) =
   var pos = 0
   var res = new(ParseResult)
-  for index, ch in token.doc[0 ..< token.doc.len].strip:
+  for index, ch in token.doc.strip:
     if index < pos:
       continue
     res = state.applyInlineParsers(token.doc, index)

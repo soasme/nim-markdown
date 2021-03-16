@@ -970,7 +970,9 @@ method parse*(this: IndentedCodeParser, doc: string, start: int): ParseResult {.
 proc parseIndentedCode*(doc: string, start: int): ParseResult =
   IndentedCodeParser().parse(doc, start)
 
-proc getSetextHeading*(s: string): tuple[level: int, doc: string, size: int] =
+proc getSetextHeading*(doc: string, start = 0): tuple[level: int, doc: string, size: int] =
+  var s = substr(doc, start, doc.len-1)
+  var pos = findFirstLine(doc, start)
   var size = s.firstLine.len
   var markerLen = 0
   var matches: array[1, string]
@@ -1002,7 +1004,7 @@ proc getSetextHeading*(s: string): tuple[level: int, doc: string, size: int] =
   return (level: level, doc: doc, size: size)
 
 method parse(this: SetextHeadingParser, doc: string, start: int): ParseResult {.locks: "unknown".} =
-  let res = substr(doc, start, doc.len-1).getSetextHeading()
+  let res = getSetextHeading(doc, start)
   if res.size == -1: return ParseResult(token: nil, pos: -1)
   return ParseResult(
     token: Heading(

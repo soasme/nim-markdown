@@ -368,22 +368,26 @@ proc isBlank*(doc: string): bool =
   doc.contains(re"^[ \t]*\n?$")
 
 proc findFirstLine*(doc: string, start: int): int =
+  if start >= doc.len:
+    return 0
   let pos = doc.find('\l', start)
   if pos == -1:
-    return doc.len
+    return doc.len - start
   else:
-    return pos # include eol
+    return pos - start # include eol
 
 iterator findRestLines*(doc: string, start: int): tuple[start: int, stop: int] =
+  # left: open, right: closed
   var nextStart = start
-  var nextEnd = -1
-  while nextEnd < doc.len:
-    nextEnd = findFirstLine(doc, nextStart)
-    if nextEnd == doc.len:
+  var nextEnd = start
+  while nextStart < doc.len:
+    nextEnd = doc.find('\l', nextStart)
+    if nextEnd == -1:
       yield (nextStart, doc.len)
+      break
     else:
       yield (nextStart, nextEnd+1)
-    nextStart = nextEnd+1
+    nextStart = nextEnd + 1
 
 proc firstLine*(doc: string): string =
   for line in doc.splitLines(keepEol=true):
@@ -972,7 +976,6 @@ proc parseIndentedCode*(doc: string, start: int): ParseResult =
 
 proc getSetextHeading*(doc: string, start = 0): tuple[level: int, doc: string, size: int] =
   var s = substr(doc, start, doc.len-1)
-  var pos = findFirstLine(doc, start)
   var size = s.firstLine.len
   var markerLen = 0
   var matches: array[1, string]
@@ -1264,36 +1267,48 @@ method parse*(this: HtmlBlockParser, doc: string, start: int): ParseResult {.loc
   var pos = 0
   var size = -1
 
-  let firstLineEnd = findFirstLine(doc, start)
+  let firstLineSize = findFirstLine(doc, start)
+  let firstLineEnd = start + firstLineSize
 
   var startRe: Regex = nil
   var endRe: Regex = nil
+  var endMatch = false
 
-  for patterns in HTML_SEQUENCES:
+  for index, patterns in HTML_SEQUENCES:
     startRe = re(patterns[0], {RegexFlag.reIgnoreCase})
     let size = doc.matchLen(startRe, start, firstLineEnd)
     if size != -1:
-      endRe = re(patterns[1], {RegexFlag.reIgnoreCase})
+      if patterns[1][0] == '^':
+        endRe = re(r"\n$")
+        endMatch = true
+      else:
+        endRe = re(patterns[1], {RegexFlag.reIgnoreCase})
+        endMatch = false
       break
 
   if endRe == nil:
     return ParseResult(token: nil, pos: -1)
 
-  size = doc.find(endRe, start, firstLineEnd)
+  if endMatch:
+    size = doc.matchLen(endRe, start, firstLineEnd)
+  else:
+    size = doc.find(endRe, start, firstLineEnd)
+
   if size != -1:
     return ParseResult(
       token: HtmlBlock(doc: substr(doc, start, firstLineEnd)),
       pos: firstLineEnd
     )
 
-  let firstLine = substr(doc, start, firstLineEnd)
-  pos = firstLine.len
+  pos = firstLineSize+1
 
-  # XXX: performance improvement: no need to allocate string per line.
-  let rest = substr(doc, start, doc.len-1)
-  for line in rest.restLines:
-    pos += line.len
-    if line.find(endRe) != -1:
+  for line in findRestLines(doc, firstLineEnd+1):
+    if endMatch:
+      size = doc.matchLen(endRe, line.start, line.stop)
+    else:
+      size = doc.find(endRe, line.start, line.stop)
+    pos += (line.stop-line.start)
+    if size != -1:
       break
 
   return ParseResult(

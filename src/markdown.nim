@@ -1243,10 +1243,9 @@ method parse*(this: HtmlBlockParser, doc: string, start: int): ParseResult {.loc
   var html = ""
   var pos = 0
   var size = -1
-  let docLines = substr(doc, start, doc.len-1).splitLines(keepEol=true)
-  if docLines.len == 0:
-    return ParseResult(token: nil, pos: -1)
-  let firstLine = docLines[0]
+
+  let rest = substr(doc, start, doc.len-1)
+  let firstLine = rest.firstLine
 
   var startRe: Regex = nil
   var endRe: Regex = nil
@@ -1270,7 +1269,8 @@ method parse*(this: HtmlBlockParser, doc: string, start: int): ParseResult {.loc
     )
   else:
     pos = firstLine.len
-  for line in docLines[1 ..< docLines.len]:
+
+  for line in rest.restLines:
     pos += line.len
     html &= line
     if line.find(endRe) != -1:

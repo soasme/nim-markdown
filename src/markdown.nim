@@ -374,13 +374,16 @@ proc findFirstLine*(doc: string, start: int): int =
   else:
     return pos # include eol
 
-iterator findRestLines*(doc: string, start: int): int =
+iterator findRestLines*(doc: string, start: int): tuple[start: int, stop: int] =
   var nextStart = start
   var nextEnd = -1
   while nextEnd < doc.len:
     nextEnd = findFirstLine(doc, nextStart)
-    yield nextEnd
-    nextStart = nextEnd + 1
+    if nextEnd == doc.len:
+      yield (nextStart, doc.len)
+    else:
+      yield (nextStart, nextEnd+1)
+    nextStart = nextEnd+1
 
 proc firstLine*(doc: string): string =
   for line in doc.splitLines(keepEol=true):
@@ -1259,7 +1262,6 @@ method parse*(this: HtmlBlockParser, doc: string, start: int): ParseResult {.loc
   var pos = 0
   var size = -1
 
-  let rest = substr(doc, start, doc.len-1)
   let firstLineEnd = findFirstLine(doc, start)
   let firstLine = substr(doc, start, firstLineEnd)
 
@@ -1285,6 +1287,8 @@ method parse*(this: HtmlBlockParser, doc: string, start: int): ParseResult {.loc
 
   pos = firstLine.len
 
+  # XXX: performance improvement: no need to allocate string per line.
+  let rest = substr(doc, start, doc.len-1)
   for line in rest.restLines:
     pos += line.len
     if line.find(endRe) != -1:

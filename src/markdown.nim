@@ -1265,7 +1265,6 @@ method parse*(this: HtmlBlockParser, doc: string, start: int): ParseResult {.loc
   var size = -1
 
   let firstLineEnd = findFirstLine(doc, start)
-  let firstLine = substr(doc, start, firstLineEnd)
 
   var startRe: Regex = nil
   var endRe: Regex = nil
@@ -1287,6 +1286,7 @@ method parse*(this: HtmlBlockParser, doc: string, start: int): ParseResult {.loc
       pos: firstLineEnd
     )
 
+  let firstLine = substr(doc, start, firstLineEnd)
   pos = firstLine.len
 
   # XXX: performance improvement: no need to allocate string per line.

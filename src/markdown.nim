@@ -70,7 +70,7 @@ from strformat import fmt, `&`
 from uri import encodeUrl
 from strutils import join, splitLines, repeat, replace,
   strip, split, multiReplace, startsWith, endsWith,
-  parseInt, intToStr, splitWhitespace, contains
+  parseInt, intToStr, splitWhitespace, contains, find
 from tables import Table, initTable, mgetOrPut, contains, `[]=`, `[]`
 import unicode except `strip`, `splitWhitespace`
 from lists import DoublyLinkedList, DoublyLinkedNode,
@@ -288,18 +288,18 @@ proc appendChild*(token: Token, child: Token) =
 
 const THEMATIC_BREAK_RE = r" {0,3}([-*_])(?:[ \t]*\1){2,}[ \t]*(?:\n+|$)"
 
-const HTML_SCRIPT_START = r"^ {0,3}<(script|pre|style)(?=(\s|>|$))"
+const HTML_SCRIPT_START = r" {0,3}<(script|pre|style)(?=(\s|>|$))"
 const HTML_SCRIPT_END = r"</(script|pre|style)>"
-const HTML_COMMENT_START = r"^ {0,3}<!--"
+const HTML_COMMENT_START = r" {0,3}<!--"
 const HTML_COMMENT_END = r"-->"
-const HTML_PROCESSING_INSTRUCTION_START = r"^ {0,3}<\?"
+const HTML_PROCESSING_INSTRUCTION_START = r" {0,3}<\?"
 const HTML_PROCESSING_INSTRUCTION_END = r"\?>"
-const HTML_DECLARATION_START = r"^ {0,3}<\![A-Z]"
+const HTML_DECLARATION_START = r" {0,3}<\![A-Z]"
 const HTML_DECLARATION_END = r">"
 const HTML_CDATA_START = r" {0,3}<!\[CDATA\["
 const HTML_CDATA_END = r"\]\]>"
 const HTML_VALID_TAGS = ["address", "article", "aside", "base", "basefont", "blockquote", "body", "caption", "center", "col", "colgroup", "dd", "details", "dialog", "dir", "div", "dl", "dt", "fieldset", "figcaption", "figure", "footer", "form", "frame", "frameset", "h1", "h2", "h3", "h4", "h5", "h6", "head", "header", "hr", "html", "iframe", "legend", "li", "link", "main", "menu", "menuitem", "meta", "nav", "noframes", "ol", "optgroup", "option", "p", "param", "section", "source", "summary", "table", "tbody", "td", "tfoot", "th", "thead", "title", "tr", "track", "ul"]
-const HTML_TAG_START = r"^ {0,3}</?(" & HTML_VALID_TAGS.join("|") & r")(?=(\s|/?>|$))"
+const HTML_TAG_START = r" {0,3}</?(" & HTML_VALID_TAGS.join("|") & r")(?=(\s|/?>|$))"
 const HTML_TAG_END = r"^\n?$"
 
 const TAGNAME = r"[A-Za-z][A-Za-z0-9-]*"
@@ -327,7 +327,7 @@ const HTML_TAG = (
   & r")"
 )
 
-const HTML_OPEN_CLOSE_TAG_START = "^ {0,3}(?:" & OPEN_TAG & "|" & CLOSE_TAG & r")\s*$"
+const HTML_OPEN_CLOSE_TAG_START = " {0,3}(?:" & OPEN_TAG & "|" & CLOSE_TAG & r")\s*$"
 const HTML_OPEN_CLOSE_TAG_END = r"^\n?$"
 let HTML_SEQUENCES = @[
   (HTML_SCRIPT_START, HTML_SCRIPT_END),
@@ -366,6 +366,21 @@ proc preProcessing(state: State, token: Token) =
 
 proc isBlank*(doc: string): bool =
   doc.contains(re"^[ \t]*\n?$")
+
+proc findFirstLine*(doc: string, start: int): int =
+  let pos = doc.find('\l', start)
+  if pos == -1:
+    return doc.len
+  else:
+    return pos # include eol
+
+iterator findRestLines*(doc: string, start: int): int =
+  var nextStart = start
+  var nextEnd = -1
+  while nextEnd < doc.len:
+    nextEnd = findFirstLine(doc, nextStart)
+    yield nextEnd
+    nextStart = nextEnd + 1
 
 proc firstLine*(doc: string): string =
   for line in doc.splitLines(keepEol=true):
@@ -1245,14 +1260,15 @@ method parse*(this: HtmlBlockParser, doc: string, start: int): ParseResult {.loc
   var size = -1
 
   let rest = substr(doc, start, doc.len-1)
-  let firstLine = rest.firstLine
+  let firstLineEnd = findFirstLine(doc, start)
+  let firstLine = substr(doc, start, firstLineEnd)
 
   var startRe: Regex = nil
   var endRe: Regex = nil
 
   for patterns in HTML_SEQUENCES:
     startRe = re(patterns[0], {RegexFlag.reIgnoreCase})
-    let size = firstLine.matchLen(startRe)
+    let size = doc.matchLen(startRe, start, firstLineEnd)
     if size != -1:
       endRe = re(patterns[1], {RegexFlag.reIgnoreCase})
       break
@@ -1260,24 +1276,22 @@ method parse*(this: HtmlBlockParser, doc: string, start: int): ParseResult {.loc
   if endRe == nil:
     return ParseResult(token: nil, pos: -1)
 
-  html = firstLine
-  size = firstLine.find(endRe)
+  size = doc.find(endRe, start, firstLineEnd)
   if size != -1:
     return ParseResult(
-      token: HtmlBlock(doc: html),
-      pos: start+html.len
+      token: HtmlBlock(doc: substr(doc, start, firstLineEnd)),
+      pos: firstLineEnd
     )
-  else:
-    pos = firstLine.len
+
+  pos = firstLine.len
 
   for line in rest.restLines:
     pos += line.len
-    html &= line
     if line.find(endRe) != -1:
       break
 
   return ParseResult(
-    token: HtmlBlock(doc: html),
+    token: HtmlBlock(doc: substr(doc, start, start+pos-1)),
     pos: start+pos
   )
 

@@ -269,7 +269,7 @@ proc getLinkText*(doc: string, start: int, allowNested: bool = false): tuple[sli
 proc getLinkLabel*(doc: string, start: int): tuple[label: string, size: int];
 proc getLinkDestination*(doc: string, start: int): tuple[slice: Slice[int], size: int];
 proc getLinkTitle*(doc: string, start: int): tuple[slice: Slice[int], size: int];
-proc isContinuationText*(doc: string, start: int = 0): bool;
+proc isContinuationText*(doc: string, start: int = 0, stop: int = 0): bool;
 proc parseHtmlComment*(s: string): tuple[html: string, size: int];
 proc parseProcessingInstruction*(s: string): tuple[html: string, size: int];
 proc parseHtmlCData*(s: string): tuple[html: string, size: int];
@@ -364,8 +364,9 @@ proc preProcessing(state: State, token: Token) =
   token.doc = token.doc.replace("&#0;", "&#XFFFD;")
   token.doc = token.doc.replaceInitialTabs
 
-proc isBlank*(doc: string, start: int = 0): bool =
-  doc.match(re"[ \t]*\n?$", start)
+proc isBlank*(doc: string, start: int = 0, stop: int = 0): bool =
+  let matchStop = if stop == 0: doc.len else: stop
+  doc.matchLen(re"[ \t]*\n?$", start, matchStop) != -1
 
 proc findFirstLine*(doc: string, start: int): int =
   if start >= doc.len:
@@ -1488,7 +1489,9 @@ method parse*(this: ReferenceParser, doc: string, start: int): ParseResult =
   )
   return ParseResult(token: reference, pos: pos)
 
-proc isContinuationText*(doc: string, start: int = 0): bool =
+proc isContinuationText*(doc: string, start: int = 0, stop: int = 0): bool =
+  var matchStop = if stop == 0: doc.len else: stop
+
   let atxRes = getAtxHeading(doc, start)
   if atxRes.size != -1: return false
 
@@ -1498,7 +1501,7 @@ proc isContinuationText*(doc: string, start: int = 0): bool =
   let setextRes = getSetextHeading(doc, start)
   if setextRes.size != -1: return false
 
-  let htmlRes = matchHtmlStart(doc, start, doc.len)
+  let htmlRes = matchHtmlStart(doc, start, matchStop)
   if htmlRes.startRe != nil and not htmlRes.continuation: return false
 
   # Indented code cannot interrupt a paragraph.
@@ -1521,13 +1524,13 @@ proc isContinuationText*(doc: string, start: int = 0): bool =
 
   return true
 
-proc isUlEmptyListItem*(doc: string, start: int = 0): bool =
-  doc.match(re" {0,3}(?:[\-+*]|\d+[.)])[ \t]*\n?$", start)
+proc isUlEmptyListItem*(doc: string, start: int = 0, stop: int = 0): bool =
+  doc.matchLen(re" {0,3}(?:[\-+*]|\d+[.)])[ \t]*\n?$", start, stop) != -1
 
-proc isOlNo1ListItem*(doc: string, start: int = 0): bool =
+proc isOlNo1ListItem*(doc: string, start: int = 0, stop: int = 0): bool =
   (
-    doc.match(re" {0,3}\d+[.(][ \t]+[^\n]", start) and
-    not doc.match(re" {0,3}1[.)]", start)
+    doc.matchLen(re" {0,3}\d+[.(][ \t]+[^\n]", start, stop) != -1 and
+    doc.matchLen(re" {0,3}1[.)]", start, stop) == -1
   )
 
 method parse*(this: ParagraphParser, doc: string, start: int): ParseResult =
@@ -1537,23 +1540,23 @@ method parse*(this: ParagraphParser, doc: string, start: int): ParseResult =
   var size: int = firstLineSize+1
   let rest = substr(doc, start, doc.len-1)
 
-  for line in rest.restLines:
+  for slice in findRestLines(doc, firstLineEnd+1):
     # Special cases.
     # empty list item is continuation text
     # ol should start with 1.
-    if line.isUlEmptyListItem or line.isOlNo1ListItem:
-      size += line.len
+    if isUlEmptyListItem(doc, slice.start, slice.stop) or isOlNo1ListItem(doc, slice.start, slice.stop):
+      size += (slice.stop - slice.start)
       continue
 
     # Continuation text ends at a blank line.
-    if line.isBlank:
-      size += line.len
+    if isBlank(doc, slice.start, slice.stop):
+      size += (slice.stop - slice.start)
       break
 
-    if not line.isContinuationText:
+    if not isContinuationText(doc, slice.start, slice.stop):
       break
 
-    size += line.len
+    size += (slice.stop - slice.start)
 
   var p = substr(doc, start, start+size-1)
   let trailing = p.findAll(re"\n*$").join()

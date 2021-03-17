@@ -1489,13 +1489,13 @@ method parse*(this: ReferenceParser, doc: string, start: int): ParseResult =
   return ParseResult(token: reference, pos: pos)
 
 proc isContinuationText*(doc: string, start: int = 0): bool =
-  let atxRes = doc.getAtxHeading()
+  let atxRes = getAtxHeading(doc, start)
   if atxRes.size != -1: return false
 
-  let brRes = doc.getThematicBreak()
+  let brRes = getThematicBreak(doc, start)
   if brRes.size != -1: return false
 
-  let setextRes = doc.getSetextHeading()
+  let setextRes = getSetextHeading(doc, start)
   if setextRes.size != -1: return false
 
   let htmlRes = matchHtmlStart(doc, start, doc.len)
@@ -1503,19 +1503,19 @@ proc isContinuationText*(doc: string, start: int = 0): bool =
 
   # Indented code cannot interrupt a paragraph.
 
-  var fenceRes = doc.getFence()
+  var fenceRes = getFence(doc, start)
   if fenceRes.size != -1: return false
 
-  if doc.isBlockquote: return false
+  if isBlockquote(doc, start): return false
 
   var ulMarker: string
   var ulDoc: string
-  if doc.parseUnorderedListItem(marker=ulMarker, listItemDoc=ulDoc) != -1: return false
+  if parseUnorderedListItem(doc, start, ulMarker, ulDoc) != -1: return false
 
   var olMarker: string
   var olDoc: string
   var olIndex: int
-  let olOffset = doc.parseOrderedListItem(marker=olMarker,
+  let olOffset = parseOrderedListItem(doc, start, marker=olMarker,
     listItemDoc=olDoc, index=olIndex)
   if olOffset != -1: return false
 
@@ -1526,12 +1526,14 @@ proc isUlEmptyListItem*(doc: string, start: int = 0): bool =
 
 proc isOlNo1ListItem*(doc: string, start: int = 0): bool =
   (
-    doc.contains(re" {0,3}\d+[.(][ \t]+[^\n]", start) and
-    not doc.contains(re" {0,3}1[.)]", start)
+    doc.match(re" {0,3}\d+[.(][ \t]+[^\n]", start) and
+    not doc.match(re" {0,3}1[.)]", start)
   )
 
 method parse*(this: ParagraphParser, doc: string, start: int): ParseResult =
   let firstLineSize = findFirstLine(doc, start)
+  var firstLineEnd = start + firstLineSize
+
   var size: int = firstLineSize+1
   let rest = substr(doc, start, doc.len-1)
 

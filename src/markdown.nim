@@ -70,7 +70,7 @@ from strformat import fmt, `&`
 from uri import encodeUrl
 from strutils import join, splitLines, repeat, replace,
   strip, split, multiReplace, startsWith, endsWith,
-  parseInt, intToStr, splitWhitespace, contains
+  parseInt, intToStr, splitWhitespace, contains, find
 from tables import Table, initTable, mgetOrPut, contains, `[]=`, `[]`
 import unicode except `strip`, `splitWhitespace`
 from lists import DoublyLinkedList, DoublyLinkedNode,
@@ -269,7 +269,7 @@ proc getLinkText*(doc: string, start: int, allowNested: bool = false): tuple[sli
 proc getLinkLabel*(doc: string, start: int): tuple[label: string, size: int];
 proc getLinkDestination*(doc: string, start: int): tuple[slice: Slice[int], size: int];
 proc getLinkTitle*(doc: string, start: int): tuple[slice: Slice[int], size: int];
-proc isContinuationText*(doc: string): bool;
+proc isContinuationText*(doc: string, start: int = 0, stop: int = 0): bool;
 proc parseHtmlComment*(s: string): tuple[html: string, size: int];
 proc parseProcessingInstruction*(s: string): tuple[html: string, size: int];
 proc parseHtmlCData*(s: string): tuple[html: string, size: int];
@@ -288,18 +288,18 @@ proc appendChild*(token: Token, child: Token) =
 
 const THEMATIC_BREAK_RE = r" {0,3}([-*_])(?:[ \t]*\1){2,}[ \t]*(?:\n+|$)"
 
-const HTML_SCRIPT_START = r"^ {0,3}<(script|pre|style)(?=(\s|>|$))"
+const HTML_SCRIPT_START = r" {0,3}<(script|pre|style)(?=(\s|>|$))"
 const HTML_SCRIPT_END = r"</(script|pre|style)>"
-const HTML_COMMENT_START = r"^ {0,3}<!--"
+const HTML_COMMENT_START = r" {0,3}<!--"
 const HTML_COMMENT_END = r"-->"
-const HTML_PROCESSING_INSTRUCTION_START = r"^ {0,3}<\?"
+const HTML_PROCESSING_INSTRUCTION_START = r" {0,3}<\?"
 const HTML_PROCESSING_INSTRUCTION_END = r"\?>"
-const HTML_DECLARATION_START = r"^ {0,3}<\![A-Z]"
+const HTML_DECLARATION_START = r" {0,3}<\![A-Z]"
 const HTML_DECLARATION_END = r">"
 const HTML_CDATA_START = r" {0,3}<!\[CDATA\["
 const HTML_CDATA_END = r"\]\]>"
 const HTML_VALID_TAGS = ["address", "article", "aside", "base", "basefont", "blockquote", "body", "caption", "center", "col", "colgroup", "dd", "details", "dialog", "dir", "div", "dl", "dt", "fieldset", "figcaption", "figure", "footer", "form", "frame", "frameset", "h1", "h2", "h3", "h4", "h5", "h6", "head", "header", "hr", "html", "iframe", "legend", "li", "link", "main", "menu", "menuitem", "meta", "nav", "noframes", "ol", "optgroup", "option", "p", "param", "section", "source", "summary", "table", "tbody", "td", "tfoot", "th", "thead", "title", "tr", "track", "ul"]
-const HTML_TAG_START = r"^ {0,3}</?(" & HTML_VALID_TAGS.join("|") & r")(?=(\s|/?>|$))"
+const HTML_TAG_START = r" {0,3}</?(" & HTML_VALID_TAGS.join("|") & r")(?=(\s|/?>|$))"
 const HTML_TAG_END = r"^\n?$"
 
 const TAGNAME = r"[A-Za-z][A-Za-z0-9-]*"
@@ -327,7 +327,7 @@ const HTML_TAG = (
   & r")"
 )
 
-const HTML_OPEN_CLOSE_TAG_START = "^ {0,3}(?:" & OPEN_TAG & "|" & CLOSE_TAG & r")\s*$"
+const HTML_OPEN_CLOSE_TAG_START = " {0,3}(?:" & OPEN_TAG & "|" & CLOSE_TAG & r")\s*$"
 const HTML_OPEN_CLOSE_TAG_END = r"^\n?$"
 let HTML_SEQUENCES = @[
   (HTML_SCRIPT_START, HTML_SCRIPT_END),
@@ -364,8 +364,31 @@ proc preProcessing(state: State, token: Token) =
   token.doc = token.doc.replace("&#0;", "&#XFFFD;")
   token.doc = token.doc.replaceInitialTabs
 
-proc isBlank*(doc: string): bool =
-  doc.contains(re"^[ \t]*\n?$")
+proc isBlank*(doc: string, start: int = 0, stop: int = 0): bool =
+  let matchStop = if stop == 0: doc.len else: stop
+  doc.matchLen(re"[ \t]*\n?$", start, matchStop) != -1
+
+proc findFirstLine*(doc: string, start: int): int =
+  if start >= doc.len:
+    return 0
+  let pos = doc.find('\l', start)
+  if pos == -1:
+    return doc.len - start
+  else:
+    return pos - start # include eol
+
+iterator findRestLines*(doc: string, start: int): tuple[start: int, stop: int] =
+  # left: open, right: closed
+  var nextStart = start
+  var nextEnd = start
+  while nextStart < doc.len:
+    nextEnd = doc.find('\l', nextStart)
+    if nextEnd == -1:
+      yield (nextStart, doc.len)
+      break
+    else:
+      yield (nextStart, nextEnd+1)
+    nextStart = nextEnd + 1
 
 proc firstLine*(doc: string): string =
   for line in doc.splitLines(keepEol=true):
@@ -678,10 +701,11 @@ proc parseOrderedListItem*(doc: string, start=0, marker: var string, listItemDoc
         pos += size
         break
     elif listItemDoc.find(re"\n{2,}$") == -1:
-      var line = substr(doc, pos, doc.len-1).firstLine
-      if line.isContinuationText:
-        listItemDoc &= line
-        size = line.len
+      var firstLineSize = findFirstLine(doc, pos)
+      var firstLineEnd = pos + firstLineSize
+      if isContinuationText(doc, pos, firstLineEnd):
+        listItemDoc &= substr(doc, pos, firstLineEnd)
+        size = firstLineSize
       else:
         break
     else:
@@ -739,10 +763,11 @@ proc parseUnorderedListItem*(doc: string, start=0, marker: var string, listItemD
         pos += size
         break
     elif listItemDoc.find(re"\n{2,}$") == -1:
-      var line = substr(doc, pos, doc.len-1).firstLine
-      if line.isContinuationText:
-        listItemDoc &= line
-        size = line.len
+      var firstLineSize = findFirstLine(doc, pos)
+      var firstLineEnd = pos + firstLineSize
+      if isContinuationText(doc, pos, firstLineEnd):
+        listItemDoc &= substr(doc, pos, firstLineEnd)
+        size = firstLineSize
       else:
         break
     else:
@@ -952,39 +977,43 @@ method parse*(this: IndentedCodeParser, doc: string, start: int): ParseResult {.
 proc parseIndentedCode*(doc: string, start: int): ParseResult =
   IndentedCodeParser().parse(doc, start)
 
-proc getSetextHeading*(s: string): tuple[level: int, doc: string, size: int] =
-  var size = s.firstLine.len
+proc getSetextHeading*(doc: string, start = 0): tuple[level: int, doc: string, size: int] =
+  var firstLineSize = findFirstLine(doc, start)
+  var firstLineEnd = start + firstLineSize
+  var size = firstLineSize+1
   var markerLen = 0
   var matches: array[1, string]
   let pattern = re(r" {0,3}(=|-)+ *(?:\n+|$)")
   var level = 0
-  for line in s.restLines:
-    if line.match(re"^(?:\n|$)"): # empty line: break
+
+  for slice in findRestLines(doc, firstLineEnd+1):
+    if matchLen(doc, re"(?:\n|$)", slice.start, slice.stop) != -1: # found empty line
       break
-    if line.matchLen(re"^ {4,}") != -1: # not a code block anymore.
-      size += line.len
+    if matchLen(doc, re" {4,}", slice.start, slice.stop) != -1: # found code block
+      size += slice.stop - slice.start
       continue
-    if line.match(pattern, matches=matches):
-      size += line.len
-      markerLen = line.len
+    if matchLen(doc, pattern, matches, slice.start, slice.stop) != -1:
+      markerLen = slice.stop - slice.start
+      size += markerLen
       if matches[0] == "=":
         level = 1
       elif matches[0] == "-":
         level = 2
       break
     else:
-      size += line.len
+      size += slice.stop - slice.start
+
   if level == 0:
     return (level: 0, doc: "", size: -1)
 
-  let doc = s[0..<size-markerLen].strip
-  if doc.match(re"(?:\s*\n)+"):
+  if matchLen(doc, re"(?:\s*\n)+", start, start+size-markerLen) != -1:
     return (level: 0, doc: "", size: -1)
 
+  let doc = substr(doc, start, start+size-markerLen-1).strip
   return (level: level, doc: doc, size: size)
 
 method parse(this: SetextHeadingParser, doc: string, start: int): ParseResult {.locks: "unknown".} =
-  let res = substr(doc, start, doc.len-1).getSetextHeading()
+  let res = getSetextHeading(doc, start)
   if res.size == -1: return ParseResult(token: nil, pos: -1)
   return ParseResult(
     token: Heading(
@@ -1239,51 +1268,80 @@ proc parseHtmlDeclaration*(s: string): tuple[html: string, size: int] =
 proc parseHtmlTag*(s: string): tuple[html: string, size: int] =
   return s.parseHTMLBlockContent(HTML_TAG_START, HTML_TAG_END)
 
-method parse*(this: HtmlBlockParser, doc: string, start: int): ParseResult {.locks: "unknown".} =
-  var html = ""
-  var pos = 0
-  var size = -1
-  let docLines = substr(doc, start, doc.len-1).splitLines(keepEol=true)
-  if docLines.len == 0:
-    return ParseResult(token: nil, pos: -1)
-  let firstLine = docLines[0]
-
+proc matchHtmlStart*(doc: string, start: int = 0, bufsize: int = 0): tuple[startRe: Regex, endRe: Regex, endMatch: bool, continuation: bool] =
   var startRe: Regex = nil
   var endRe: Regex = nil
+  var endMatch = false
+  var continuation = false
 
-  for patterns in HTML_SEQUENCES:
+  for index, patterns in HTML_SEQUENCES:
     startRe = re(patterns[0], {RegexFlag.reIgnoreCase})
-    let size = firstLine.matchLen(startRe)
+    let size = doc.matchLen(startRe, start, bufsize)
     if size != -1:
-      endRe = re(patterns[1], {RegexFlag.reIgnoreCase})
+      continuation = index == 6 # HTML_OPEN_CLOSE_TAG_START/END
+      if patterns[1][0] == '^':
+        endRe = re(r"\n$")
+        endMatch = true
+      else:
+        endRe = re(patterns[1], {RegexFlag.reIgnoreCase})
+        endMatch = false
       break
 
   if endRe == nil:
-    return ParseResult(token: nil, pos: -1)
+    return (nil, nil, false, false)
+  else:
+    return (startRe, endRe, endMatch, continuation)
 
-  html = firstLine
-  size = firstLine.find(endRe)
+proc parseHtmlBlock(doc: string, start: int = 0): ParseResult =
+  var html = ""
+  var pos = 0
+  var size = -1
+
+  let firstLineSize = findFirstLine(doc, start)
+  let firstLineEnd = start + firstLineSize
+
+  let matchStart = matchHtmlStart(doc, start, firstLineEnd)
+  if matchStart.endRe == nil:
+    return skipParsing
+
+  var startRe: Regex = matchStart.startRe
+  var endRe: Regex = matchStart.endRe
+  var endMatch = matchStart.endMatch
+
+  if endMatch:
+    size = doc.matchLen(endRe, start, firstLineEnd)
+  else:
+    size = doc.find(endRe, start, firstLineEnd)
+
   if size != -1:
     return ParseResult(
-      token: HtmlBlock(doc: html),
-      pos: start+html.len
+      token: HtmlBlock(doc: substr(doc, start, firstLineEnd)),
+      pos: firstLineEnd
     )
-  else:
-    pos = firstLine.len
-  for line in docLines[1 ..< docLines.len]:
-    pos += line.len
-    html &= line
-    if line.find(endRe) != -1:
+
+  pos = firstLineSize+1
+
+  for line in findRestLines(doc, firstLineEnd+1):
+    if endMatch:
+      size = doc.matchLen(endRe, line.start, line.stop)
+    else:
+      size = doc.find(endRe, line.start, line.stop)
+    pos += (line.stop-line.start)
+    if size != -1:
       break
 
   return ParseResult(
-    token: HtmlBlock(doc: html),
+    token: HtmlBlock(doc: substr(doc, start, start+pos-1)),
     pos: start+pos
   )
 
-const rBlockquoteMarker = r"^( {0,3}>)"
+method parse*(this: HtmlBlockParser, doc: string, start: int): ParseResult {.locks: "unknown".} =
+  return parseHtmlBlock(doc, start)
 
-proc isBlockquote*(s: string): bool = s.contains(re(rBlockquoteMarker))
+const rBlockquoteMarker = r"( {0,3}>)"
+
+proc isBlockquote*(s: string, start: int = 0): bool =
+  s.match(re(rBlockquoteMarker), start)
 
 proc consumeBlockquoteMarker(doc: string): string =
   var r: string
@@ -1436,75 +1494,74 @@ method parse*(this: ReferenceParser, doc: string, start: int): ParseResult =
   )
   return ParseResult(token: reference, pos: pos)
 
-proc isContinuationText*(doc: string): bool =
-  let atxRes = doc.getAtxHeading()
+proc isContinuationText*(doc: string, start: int = 0, stop: int = 0): bool =
+  var matchStop = if stop == 0: doc.len else: stop
+
+  let atxRes = getAtxHeading(doc, start)
   if atxRes.size != -1: return false
 
-  let brRes = doc.getThematicBreak()
+  let brRes = getThematicBreak(doc, start)
   if brRes.size != -1: return false
 
-  let setextRes = doc.getSetextHeading()
+  let setextRes = getSetextHeading(doc, start)
   if setextRes.size != -1: return false
 
-  # All HTML blocks can interrupt a paragraph except open&closing tags.
-  if doc.parseHtmlScript.size != -1: return false
-  if doc.parseHtmlComment.size != -1: return false
-  if doc.parseProcessingInstruction.size != -1: return false
-  if doc.parseHtmlDeclaration.size != -1: return false
-  if doc.parseHtmlCData.size != -1: return false
-  if doc.parseHtmlTag.size != -1: return false
+  let htmlRes = matchHtmlStart(doc, start, matchStop)
+  if htmlRes.startRe != nil and not htmlRes.continuation: return false
 
   # Indented code cannot interrupt a paragraph.
 
-  var fenceRes = doc.getFence()
+  var fenceRes = getFence(doc, start)
   if fenceRes.size != -1: return false
 
-  if doc.isBlockquote: return false
+  if isBlockquote(doc, start): return false
 
   var ulMarker: string
   var ulDoc: string
-  if doc.parseUnorderedListItem(marker=ulMarker, listItemDoc=ulDoc) != -1: return false
+  if parseUnorderedListItem(doc, start, ulMarker, ulDoc) != -1: return false
 
   var olMarker: string
   var olDoc: string
   var olIndex: int
-  let olOffset = doc.parseOrderedListItem(marker=olMarker,
+  let olOffset = parseOrderedListItem(doc, start, marker=olMarker,
     listItemDoc=olDoc, index=olIndex)
   if olOffset != -1: return false
 
   return true
 
-proc isUlEmptyListItem*(doc: string): bool =
-  doc.match(re"^ {0,3}(?:[\-+*]|\d+[.)])[ \t]*\n?$")
+proc isUlEmptyListItem*(doc: string, start: int = 0, stop: int = 0): bool =
+  doc.matchLen(re" {0,3}(?:[\-+*]|\d+[.)])[ \t]*\n?$", start, stop) != -1
 
-proc isOlNo1ListItem*(doc: string): bool =
+proc isOlNo1ListItem*(doc: string, start: int = 0, stop: int = 0): bool =
   (
-    doc.contains(re" {0,3}\d+[.(][ \t]+[^\n]") and
-    not doc.contains(re" {0,3}1[.)]")
+    doc.matchLen(re" {0,3}\d+[.(][ \t]+[^\n]", start, stop) != -1 and
+    doc.matchLen(re" {0,3}1[.)]", start, stop) == -1
   )
 
 method parse*(this: ParagraphParser, doc: string, start: int): ParseResult =
-  let rest = substr(doc, start, doc.len-1)
-  let firstLine = rest.firstLine
-  var size: int = firstLine.len
+  let firstLineSize = findFirstLine(doc, start)
+  var firstLineEnd = start + firstLineSize
 
-  for line in rest.restLines:
+  var size: int = firstLineSize+1
+  let rest = substr(doc, start, doc.len-1)
+
+  for slice in findRestLines(doc, firstLineEnd+1):
     # Special cases.
     # empty list item is continuation text
     # ol should start with 1.
-    if line.isUlEmptyListItem or line.isOlNo1ListItem:
-      size += line.len
+    if isUlEmptyListItem(doc, slice.start, slice.stop) or isOlNo1ListItem(doc, slice.start, slice.stop):
+      size += (slice.stop - slice.start)
       continue
 
     # Continuation text ends at a blank line.
-    if line.isBlank:
-      size += line.len
+    if isBlank(doc, slice.start, slice.stop):
+      size += (slice.stop - slice.start)
       break
 
-    if not line.isContinuationText:
+    if not isContinuationText(doc, slice.start, slice.stop):
       break
 
-    size += line.len
+    size += (slice.stop - slice.start)
 
   var p = substr(doc, start, start+size-1)
   let trailing = p.findAll(re"\n*$").join()

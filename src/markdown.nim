@@ -1316,9 +1316,10 @@ method parse*(this: HtmlBlockParser, doc: string, start: int): ParseResult {.loc
     pos: start+pos
   )
 
-const rBlockquoteMarker = r"^( {0,3}>)"
+const rBlockquoteMarker = r"( {0,3}>)"
 
-proc isBlockquote*(s: string): bool = s.contains(re(rBlockquoteMarker))
+proc isBlockquote*(s: string, start: int = 0): bool =
+  s.match(re(rBlockquoteMarker), start)
 
 proc consumeBlockquoteMarker(doc: string): string =
   var r: string

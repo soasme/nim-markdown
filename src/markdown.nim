@@ -701,10 +701,11 @@ proc parseOrderedListItem*(doc: string, start=0, marker: var string, listItemDoc
         pos += size
         break
     elif listItemDoc.find(re"\n{2,}$") == -1:
-      var line = substr(doc, pos, doc.len-1).firstLine
-      if line.isContinuationText:
-        listItemDoc &= line
-        size = line.len
+      var firstLineSize = findFirstLine(doc, pos)
+      var firstLineEnd = pos + firstLineSize
+      if isContinuationText(doc, pos, firstLineEnd):
+        listItemDoc &= substr(doc, pos, firstLineEnd)
+        size = firstLineSize
       else:
         break
     else:
@@ -762,10 +763,11 @@ proc parseUnorderedListItem*(doc: string, start=0, marker: var string, listItemD
         pos += size
         break
     elif listItemDoc.find(re"\n{2,}$") == -1:
-      var line = substr(doc, pos, doc.len-1).firstLine
-      if line.isContinuationText:
-        listItemDoc &= line
-        size = line.len
+      var firstLineSize = findFirstLine(doc, pos)
+      var firstLineEnd = pos + firstLineSize
+      if isContinuationText(doc, pos, firstLineEnd):
+        listItemDoc &= substr(doc, pos, firstLineEnd)
+        size = firstLineSize
       else:
         break
     else:

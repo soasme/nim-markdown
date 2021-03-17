@@ -1519,9 +1519,9 @@ proc isOlNo1ListItem*(doc: string): bool =
   )
 
 method parse*(this: ParagraphParser, doc: string, start: int): ParseResult =
+  let firstLineSize = findFirstLine(doc, start)
+  var size: int = firstLineSize+1
   let rest = substr(doc, start, doc.len-1)
-  let firstLine = rest.firstLine
-  var size: int = firstLine.len
 
   for line in rest.restLines:
     # Special cases.

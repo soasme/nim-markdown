@@ -978,35 +978,38 @@ proc parseIndentedCode*(doc: string, start: int): ParseResult =
   IndentedCodeParser().parse(doc, start)
 
 proc getSetextHeading*(doc: string, start = 0): tuple[level: int, doc: string, size: int] =
-  var s = substr(doc, start, doc.len-1)
-  var size = s.firstLine.len
+  var firstLineSize = findFirstLine(doc, start)
+  var firstLineEnd = start + firstLineSize
+  var size = firstLineSize+1
   var markerLen = 0
   var matches: array[1, string]
   let pattern = re(r" {0,3}(=|-)+ *(?:\n+|$)")
   var level = 0
-  for line in s.restLines:
-    if line.match(re"^(?:\n|$)"): # empty line: break
+
+  for slice in findRestLines(doc, firstLineEnd+1):
+    if matchLen(doc, re"(?:\n|$)", slice.start, slice.stop) != -1: # found empty line
       break
-    if line.matchLen(re"^ {4,}") != -1: # not a code block anymore.
-      size += line.len
+    if matchLen(doc, re" {4,}", slice.start, slice.stop) != -1: # found code block
+      size += slice.stop - slice.start
       continue
-    if line.match(pattern, matches=matches):
-      size += line.len
-      markerLen = line.len
+    if matchLen(doc, pattern, matches, slice.start, slice.stop) != -1:
+      markerLen = slice.stop - slice.start
+      size += markerLen
       if matches[0] == "=":
         level = 1
       elif matches[0] == "-":
         level = 2
       break
     else:
-      size += line.len
+      size += slice.stop - slice.start
+
   if level == 0:
     return (level: 0, doc: "", size: -1)
 
-  let doc = s[0..<size-markerLen].strip
-  if doc.match(re"(?:\s*\n)+"):
+  if matchLen(doc, re"(?:\s*\n)+", start, start+size-markerLen) != -1:
     return (level: 0, doc: "", size: -1)
 
+  let doc = substr(doc, start, start+size-markerLen-1).strip
   return (level: level, doc: doc, size: size)
 
 method parse(this: SetextHeadingParser, doc: string, start: int): ParseResult {.locks: "unknown".} =

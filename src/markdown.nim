@@ -269,7 +269,7 @@ proc getLinkText*(doc: string, start: int, allowNested: bool = false): tuple[sli
 proc getLinkLabel*(doc: string, start: int): tuple[label: string, size: int];
 proc getLinkDestination*(doc: string, start: int): tuple[slice: Slice[int], size: int];
 proc getLinkTitle*(doc: string, start: int): tuple[slice: Slice[int], size: int];
-proc isContinuationText*(doc: string): bool;
+proc isContinuationText*(doc: string, start: int = 0): bool;
 proc parseHtmlComment*(s: string): tuple[html: string, size: int];
 proc parseProcessingInstruction*(s: string): tuple[html: string, size: int];
 proc parseHtmlCData*(s: string): tuple[html: string, size: int];
@@ -1262,17 +1262,17 @@ proc parseHtmlDeclaration*(s: string): tuple[html: string, size: int] =
 proc parseHtmlTag*(s: string): tuple[html: string, size: int] =
   return s.parseHTMLBlockContent(HTML_TAG_START, HTML_TAG_END)
 
-proc matchHtmlStart*(doc: string, start: int = 0, bufsize: int = 0): tuple[startRe: Regex, endRe: Regex, endMatch: bool, endTerminate: bool] =
+proc matchHtmlStart*(doc: string, start: int = 0, bufsize: int = 0): tuple[startRe: Regex, endRe: Regex, endMatch: bool, continuation: bool] =
   var startRe: Regex = nil
   var endRe: Regex = nil
   var endMatch = false
-  var endTerminate = false
+  var continuation = false
 
   for index, patterns in HTML_SEQUENCES:
     startRe = re(patterns[0], {RegexFlag.reIgnoreCase})
     let size = doc.matchLen(startRe, start, bufsize)
     if size != -1:
-      endTerminate = index == 6 # HTML_OPEN_CLOSE_TAG_START/END
+      continuation = index == 6 # HTML_OPEN_CLOSE_TAG_START/END
       if patterns[1][0] == '^':
         endRe = re(r"\n$")
         endMatch = true
@@ -1282,9 +1282,9 @@ proc matchHtmlStart*(doc: string, start: int = 0, bufsize: int = 0): tuple[start
       break
 
   if endRe == nil:
-    return (nil, nil, false, endTerminate)
+    return (nil, nil, false, false)
   else:
-    return (startRe, endRe, endMatch, endTerminate)
+    return (startRe, endRe, endMatch, continuation)
 
 proc parseHtmlBlock(doc: string, start: int = 0): ParseResult =
   var html = ""
@@ -1488,7 +1488,7 @@ method parse*(this: ReferenceParser, doc: string, start: int): ParseResult =
   )
   return ParseResult(token: reference, pos: pos)
 
-proc isContinuationText*(doc: string): bool =
+proc isContinuationText*(doc: string, start: int = 0): bool =
   let atxRes = doc.getAtxHeading()
   if atxRes.size != -1: return false
 
@@ -1498,13 +1498,8 @@ proc isContinuationText*(doc: string): bool =
   let setextRes = doc.getSetextHeading()
   if setextRes.size != -1: return false
 
-  # All HTML blocks can interrupt a paragraph except open&closing tags.
-  if doc.parseHtmlScript.size != -1: return false
-  if doc.parseHtmlComment.size != -1: return false
-  if doc.parseProcessingInstruction.size != -1: return false
-  if doc.parseHtmlDeclaration.size != -1: return false
-  if doc.parseHtmlCData.size != -1: return false
-  if doc.parseHtmlTag.size != -1: return false
+  let htmlRes = matchHtmlStart(doc, start, doc.len)
+  if htmlRes.startRe != nil and not htmlRes.continuation: return false
 
   # Indented code cannot interrupt a paragraph.
 

@@ -1262,22 +1262,17 @@ proc parseHtmlDeclaration*(s: string): tuple[html: string, size: int] =
 proc parseHtmlTag*(s: string): tuple[html: string, size: int] =
   return s.parseHTMLBlockContent(HTML_TAG_START, HTML_TAG_END)
 
-method parse*(this: HtmlBlockParser, doc: string, start: int): ParseResult {.locks: "unknown".} =
-  var html = ""
-  var pos = 0
-  var size = -1
-
-  let firstLineSize = findFirstLine(doc, start)
-  let firstLineEnd = start + firstLineSize
-
+proc matchHtmlStart*(doc: string, start: int = 0, bufsize: int = 0): tuple[startRe: Regex, endRe: Regex, endMatch: bool, endTerminate: bool] =
   var startRe: Regex = nil
   var endRe: Regex = nil
   var endMatch = false
+  var endTerminate = false
 
   for index, patterns in HTML_SEQUENCES:
     startRe = re(patterns[0], {RegexFlag.reIgnoreCase})
-    let size = doc.matchLen(startRe, start, firstLineEnd)
+    let size = doc.matchLen(startRe, start, bufsize)
     if size != -1:
+      endTerminate = index == 6 # HTML_OPEN_CLOSE_TAG_START/END
       if patterns[1][0] == '^':
         endRe = re(r"\n$")
         endMatch = true
@@ -1287,7 +1282,25 @@ method parse*(this: HtmlBlockParser, doc: string, start: int): ParseResult {.loc
       break
 
   if endRe == nil:
-    return ParseResult(token: nil, pos: -1)
+    return (nil, nil, false, endTerminate)
+  else:
+    return (startRe, endRe, endMatch, endTerminate)
+
+proc parseHtmlBlock(doc: string, start: int = 0): ParseResult =
+  var html = ""
+  var pos = 0
+  var size = -1
+
+  let firstLineSize = findFirstLine(doc, start)
+  let firstLineEnd = start + firstLineSize
+
+  let matchStart = matchHtmlStart(doc, start, firstLineEnd)
+  if matchStart.endRe == nil:
+    return skipParsing
+
+  var startRe: Regex = matchStart.startRe
+  var endRe: Regex = matchStart.endRe
+  var endMatch = matchStart.endMatch
 
   if endMatch:
     size = doc.matchLen(endRe, start, firstLineEnd)
@@ -1315,6 +1328,9 @@ method parse*(this: HtmlBlockParser, doc: string, start: int): ParseResult {.loc
     token: HtmlBlock(doc: substr(doc, start, start+pos-1)),
     pos: start+pos
   )
+
+method parse*(this: HtmlBlockParser, doc: string, start: int): ParseResult {.locks: "unknown".} =
+  return parseHtmlBlock(doc, start)
 
 const rBlockquoteMarker = r"( {0,3}>)"
 

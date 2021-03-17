@@ -364,8 +364,8 @@ proc preProcessing(state: State, token: Token) =
   token.doc = token.doc.replace("&#0;", "&#XFFFD;")
   token.doc = token.doc.replaceInitialTabs
 
-proc isBlank*(doc: string): bool =
-  doc.contains(re"^[ \t]*\n?$")
+proc isBlank*(doc: string, start: int = 0): bool =
+  doc.match(re"[ \t]*\n?$", start)
 
 proc findFirstLine*(doc: string, start: int): int =
   if start >= doc.len:
@@ -1509,13 +1509,13 @@ proc isContinuationText*(doc: string): bool =
 
   return true
 
-proc isUlEmptyListItem*(doc: string): bool =
-  doc.match(re"^ {0,3}(?:[\-+*]|\d+[.)])[ \t]*\n?$")
+proc isUlEmptyListItem*(doc: string, start: int = 0): bool =
+  doc.match(re" {0,3}(?:[\-+*]|\d+[.)])[ \t]*\n?$", start)
 
-proc isOlNo1ListItem*(doc: string): bool =
+proc isOlNo1ListItem*(doc: string, start: int = 0): bool =
   (
-    doc.contains(re" {0,3}\d+[.(][ \t]+[^\n]") and
-    not doc.contains(re" {0,3}1[.)]")
+    doc.contains(re" {0,3}\d+[.(][ \t]+[^\n]", start) and
+    not doc.contains(re" {0,3}1[.)]", start)
   )
 
 method parse*(this: ParagraphParser, doc: string, start: int): ParseResult =

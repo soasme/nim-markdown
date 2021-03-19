@@ -945,17 +945,22 @@ proc getIndentedCodeFirstLine*(doc: string, start: int = 0): tuple[code: string,
   return (code: matches[0], size: findFirstLine(doc, start)+1)
 
 proc getIndentedCodeRestLines*(doc: string, start: int = 0): tuple[code: string, size: int] =
-  var s = substr(doc, start, doc.len-1)
+  var firstLineSize = findFirstLine(doc, start)
+  var firstLineEnd = start + firstLineSize
+
   var code: string
   var size: int
   var matches: array[1, string]
-  for line in s.restLines:
-    if line.isBlank:
-      code &= line.replace(re"^ {0,4}", "")
-      size += line.len
-    elif line.match(re(rIndentedCode), matches=matches):
-      code &= matches[0]
-      size += line.len
+
+  for slice in findRestLines(doc, firstLineEnd+1):
+    if isBlank(doc, slice.start, slice.stop):
+      add code, substr(doc, slice.start, slice.stop-1).replace(re"^ {0,4}", "")
+      size += (slice.stop - slice.start)
+
+    elif matchLen(doc, re(rIndentedCode), matches, slice.start, slice.stop) != -1:
+      add code, matches[0]
+      size += (slice.stop - slice.start)
+
     else:
       break
   return (code: code, size: size)

@@ -102,7 +102,7 @@ template re(data: string, flags: set[RegexFlag]): Regex =
     precompiledExp.mgetOrPut(tmpName, re.re(tmpName, flags))
 
 type
-  MarkdownError* = object of Exception ## The error object for markdown parsing and rendering.
+  MarkdownError* = object of ValueError## The error object for markdown parsing and rendering.
                                        ## Usually, you should not see MarkdownError raising in your application
                                        ## unless it's documented. Otherwise, please report it as an issue.
                                        ##
@@ -270,12 +270,6 @@ proc getLinkLabel*(doc: string, start: int): tuple[label: string, size: int];
 proc getLinkDestination*(doc: string, start: int): tuple[slice: Slice[int], size: int];
 proc getLinkTitle*(doc: string, start: int): tuple[slice: Slice[int], size: int];
 proc isContinuationText*(doc: string, start: int = 0, stop: int = 0): bool;
-proc parseHtmlComment*(s: string): tuple[html: string, size: int];
-proc parseProcessingInstruction*(s: string): tuple[html: string, size: int];
-proc parseHtmlCData*(s: string): tuple[html: string, size: int];
-proc parseHtmlDeclaration*(s: string): tuple[html: string, size: int];
-proc parseHtmlTag*(s: string): tuple[html: string, size: int];
-proc parseHtmlOpenCloseTag*(s: string): tuple[html: string, size: int];
 proc toStringSeq(tokens: DoublyLinkedList[Token]): seq[string];
 
 let skipParsing = ParseResult(token: nil, pos: -1)
@@ -794,9 +788,6 @@ method parse*(this: UlParser, doc: string, start: int): ParseResult =
 
   return ParseResult(token: ulToken, pos: pos)
 
-proc parseUnorderedList(doc: string, start: int): ParseResult {.locks: "unknown".} =
-  UlParser().parse(doc, start)
-
 method parse*(this: OlParser, doc: string, start: int): ParseResult =
   var pos = start
   var marker = ""
@@ -925,7 +916,6 @@ method parse*(this: FencedCodeParser, doc: string, start: int): ParseResult {.lo
 const rIndentedCode = r"(?: {4}| {0,3}\t)(.*\n?)"
 
 proc getIndentedCodeFirstLine*(doc: string, start: int = 0): tuple[code: string, size: int]=
-  var s = substr(doc, start, doc.len-1)
   var matches: array[1, string]
   if matchLen(doc, re(rIndentedCode), matches, start) == -1: return ("", -1)
   if matches[0].isBlank: return ("", -1)
@@ -1236,30 +1226,6 @@ proc parseHTMLBlockContent*(doc: string, startPattern: string, endPattern: strin
       break
   return (html, pos)
 
-proc parseHtmlScript(s: string): tuple[html: string, size: int] =
-  return s.parseHTMLBlockContent(HTML_SCRIPT_START, HTML_SCRIPT_END)
-
-proc parseHtmlComment*(s: string): tuple[html: string, size: int] =
-  return s.parseHTMLBlockContent(HTML_COMMENT_START, HTML_COMMENT_END)
-
-proc parseProcessingInstruction*(s: string): tuple[html: string, size: int] =
-  return s.parseHTMLBlockContent(
-    HTML_PROCESSING_INSTRUCTION_START,
-    HTML_PROCESSING_INSTRUCTION_END)
-
-proc parseHtmlCData*(s: string): tuple[html: string, size: int] =
-  return s.parseHTMLBlockContent(HTML_CDATA_START, HTML_CDATA_END)
-
-proc parseHtmlOpenCloseTag*(s: string): tuple[html: string, size: int] =
-  return s.parseHTMLBlockContent(
-    HTML_OPEN_CLOSE_TAG_START, HTML_OPEN_CLOSE_TAG_END)
-
-proc parseHtmlDeclaration*(s: string): tuple[html: string, size: int] =
-  return s.parseHTMLBlockContent(HTML_DECLARATION_START, HTML_DECLARATION_END)
-
-proc parseHtmlTag*(s: string): tuple[html: string, size: int] =
-  return s.parseHTMLBlockContent(HTML_TAG_START, HTML_TAG_END)
-
 proc matchHtmlStart*(doc: string, start: int = 0, bufsize: int = 0): tuple[startRe: Regex, endRe: Regex, endMatch: bool, continuation: bool] =
   var startRe: Regex = nil
   var endRe: Regex = nil
@@ -1285,7 +1251,6 @@ proc matchHtmlStart*(doc: string, start: int = 0, bufsize: int = 0): tuple[start
     return (startRe, endRe, endMatch, continuation)
 
 proc parseHtmlBlock(doc: string, start: int = 0): ParseResult =
-  var html = ""
   var pos = 0
   var size = -1
 
@@ -1296,7 +1261,6 @@ proc parseHtmlBlock(doc: string, start: int = 0): ParseResult =
   if matchStart.endRe == nil:
     return skipParsing
 
-  var startRe: Regex = matchStart.startRe
   var endRe: Regex = matchStart.endRe
   var endMatch = matchStart.endMatch
 
@@ -1535,7 +1499,6 @@ method parse*(this: ParagraphParser, doc: string, start: int): ParseResult =
   var firstLineEnd = start + firstLineSize
 
   var size: int = firstLineSize+1
-  let rest = substr(doc, start, doc.len-1)
 
   for slice in findRestLines(doc, firstLineEnd+1):
     # Special cases.

@@ -2215,7 +2215,8 @@ method parse*(this: CodeSpanParser, doc: string, start: int): ParseResult {.lock
     return ParseResult(token: token, pos: start+size)
 
   var codeSpanVal = matches[2].strip(chars={'\n'}).replace(re"[\n]+", " ")
-  if codeSpanVal[0] == ' ' and codeSpanVal[codeSpanVal.len-1] == ' ' and not codeSpanVal.match(re"^[ ]+$"):
+
+  if codeSpanVal != "" and codeSpanVal[0] == ' ' and codeSpanVal[codeSpanVal.len-1] == ' ' and not codeSpanVal.match(re"^[ ]+$"):
     codeSpanVal = codeSpanVal[1 ..< codeSpanVal.len-1]
 
   let token = CodeSpan(doc: codeSpanVal)

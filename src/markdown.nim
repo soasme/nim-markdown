@@ -935,16 +935,17 @@ method parse*(this: FencedCodeParser, doc: string, start: int): ParseResult {.lo
   )
   return ParseResult(token: codeToken, pos: pos)
 
-const rIndentedCode = r"^(?: {4}| {0,3}\t)(.*\n?)"
+const rIndentedCode = r"(?: {4}| {0,3}\t)(.*\n?)"
 
-proc getIndentedCodeFirstLine*(s: string): tuple[code: string, size: int]=
+proc getIndentedCodeFirstLine*(doc: string, start: int = 0): tuple[code: string, size: int]=
+  var s = substr(doc, start, doc.len-1)
   var matches: array[1, string]
-  let firstLine = s.firstLine
-  if not firstLine.match(re(rIndentedCode), matches=matches): return ("", -1)
+  if matchLen(doc, re(rIndentedCode), matches, start) == -1: return ("", -1)
   if matches[0].isBlank: return ("", -1)
-  return (code: matches[0], size: firstLine.len)
+  return (code: matches[0], size: findFirstLine(doc, start)+1)
 
-proc getIndentedCodeRestLines*(s: string): tuple[code: string, size: int] =
+proc getIndentedCodeRestLines*(doc: string, start: int = 0): tuple[code: string, size: int] =
+  var s = substr(doc, start, doc.len-1)
   var code: string
   var size: int
   var matches: array[1, string]
@@ -960,12 +961,11 @@ proc getIndentedCodeRestLines*(s: string): tuple[code: string, size: int] =
   return (code: code, size: size)
 
 method parse*(this: IndentedCodeParser, doc: string, start: int): ParseResult {.locks: "unknown".} =
-  var rest = substr(doc, start, doc.len-1)
-  var res = rest.getIndentedCodeFirstLine()
+  var res = getIndentedCodeFirstLine(doc, start)
   if res.size == -1: return ParseResult(token: nil, pos: -1)
   var code = res.code
   var pos = start + res.size
-  res = rest.getIndentedCodeRestLines()
+  res = getIndentedCodeRestLines(doc, start)
   code &= res.code
   code = code.removeBlankLines
   pos += res.size

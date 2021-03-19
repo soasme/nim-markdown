@@ -111,6 +111,7 @@ Features:
 
 Released:
 
+* v0.8.4, 19 Mar 2021, performance improvement: eliminate all `firstLine` and `restLines` calls. (#54, #55, #56).
 * v0.8.3, 13 Mar 2021, performance improvement: faster html pattern matching (#52) & eliminate all `since()` calls (#53).
 * v0.8.2, 3 Mar 2021, performance improvement: use pre-compiled regex.
 * v0.8.1, 30 Dec 2019, bugfix: fixed compatibility with `--gc:arc`.

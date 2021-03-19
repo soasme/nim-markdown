@@ -390,19 +390,6 @@ iterator findRestLines*(doc: string, start: int): tuple[start: int, stop: int] =
       yield (nextStart, nextEnd+1)
     nextStart = nextEnd + 1
 
-proc firstLine*(doc: string): string =
-  for line in doc.splitLines(keepEol=true):
-    return line
-  return ""
-
-iterator restLines*(doc: string): string =
-  var isRestLines = false
-  for line in doc.splitLines(keepEol=true):
-    if isRestLines:
-      yield line
-    else:
-      isRestLines = true
-
 proc escapeTag*(doc: string): string =
   ## Replace `<` and `>` to HTML-safe characters.
   ## Example::

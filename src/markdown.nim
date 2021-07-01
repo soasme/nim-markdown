@@ -1,12 +1,12 @@
 ## # nim-markdown
 ##
 ## Most markdown parsers parse markdown documents in two steps, so does nim-markdown.
-## The two-step consists of blocking parsing and inline parsing.
+## The two-step consists of blocks parsing and inline parsing.
 ##
 ## * **Block Parsing**: One or more lines belongs to blocks, such as `<p>`, `<h1>`, etc.
 ## * **Inline Parsing**: Textual contents within the lines belongs to inlines, such as `<a>`, `<em>`, `<strong>`, etc.
 ##
-## When parsing block elements, nim-markdown follows below algorithm.
+## When parsing block elements, nim-markdown follows this algorithm:
 ##
 ## * Step 1. Track current position `pos` in the document.
 ## * Step 2. If the document since pos matches one of our parsers, then apply it.
@@ -26,7 +26,7 @@
 ##                                                             ^EOF, exit parsing.
 ## ```
 ##
-## After the block parsing step, a tree with only Block Token are constructed.
+## After the block parsing step, a tree with only Block Tokens is constructed.
 ##
 ## ```
 ## Document()
@@ -34,7 +34,7 @@
 ## +-Paragraph(doc="Wel...")
 ## ```
 ##
-## Then, we proceed inline parsing. It walks the tree and expand more inline elements.
+## Then, we proceed to inline parsing. It walks the tree and expands more inline elements.
 ## The algorithm is the same, except we apply it to every Block Token.
 ## Eventually, we get something like this:
 ##

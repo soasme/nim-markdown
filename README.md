@@ -36,7 +36,7 @@ echo(html)
 
 Below are some useful links:
 
-* The API documentation: <https://www.soasme.com/nim-markdown/>
+* The API documentation: <https://www.soasme.com/nim-markdown/htmldocs/markdown.html>
 * The dev guide: <https://enqueuezero.com/markdown-parser.html>
 * The cheat sheet: <https://github.com/adam-p/markdown-here/wiki/Markdown-Cheatsheet>
 

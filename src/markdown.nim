@@ -358,11 +358,11 @@ proc preProcessing(state: State, token: Token) =
   token.doc = token.doc.replace("&#0;", "&#XFFFD;")
   token.doc = token.doc.replaceInitialTabs
 
-proc isBlank*(doc: string, start: int = 0, stop: int = 0): bool =
+proc isBlank(doc: string, start: int = 0, stop: int = 0): bool =
   let matchStop = if stop == 0: doc.len else: stop
   doc.matchLen(re"[ \t]*\n?$", start, matchStop) != -1
 
-proc findFirstLine*(doc: string, start: int): int =
+proc findFirstLine(doc: string, start: int): int =
   if start >= doc.len:
     return 0
   let pos = doc.find('\l', start)
@@ -371,7 +371,7 @@ proc findFirstLine*(doc: string, start: int): int =
   else:
     return pos - start # include eol
 
-iterator findRestLines*(doc: string, start: int): tuple[start: int, stop: int] =
+iterator findRestLines(doc: string, start: int): tuple[start: int, stop: int] =
   # left: open, right: closed
   var nextStart = start
   var nextEnd = start
@@ -384,20 +384,20 @@ iterator findRestLines*(doc: string, start: int): tuple[start: int, stop: int] =
       yield (nextStart, nextEnd+1)
     nextStart = nextEnd + 1
 
-proc escapeTag*(doc: string): string =
+proc escapeTag(doc: string): string =
   ## Replace `<` and `>` to HTML-safe characters.
   ## Example::
   ##     check escapeTag("<tag>") == "&lt;tag&gt;"
   result = doc.replace("<", "&lt;")
   result = result.replace(">", "&gt;")
 
-proc escapeQuote*(doc: string): string =
+proc escapeQuote(doc: string): string =
   ## Replace `"` to HTML-safe characters.
   ## Example::
   ##     check escapeTag("'tag'") == "&quote;tag&quote;"
   doc.replace("\"", "&quot;")
 
-proc escapeAmpersandChar*(doc: string): string =
+proc escapeAmpersandChar(doc: string): string =
   ## Replace character `&` to HTML-safe characters.
   ## Example::
   ##     check escapeAmpersandChar("&amp;") ==  "&amp;amp;"
@@ -405,7 +405,7 @@ proc escapeAmpersandChar*(doc: string): string =
 
 let reAmpersandSeq = re"&(?!#?\w+;)"
 
-proc escapeAmpersandSeq*(doc: string): string =
+proc escapeAmpersandSeq(doc: string): string =
   ## Replace `&` from a sequence of characters starting from it to HTML-safe characters.
   ## It's useful to keep those have been escaped.
   ##
@@ -414,11 +414,11 @@ proc escapeAmpersandSeq*(doc: string): string =
   ##     escapeAmpersandSeq("&amp;") == "&amp;"
   result = doc.replace(sub=reAmpersandSeq, by="&amp;")
 
-proc escapeCode*(doc: string): string =
+proc escapeCode(doc: string): string =
   ## Make code block in markdown document HTML-safe.
   result = doc.escapeAmpersandChar.escapeTag
 
-proc removeBlankLines*(doc: string): string =
+proc removeBlankLines(doc: string): string =
   doc.strip(leading=false, trailing=true, chars={'\n'})
 
 proc escapeInvalidHTMLTag(doc: string): string =
@@ -429,7 +429,7 @@ proc escapeInvalidHTMLTag(doc: string): string =
 
 const IGNORED_HTML_ENTITY = ["&lt;", "&gt;", "&amp;"]
 
-proc escapeHTMLEntity*(doc: string): string =
+proc escapeHTMLEntity(doc: string): string =
   var entities = doc.findAll(re"&([^;]+);")
   result = doc
   for entity in entities:
@@ -440,7 +440,7 @@ proc escapeHTMLEntity*(doc: string): string =
       else:
         result = result.replace(re(entity), utf8Char)
 
-proc escapeLinkUrl*(url: string): string =
+proc escapeLinkUrl(url: string): string =
   encodeUrl(url.escapeHTMLEntity, usePlus=false).multiReplace([
     ("%40", "@"),
     ("%3A", ":"),
@@ -458,16 +458,16 @@ proc escapeLinkUrl*(url: string): string =
     ("%2F", "/"),
   ])
 
-proc escapeBackslash*(doc: string): string =
+proc escapeBackslash(doc: string): string =
   doc.replacef(re"\\([\\`*{}\[\]()#+\-.!_<>~|""$%&',/:;=?@^])", "$1")
 
-proc reFmt*(patterns: varargs[string]): Regex =
+proc reFmt(patterns: varargs[string]): Regex =
   var s: string
   for p in patterns:
     s &= p
   re(s)
 
-proc toSeq*(tokens: DoublyLinkedList[Token]): seq[Token] =
+proc toSeq(tokens: DoublyLinkedList[Token]): seq[Token] =
   result = newSeq[Token]()
   for token in tokens.items:
     result.add(token)

@@ -20,6 +20,7 @@ test "fencing block code":
     ) == "<pre><code class=\"language-nim\">proc helloworld():\n  echo(&quot;hello world&quot;)\n</code></pre>\n"
   check markdown("```\nproc helloworld():\n  echo(\"hello world\")\n```"
     ) == "<pre><code>proc helloworld():\n  echo(&quot;hello world&quot;)\n</code></pre>\n"
+  check markdown("```\na\n``` ") == "<pre><code>a\n</code></pre>\n"
 
 test "paragraph":
   check markdown("hello world") == "<p>hello world</p>\n"

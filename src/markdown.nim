@@ -850,7 +850,7 @@ proc parseCodeContent*(doc: string, indent: int, fence: string): tuple[code: str
   var closeSize = -1
   var pos = 0
   var codeContent = ""
-  let closeRe = re(r"(?: {0,3})" & fence & fmt"{fence[0]}" & "{0,}(?:$|\n)")
+  let closeRe = re(r"(?: {0,3})" & fence & fmt"{fence[0]}" & "{0,}( |\t)*(?:$|\n)")
   for line in doc.splitLines(keepEol=true):
     closeSize = line.matchLen(closeRe)
     if closeSize != -1:

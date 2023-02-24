@@ -111,6 +111,7 @@ Features:
 
 Released:
 
+* v0.8.7, 25 Feb 2023, bugfix: allow whitespace and tab after code closing fence. [#64](https://github.com/soasme/nim-markdown/issues/64).
 * v0.8.6, 9 Jul 2022, bugfix: export no internal procs.
 * v0.8.5, 19 Mar 2021, bugfix: codespan might be empty. #42.
 * v0.8.4, 19 Mar 2021, performance improvement: eliminate all `firstLine` and `restLines` calls. (#54, #55, #56).

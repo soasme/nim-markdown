@@ -549,7 +549,11 @@ method `$`*(token: Paragraph): string =
 method `$`*(token: Heading): string =
   let num = fmt"{token.level}"
   let child = token.children.toStringSeq.join("")
-  fmt"<h{num}>{child}</h{num}>"
+  if num == "1" or num == "2":
+    let id = child.toLower.replace(" ", "-")
+    fmt"<h{num} id='{id}'>{child}</h{num}>"
+  else:
+    fmt"<h{num}>{child}</h{num}>"
 
 method `$`*(token: THeadCell): string =
   let align = token.align
@@ -1163,7 +1167,7 @@ method parse*(this: HtmlTableParser, doc: string, start: int): ParseResult {.loc
       doc: "",
     )
     for index, elem in heads:
-      var doc = 
+      var doc =
         if index >= rowColumns.len:
           ""
         else:
@@ -1727,7 +1731,7 @@ proc getLinkDestination*(doc: string, start: int): tuple[slice: Slice[int], size
   # if start < 1 or doc[start - 1] != '(':
   #   raise newException(MarkdownError, fmt"{start} can not be the start of inline link destination.")
 
-  # A link destination can be 
+  # A link destination can be
   # a sequence of zero or more characters between an opening < and a closing >
   # that contains no line breaks or unescaped < or > characters, or
   var size = -1
@@ -1741,11 +1745,11 @@ proc getLinkDestination*(doc: string, start: int): tuple[slice: Slice[int], size
     return (slice, size)
 
   # A link destination can also be
-  # a nonempty sequence of characters that does not include ASCII space or control characters, 
-  # and includes parentheses only if 
-  # (a) they are backslash-escaped or 
-  # (b) they are part of a balanced pair of unescaped parentheses. 
-  # (Implementations may impose limits on parentheses nesting to avoid performance issues, 
+  # a nonempty sequence of characters that does not include ASCII space or control characters,
+  # and includes parentheses only if
+  # (a) they are backslash-escaped or
+  # (b) they are part of a balanced pair of unescaped parentheses.
+  # (Implementations may impose limits on parentheses nesting to avoid performance issues,
   # but at least three levels of nesting should be supported.)
   var level = 1 # assume the parenthesis has opened.
   var urlLen = 0
@@ -2007,18 +2011,18 @@ method parse*(this: LinkParser, doc: string, start: int): ParseResult {.locks: "
     var res = doc.parseInlineLink(start, labelSlice)
     if res.pos != -1: return res
 
-  # A collapsed reference link consists of a link label that matches a link reference 
-  # definition elsewhere in the document, followed by the string []. 
+  # A collapsed reference link consists of a link label that matches a link reference
+  # definition elsewhere in the document, followed by the string [].
   if labelSlice.b + 2 < doc.len and substr(doc, labelSlice.b+1, labelSlice.b+2) == "[]":
     var res = doc.parseCollapsedReferenceLink(start, labelSlice)
     if res.pos != -1: return res
 
-  # A full reference link consists of a link text immediately followed by a link label 
+  # A full reference link consists of a link text immediately followed by a link label
   # that matches a link reference definition elsewhere in the document.
   elif labelSlice.b + 1 < doc.len and doc[labelSlice.b + 1] == '[':
     return doc.parseFullReferenceLink(start, labelSlice)
 
-  # A shortcut reference link consists of a link label that matches a link reference 
+  # A shortcut reference link consists of a link label that matches a link reference
   # definition elsewhere in the document and is not followed by [] or a link label.
   return doc.parseShortcutReferenceLink(start, labelSlice)
 
@@ -2138,17 +2142,17 @@ method parse*(this: ImageParser, doc: string, start: int): ParseResult {.locks: 
   if labelSlice.b + 1 < doc.len and doc[labelSlice.b + 1] == '(':
     return doc.parseInlineImage(start+1, labelSlice)
 
-  # A collapsed reference link consists of a link label that matches a link reference 
-  # definition elsewhere in the document, followed by the string []. 
+  # A collapsed reference link consists of a link label that matches a link reference
+  # definition elsewhere in the document, followed by the string [].
   elif labelSlice.b + 2 < doc.len and substr(doc, labelSlice.b+1, labelSlice.b+2) == "[]":
     return doc.parseCollapsedReferenceImage(start, labelSlice)
 
-  # A full reference link consists of a link text immediately followed by a link label 
+  # A full reference link consists of a link text immediately followed by a link label
   # that matches a link reference definition elsewhere in the document.
   if labelSlice.b + 1 < doc.len and doc[labelSlice.b + 1] == '[':
     return doc.parseFullReferenceImage(start, labelSlice)
 
-  # A shortcut reference link consists of a link label that matches a link reference 
+  # A shortcut reference link consists of a link label that matches a link reference
   # definition elsewhere in the document and is not followed by [] or a link label.
   return doc.parseShortcutReferenceImage(start, labelSlice)
 
@@ -2360,7 +2364,7 @@ proc processEmphasis*(state: State, token: Token) =
 
     # if none is found.
     if not openerFound and not oddMatch:
-      # Set openers_bottom to the element before current_position. 
+      # Set openers_bottom to the element before current_position.
       # (We know that there are no openers for this kind of closer up to and including this point,
       # so this puts a lower bound on future searches.)
       if oldCloser.value.kind == "*":

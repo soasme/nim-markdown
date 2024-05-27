@@ -502,7 +502,7 @@ method `$`*(token: HtmlEntity): string =
   token.doc.escapeHTMLEntity.escapeQuote
 
 method `$`*(token: Text): string =
-  token.doc.escapeAmpersandSeq.escapeTag.escapeQuote
+  token.doc.escapeAmpersandChar.escapeTag.escapeQuote
 
 method `$`*(token: AutoLink): string =
   let href = token.url.escapeLinkUrl.escapeAmpersandSeq
@@ -2550,3 +2550,4 @@ when isMainModule:
       config=readCLIOptions()
     )
   )
+

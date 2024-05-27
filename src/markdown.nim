@@ -278,7 +278,13 @@ method parse*(this: Parser, doc: string, start: int): ParseResult {.base.} =
   ParseResult(token: Token(), pos: doc.len)
 
 proc appendChild*(token: Token, child: Token) =
-  token.children.append(child)
+  if child of Text and token.children.tail != nil and token.children.tail.value of Text and Text(child).delimiter == Text(token.children.tail.value).delimiter:
+    token.children.tail.value.doc &= child.doc
+    token.children.tail.value.pos = max(token.children.tail.value.pos, child.pos)
+    token.children.tail.value.children.append child.children
+    token.children.tail.value.chunks.add child.chunks
+  else:
+    token.children.append(child)
 
 const THEMATIC_BREAK_RE = r" {0,3}([-*_])(?:[ \t]*\1){2,}[ \t]*(?:\n+|$)"
 
@@ -1603,6 +1609,7 @@ proc parseBlock(state: State, token: Token) =
       res = parse(blockParser, token.doc, token.pos)
       if res.pos != -1:
         res = res.token.apply(state, res)
+        res.token.pos = res.pos
         token.appendChild(res.token)
         token.pos = res.pos
         break
@@ -2396,6 +2403,7 @@ proc parseLeafBlockInlines(state: State, token: Token) =
       continue
     res = state.applyInlineParsers(token.doc, index)
     pos = res.pos
+    res.token.pos = token.pos - token.doc.len + pos
     token.appendChild(res.token)
   processEmphasis(state, token)
 

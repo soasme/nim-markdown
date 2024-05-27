@@ -128,7 +128,6 @@ type
     doc*: string
     pos*: int
     children*: DoublyLinkedList[Token]
-    chunks*: seq[Chunk]
 
   ParseResult* = ref object
     token*: Token
@@ -169,6 +168,7 @@ type
 
   BlockquoteParser* = ref object of Parser
   Blockquote* = ref object of Block
+    chunks*: seq[Chunk]
 
   UlParser* = ref object of Parser
   Ul* = ref object of Block
@@ -282,7 +282,6 @@ proc appendChild*(token: Token, child: Token) =
     token.children.tail.value.doc &= child.doc
     token.children.tail.value.pos = max(token.children.tail.value.pos, child.pos)
     token.children.tail.value.children.append child.children
-    token.children.tail.value.chunks.add child.chunks
   else:
     token.children.append(child)
 
@@ -1551,25 +1550,26 @@ proc parseContainerBlock(state: State, token: Token): ParseResult =
   #parseBlock(state, token)
   var chunks: seq[Chunk]
   var pos: int
-  for chunk in token.chunks:
-    chunks.add(chunk)
-    pos = chunk.pos
-    if chunk.kind == BlockChunk:
-      token.doc = chunk.doc
-      var t = Token(doc: chunk.doc)
-      parseBlock(state, t)
-      var p = t.children.head
-      if p != nil and p.value of Paragraph and token.tipToken of Paragraph:
-        token.tipToken.doc &= p.value.doc
-        t.children.remove(p)
-      for child in t.children:
-        token.appendChild(child)
-      if not (token.tipToken of Paragraph):
-        break
-    else:
-      if not token.tipToken.doc.endsWith("\n"):
-        token.tipToken.doc &= "\n"
-      token.tipToken.doc &= chunk.doc.strip(chars={' '})
+  if token of Blockquote:
+    for chunk in Blockquote(token).chunks:
+      chunks.add(chunk)
+      pos = chunk.pos
+      if chunk.kind == BlockChunk:
+        token.doc = chunk.doc
+        var t = Token(doc: chunk.doc)
+        parseBlock(state, t)
+        var p = t.children.head
+        if p != nil and p.value of Paragraph and token.tipToken of Paragraph:
+          token.tipToken.doc &= p.value.doc
+          t.children.remove(p)
+        for child in t.children:
+          token.appendChild(child)
+        if not (token.tipToken of Paragraph):
+          break
+      else:
+        if not token.tipToken.doc.endsWith("\n"):
+          token.tipToken.doc &= "\n"
+        token.tipToken.doc &= chunk.doc.strip(chars={' '})
   return ParseResult(token: token, pos: pos)
 
 proc finalizeList*(state: State, token: Token) =

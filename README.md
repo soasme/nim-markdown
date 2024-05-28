@@ -66,7 +66,7 @@ $ nimble test
 Build document:
 
 ```bash
-$ nim doc --project --git.url=https://github.com/soasme/nim-markdown --git.commit=v0.7.0 src/markdown.nim
+$ nim doc --project --git.url=https://github.com/soasme/nim-markdown --git.commit=v0.8.0 src/markdown.nim
 ```
 
 The [Markdown Parser](https://enqueuezero.com/markdown-parser.html) serves as a guidance on the implementation of `nim-markdown`, or in any generic programming language.
@@ -111,6 +111,7 @@ Features:
 
 Released:
 
+* v0.8.8, 29 May 2024, performance improvement: read more chars into Text. [#72](https://github.com/soasme/nim-markdown).
 * v0.8.7, 25 Feb 2023, bugfix: allow whitespace and tab after code closing fence. [#64](https://github.com/soasme/nim-markdown/issues/64).
 * v0.8.6, 9 Jul 2022, bugfix: export no internal procs.
 * v0.8.5, 19 Mar 2021, bugfix: codespan might be empty. #42.

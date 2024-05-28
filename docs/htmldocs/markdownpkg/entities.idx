@@ -1,1 +1,2 @@
-htmlEntityToUtf8	markdownpkg/entities.html#htmlEntityToUtf8,string	entities: htmlEntityToUtf8(s: string): string	
+nimTitle	entities	markdownpkg/entities.html	module src/markdownpkg/entities		0
+nim	htmlEntityToUtf8	markdownpkg/entities.html#htmlEntityToUtf8,string	proc htmlEntityToUtf8(s: string): string		3

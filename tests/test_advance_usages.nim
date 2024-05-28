@@ -45,7 +45,6 @@ test "customize parsing":
 """
   check markdown(md, c) == """<p>#include nothing</p>
 <h1>I'm included.</h1>
-
 """
   removeFile("hello.md")
 
@@ -63,5 +62,4 @@ test "operate ast":
   root.appendChild(p)
   check root.render == """<h1>Hello World</h1>
 <p>Test.</p>
-<p><em>emphasis text.</em></p>
-"""
+<p><em>emphasis text.</em></p>"""

@@ -550,7 +550,11 @@ method `$`*(token: Paragraph): string =
 method `$`*(token: Heading): string =
   let num = $token.level
   let child = token.render("")
-  fmt"<h{num}>{child}</h{num}>"
+  if num == "1" or num == "2":
+    let id = child.toLower.replace(" ", "-").escapeAmpersandSeq.escapeQuote
+    fmt"""<h{num} id="{id}">{child}</h{num}>"""
+  else:
+    fmt"<h{num}>{child}</h{num}>"
 
 method `$`*(token: THeadCell): string =
   let align = token.align

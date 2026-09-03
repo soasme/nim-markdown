@@ -645,7 +645,61 @@ proc parseLoose(token: Token): bool =
         return true
   return false
 
+func firstBlockMarker(doc: string, start: int, stop = 0): char =
+  let limit = if stop <= 0: doc.len else: min(stop, doc.len)
+  var pos = start
+  while pos < limit and pos - start < 4 and doc[pos] == ' ':
+    inc pos
+  if pos - start <= 3 and pos < limit:
+    return doc[pos]
+
+func possibleUnorderedListItem(doc: string, start: int, stop = 0): bool =
+  let limit = if stop <= 0: doc.len else: min(stop, doc.len)
+  var pos = start
+  if doc.firstBlockMarker(start, limit) notin {'*', '-', '+'}:
+    return false
+  while pos < limit and doc[pos] == ' ':
+    inc pos
+  inc pos
+  return pos >= limit or doc[pos] in {' ', '\t', '\n'}
+
+func possibleOrderedListItem(doc: string, start: int, stop = 0): bool =
+  let limit = if stop <= 0: doc.len else: min(stop, doc.len)
+  if doc.firstBlockMarker(start, limit) notin {'0'..'9'}:
+    return false
+  var pos = start
+  while pos < limit and doc[pos] == ' ':
+    inc pos
+  var digitCount = 0
+  while pos < limit and digitCount < 9 and doc[pos] in {'0'..'9'}:
+    inc pos
+    inc digitCount
+  if digitCount == 0 or pos >= limit or doc[pos] notin {'.', ')'}:
+    return false
+  inc pos
+  return pos >= limit or doc[pos] in {' ', '\n'}
+
+proc isUnorderedListItemStart(doc: string, start: int, stop = 0): bool =
+  if not doc.possibleUnorderedListItem(start, stop):
+    return false
+  return doc.matchLen(
+    re"(?P<leading> {0,3})(?P<marker>[*\-+])(?:(?P<empty> *(?:\n|$))|(?<indent>(?: +|\t+))([^\n]+(?:\n|$)))",
+    start,
+    stop,
+  ) != -1
+
+proc isOrderedListItemStart(doc: string, start: int, stop = 0): bool =
+  if not doc.possibleOrderedListItem(start, stop):
+    return false
+  return doc.matchLen(
+    re"(?P<leading> {0,3})(?<index>\d{1,9})(?P<marker>\.|\))(?: *$| *\n|(?P<indent> +)([^\n]+(?:\n|$)))",
+    start,
+    stop,
+  ) != -1
+
 proc parseOrderedListItem*(doc: string, start=0, marker: var string, listItemDoc: var string, index: var int = 1): int =
+  if not doc.possibleOrderedListItem(start):
+    return -1
   let markerRegex = re"(?P<leading> {0,3})(?<index>\d{1,9})(?P<marker>\.|\))(?: *$| *\n|(?P<indent> +)([^\n]+(?:\n|$)))"
   var matches: array[5, string]
   var pos = start
@@ -700,6 +754,8 @@ proc parseOrderedListItem*(doc: string, start=0, marker: var string, listItemDoc
   return pos - start
 
 proc parseUnorderedListItem*(doc: string, start=0, marker: var string, listItemDoc: var string): int =
+  if not doc.possibleUnorderedListItem(start):
+    return -1
   #  thematic break takes precedence over list item.
   if doc.matchLen(re(THEMATIC_BREAK_RE), start) != -1:
     return -1
@@ -829,6 +885,8 @@ method parse*(this: OlParser, doc: string, start: int): ParseResult =
   return ParseResult(token: olToken, pos: pos)
 
 proc getThematicBreak(doc: string, start: int = 0): tuple[size: int] =
+  if doc.firstBlockMarker(start) notin {'*', '_', '-'}:
+    return (size: -1)
   return (size: doc.matchLen(re(THEMATIC_BREAK_RE), start))
 
 method parse*(this: ThematicBreakParser, doc: string, start: int): ParseResult =
@@ -840,6 +898,8 @@ method parse*(this: ThematicBreakParser, doc: string, start: int): ParseResult =
   )
 
 proc getFence*(doc: string, start: int = 0): tuple[indent: int, fence: string, size: int] =
+  if doc.firstBlockMarker(start) notin {'`', '~'}:
+    return (-1, "", -1)
   var matches: array[2, string]
   let size = doc.matchLen(re"((?: {0,3})?)(`{3,}|~{3,})", matches, start)
   if size == -1: return (-1, "", -1)
@@ -1011,6 +1071,8 @@ method parse(this: SetextHeadingParser, doc: string, start: int): ParseResult =
 const ATX_HEADING_RE = r" {0,3}(#{1,6})([ \t]+)?(?(2)([^\n]*?))([ \t]+)?(?(4)#*) *(?:\n+|$)"
 
 proc getAtxHeading*(s: string, start: int = 0): tuple[level: int, doc: string, size: int] =
+  if s.firstBlockMarker(start) != '#':
+    return (level: 0, doc: "", size: -1)
   var matches: array[4, string]
   let size = s.matchLen(re(ATX_HEADING_RE), matches, start)
   if size == -1:
@@ -1230,6 +1292,8 @@ proc parseHTMLBlockContent*(doc: string, startPattern: string, endPattern: strin
   return (html, pos)
 
 proc matchHtmlStart*(doc: string, start: int = 0, bufsize: int = 0): tuple[startRe: Regex, endRe: Regex, endMatch: bool, continuation: bool] =
+  if doc.firstBlockMarker(start, bufsize) != '<':
+    return (nil, nil, false, false)
   var startRe: Regex = nil
   var endRe: Regex = nil
   var endMatch = false
@@ -1300,6 +1364,8 @@ method parse*(this: HtmlBlockParser, doc: string, start: int): ParseResult =
 const rBlockquoteMarker = r"( {0,3}>)"
 
 proc isBlockquote*(s: string, start: int = 0): bool =
+  if s.firstBlockMarker(start) != '>':
+    return false
   s.match(re(rBlockquoteMarker), start)
 
 proc consumeBlockquoteMarker(doc: string): string =
@@ -1318,6 +1384,8 @@ proc consumeBlockquoteMarker(doc: string): string =
         add result, r
 
 method parse*(this: BlockquoteParser, doc: string, start: int): ParseResult =
+  if not doc.isBlockquote(start):
+    return ParseResult(token: nil, pos: -1)
   let markerContent = re(r"(( {0,3}>([^\n]*(?:\n|$)))+)")
   var matches: array[3, string]
   var pos = start
@@ -1369,6 +1437,8 @@ method parse*(this: BlockquoteParser, doc: string, start: int): ParseResult =
   return ParseResult(token: blockquote, pos: pos)
 
 method parse*(this: ReferenceParser, doc: string, start: int): ParseResult =
+  if doc.firstBlockMarker(start) != '[':
+    return ParseResult(token: nil, pos: -1)
   var pos = start
 
   var markStart = doc.matchLen(re" {0,3}\[", pos)
@@ -1475,16 +1545,8 @@ proc isContinuationText*(doc: string, start: int = 0, stop: int = 0): bool =
 
   if isBlockquote(doc, start): return false
 
-  var ulMarker: string
-  var ulDoc: string
-  if parseUnorderedListItem(doc, start, ulMarker, ulDoc) != -1: return false
-
-  var olMarker: string
-  var olDoc: string
-  var olIndex: int
-  let olOffset = parseOrderedListItem(doc, start, marker=olMarker,
-    listItemDoc=olDoc, index=olIndex)
-  if olOffset != -1: return false
+  if isUnorderedListItemStart(doc, start, matchStop): return false
+  if isOrderedListItemStart(doc, start, matchStop): return false
 
   return true
 
@@ -1507,7 +1569,12 @@ method parse*(this: ParagraphParser, doc: string, start: int): ParseResult =
     # Special cases.
     # empty list item is continuation text
     # ol should start with 1.
-    if isUlEmptyListItem(doc, slice.start, slice.stop) or isOlNo1ListItem(doc, slice.start, slice.stop):
+    let marker = doc.firstBlockMarker(slice.start, slice.stop)
+    if marker in {'-', '+', '*'} and isUlEmptyListItem(doc, slice.start, slice.stop) or
+        marker in {'0'..'9'} and (
+          isUlEmptyListItem(doc, slice.start, slice.stop) or
+          isOlNo1ListItem(doc, slice.start, slice.stop)
+        ):
       size += (slice.stop - slice.start)
       continue
 
@@ -1516,7 +1583,8 @@ method parse*(this: ParagraphParser, doc: string, start: int): ParseResult =
       size += (slice.stop - slice.start)
       break
 
-    if not isContinuationText(doc, slice.start, slice.stop):
+    if marker in {'#', '=', '*', '_', '-', '<', '`', '~', '>', '+', '0'..'9'} and
+        not isContinuationText(doc, slice.start, slice.stop):
       break
 
     size += (slice.stop - slice.start)

@@ -63,6 +63,22 @@ test "bulleted item list":
 </ul>
 """
 
+test "list markers interrupt paragraphs without consuming the remaining list":
+  check isContinuationText("ordinary paragraph text\n")
+  check isContinuationText("-not a list item\n")
+  check isContinuationText("1234567890. too many digits\n")
+  check isContinuationText("    - indented code cannot interrupt a paragraph\n")
+  check not isContinuationText("- unordered item\n")
+  check not isContinuationText("1. ordered item\n")
+
+  const itemCount = 250
+  var source = ""
+  for index in 0 ..< itemCount:
+    source.add "- item " & $index & "\n  continuation\n"
+  let rendered = markdown(source)
+  check rendered.count("<li>") == itemCount
+  check rendered.count("continuation") == itemCount
+
 test "define link":
   check markdown("[1]: https://example.com") == ""
 

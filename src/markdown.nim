@@ -243,7 +243,7 @@ type
 
   DelimiterParser* = ref object of Parser
   Delimiter* = ref object of Inline
-    token*: Text
+    token* {.cursor.}: Text ## Borrowed backlink to the delimiter's text token.
     kind*: string
     num*: int
     originalNum*: int
@@ -2550,4 +2550,3 @@ when isMainModule:
       config=readCLIOptions()
     )
   )
-

@@ -63,7 +63,7 @@
 ## Finally, All Token types support conversion to HTML strings with the special $ proc,
 ##
 
-import re
+import markdownpkg/regexcompat as re
 from strformat import fmt, `&`
 from uri import encodeUrl
 from strutils import join, splitLines, repeat, replace,
@@ -282,7 +282,7 @@ proc appendChild*(token: Token, child: Token) =
   else:
     token.children.append(child)
 
-const THEMATIC_BREAK_RE = r" {0,3}([-*_])(?:[ \t]*\1){2,}[ \t]*(?:\n+|$)"
+const THEMATIC_BREAK_RE = r" {0,3}(?:\*(?:[ \t]*\*){2,}|_(?:[ \t]*_){2,}|-(?:[ \t]*-){2,})[ \t]*(?:\n+|$)"
 
 const HTML_SCRIPT_START = r" {0,3}<(script|pre|style)(?=(\s|>|$))"
 const HTML_SCRIPT_END = r"</(script|pre|style)>"
@@ -853,7 +853,7 @@ proc parseCodeContent*(doc: string, indent: int, fence: string): tuple[code: str
   var closeSize = -1
   var pos = 0
   var codeContent = ""
-  let closeRe = re(r"(?: {0,3})" & fence & $fence[0] & "{0,}( |\t)*(?:$|\n)")
+  let closeRe = re(r"(?: {0,3})" & fence & $fence[0] & "{0,}( |\t)*(?=\n|$)")
   for line in doc.splitLines(keepEol=true):
     closeSize = line.matchLen(closeRe)
     if closeSize != -1:
@@ -861,7 +861,10 @@ proc parseCodeContent*(doc: string, indent: int, fence: string): tuple[code: str
       break
 
     if line != "\n" and line != "":
-      codeContent &= line.replacef(re(r"^ {0," & indent.intToStr & r"}([^\n]*)"), "$1")
+      if indent == 0:
+        codeContent &= line
+      else:
+        codeContent &= line.replacef(re(r"^ {0," & indent.intToStr & r"}([^\n]*)"), "$1")
     else:
       codeContent &= line
     pos += line.len
@@ -1008,7 +1011,7 @@ method parse(this: SetextHeadingParser, doc: string, start: int): ParseResult =
     pos: start+res.size
   )
 
-const ATX_HEADING_RE = r" {0,3}(#{1,6})([ \t]+)?(?(2)([^\n]*?))([ \t]+)?(?(4)#*) *(?:\n+|$)"
+const ATX_HEADING_RE = r" {0,3}(#{1,6})(?:[ \t]+([^\n]*?))?[ \t]*(?:\n+|$)"
 
 proc getAtxHeading*(s: string, start: int = 0): tuple[level: int, doc: string, size: int] =
   var matches: array[4, string]
@@ -1017,7 +1020,10 @@ proc getAtxHeading*(s: string, start: int = 0): tuple[level: int, doc: string, s
     return (level: 0, doc: "", size: -1)
 
   let level = matches[0].len
-  let doc = if matches[2] =~ re"#+": "" else: matches[2]
+  var doc = matches[1]
+  let closingStart = doc.find(re"(?:^|[ \t]+)#+[ \t]*$")
+  if closingStart != -1:
+    doc.setLen(closingStart)
   return (level: level, doc: doc, size: size)
 
 method parse(this: AtxHeadingParser, doc: string, start: int = 0): ParseResult =
@@ -1133,7 +1139,7 @@ method parse*(this: HtmlTableParser, doc: string, start: int): ParseResult =
   if lines[0] == "" or lines[0].find('|') == -1:
     return ParseResult(token: nil, pos: -1)
 
-  var heads = parseTableRow(lines[0].replace(re"^\||\|$", ""))
+  var heads = parseTableRow(lines[0].replace(re"^\||\|(?=\n?$)", ""))
   if heads.len > aligns.len:
     return ParseResult(token: nil, pos: -1)
 
@@ -1160,13 +1166,13 @@ method parse*(this: HtmlTableParser, doc: string, start: int): ParseResult =
     if line == "" or line.find('|') == -1:
       break
 
-    var rowColumns = parseTableRow(line.replace(re"^\||\|$", ""))
+    var rowColumns = parseTableRow(line.replace(re"^\||\|(?=\n?$)", ""))
 
     var tableRowToken = TableRow(
       doc: "",
     )
     for index, elem in heads:
-      var doc = 
+      var doc =
         if index >= rowColumns.len:
           ""
         else:
@@ -1845,6 +1851,31 @@ proc getLinkLabel*(doc: string, start: int): tuple[label: string, size: int] =
   )
 
 
+proc codeSpanMatch(doc: string, start: int): tuple[size: int, content: string] =
+  ## Finds a CommonMark code span without relying on a regex backreference.
+  if start >= doc.len or doc[start] != '`':
+    return (size: -1, content: "")
+
+  var openerEnd = start
+  while openerEnd < doc.len and doc[openerEnd] == '`':
+    inc openerEnd
+  let openerLength = openerEnd - start
+
+  var index = openerEnd
+  while index < doc.len:
+    if doc[index] == '`':
+      var closerEnd = index
+      while closerEnd < doc.len and doc[closerEnd] == '`':
+        inc closerEnd
+      if closerEnd - index == openerLength and index > openerEnd:
+        return (size: closerEnd - start, content: doc[openerEnd ..< index])
+      index = closerEnd
+    else:
+      inc index
+
+  (size: -1, content: "")
+
+
 proc getLinkText*(doc: string, start: int, allowNested: bool = false): tuple[slice: Slice[int], size: int] =
   # based on assumption: token.doc[start] = '['
   if doc[start] != '[':
@@ -1877,8 +1908,7 @@ proc getLinkText*(doc: string, start: int, allowNested: bool = false): tuple[sli
     # Backtick: code spans bind more tightly than the brackets in link text.
     # Skip the tokens in code.
     elif ch == '`':
-      # FIXME: it's better to extract to a code span helper function
-      skip = doc.matchLen(re"((`+)\s*([\s\S]*?[^`])\s*\2(?!`))", start+i) - 1
+      skip = doc.codeSpanMatch(start+i).size - 1
 
     # autolinks, and raw HTML tags bind more tightly than the brackets in link text.
     elif ch == '<':
@@ -2211,8 +2241,8 @@ method parse*(this: HardBreakParser, doc: string, start: int): ParseResult =
 method parse*(this: CodeSpanParser, doc: string, start: int): ParseResult =
   if doc[start] != '`': return skipParsing
 
-  var matches: array[5, string]
-  var size = doc.matchLen(re"((`+)([^`]|[^`][\s\S]*?[^`])\2(?!`))", matches, start)
+  let codeSpan = doc.codeSpanMatch(start)
+  var size = codeSpan.size
 
   if size == -1:
     size = doc.matchLen(re"`+(?!`)", start)
@@ -2221,7 +2251,7 @@ method parse*(this: CodeSpanParser, doc: string, start: int): ParseResult =
     let token = Text(doc: substr(doc, start, start+size-1))
     return ParseResult(token: token, pos: start+size)
 
-  var codeSpanVal = matches[2].strip(chars={'\n'}).replace(re"[\n]+", " ")
+  var codeSpanVal = codeSpan.content.strip(chars={'\n'}).replace(re"[\n]+", " ")
 
   if codeSpanVal != "" and codeSpanVal[0] == ' ' and codeSpanVal[codeSpanVal.len-1] == ' ' and not codeSpanVal.match(re"^[ ]+$"):
     codeSpanVal = codeSpanVal[1 ..< codeSpanVal.len-1]
